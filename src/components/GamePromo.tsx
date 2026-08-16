@@ -25,7 +25,7 @@ export default function GamePromo({ gameLink, isAdmin, onEditLink }: GamePromoPr
               <div className="relative shrink-0">
                 <div className="absolute inset-0 -m-2 rounded-full bg-cyan-400/15 blur-xl animate-pulse-slow" />
                 <img
-                  src="/images/stormblade-icon.png"
+                  src="./images/stormblade-icon.png"
                   alt="Stormblade"
                   className="relative h-20 w-20 sm:h-24 sm:w-24 rounded-full border-2 border-cyan-400/30 shadow-[0_0_30px_rgba(34,211,238,0.25)] object-cover"
                   draggable={false}

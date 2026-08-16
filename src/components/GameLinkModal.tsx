@@ -43,7 +43,8 @@ export default function GameLinkModal({ currentLink, onSave, onClose }: GameLink
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/8 px-6 py-4">
           <div className="flex items-center gap-3">
-            <img src="/images/stormblade-icon.png" alt="" className="h-9 w-9 rounded-full border border-cyan-400/30" />
+            <img src="./images/stormblade-icon.png" alt="" className="h-9 w-9
+rounded-full border border-cyan-400/30" />
             <h2 className="text-lg font-bold text-white">Stormblade Link</h2>
           </div>
           <button
