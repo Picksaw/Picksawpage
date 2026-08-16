@@ -1,0 +1,32 @@
+# Cloudflare Worker configuration for Picksaw admin auth.
+#
+# This file is SAFE to commit — it contains NO secrets.
+# Secrets (ADMIN_PASSWORD, AUTH_SIGNING_KEY) are set separately via:
+#   npx wrangler secret put ADMIN_PASSWORD
+#   npx wrangler secret put AUTH_SIGNING_KEY
+# or in the Cloudflare dashboard (see ADMIN_SETUP.md).
+
+name = "picksaw-admin"
+main = "src/index.ts"
+compatibility_date = "2024-09-01"
+
+# Non-secret vars only. Replace with the origin(s) your site is served from.
+# Comma-separated. Example for GitHub Pages + a custom domain:
+[vars]
+ALLOWED_ORIGINS = "https://picksaw.ir,https://www.picksaw.ir,http://localhost:4173,http://localhost:5173"
+
+# ⚠️ Do NOT put ADMIN_PASSWORD or AUTH_SIGNING_KEY here.
+# Those must be added as encrypted secrets (see commands above).
+
+# ─────────────────────────────────────────────────────────────
+# Cloudflare D1 database binding.
+# The `database_id` below is a PLACEHOLDER — replace it with the real
+# id printed by `wrangler d1 create picksaw-db` (see ADMIN_SETUP.md).
+# D1 access is via this binding only; NO credentials live in source.
+# The Worker reads it as `env.DB`.
+# ─────────────────────────────────────────────────────────────
+[[d1_databases]]
+binding = "DB"
+database_name = "picksaw-db"
+database_id = "731c38f3-2d0e-4ac8-827b-5ab618be4f37"
+migrations_dir = "migrations"

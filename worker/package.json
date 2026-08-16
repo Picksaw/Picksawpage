@@ -1,0 +1,17 @@
+{
+  "name": "picksaw-admin-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Worker performing server-side admin authentication for Picksaw.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "secret:password": "wrangler secret put ADMIN_PASSWORD",
+    "secret:signing": "wrangler secret put AUTH_SIGNING_KEY"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260816.1",
+    "typescript": "^5.5.0",
+    "wrangler": "^4.123.0"
+  }
+}
