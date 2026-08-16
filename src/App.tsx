@@ -7,56 +7,58 @@ import Feed from "./components/Feed";
 import AdminPanel from "./components/AdminPanel";
 import PostModal from "./components/PostModal";
 import LoginModal from "./components/LoginModal";
-import GameLinkModal from "./components/GameLinkModal";
 import { useAdmin } from "./hooks/useAdmin";
-import { fetchPosts, createPostApi, deletePostApi, AuthError, type NewPostInput } from "./api/posts";
+import {
+  fetchPosts,
+  createPostApi,
+  deletePostApi,
+  AuthError,
+  type NewPostInput,
+} from "./api/posts";
 import { type Post } from "./types";
 
-const GAME_LINK_KEY = "picksaw_game_link";
+// ============================================================
+// GAME LINK
+// Change this URL whenever your StormBlade game URL changes.
+// Then rebuild/redeploy the website.
+// ============================================================
+const GAME_LINK = "https://stormblade.picksaw.ir";
 
 export default function App() {
   const { isAdmin, login, logout } = useAdmin();
+
   const [posts, setPosts] = useState<Post[]>([]);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
-  const [showGameLink, setShowGameLink] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
-  // Load posts from the Worker/D1 on first render (public — no auth needed).
+  // Load posts from the Worker/D1 on first render.
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
       try {
         const loaded = await fetchPosts();
-        if (!cancelled) setPosts(loaded);
+
+        if (!cancelled) {
+          setPosts(loaded);
+        }
       } catch {
-        // Network/API error — leave posts empty; public site still renders.
-        if (!cancelled) setPosts([]);
+        // Network/API error — leave posts empty;
+        // public site still renders.
+        if (!cancelled) {
+          setPosts([]);
+        }
       }
     })();
+
     return () => {
       cancelled = true;
     };
   }, []);
-  const [gameLink, setGameLink] = useState<string>(() => {
-    try {
-      return localStorage.getItem(GAME_LINK_KEY) || "";
-    } catch {
-      return "";
-    }
-  });
 
-  const handleSaveGameLink = useCallback((link: string) => {
-    setGameLink(link);
-    try {
-      localStorage.setItem(GAME_LINK_KEY, link);
-    } catch {
-      // storage unavailable
-    }
-  }, []);
-
-  // Create: persist via the authenticated Worker, then cache in state.
-  // Throws on failure so the AdminPanel keeps its existing error handling.
+  // Create: persist via the authenticated Worker,
+  // then cache in React state.
   const handleAddPost = useCallback(
     async (input: NewPostInput): Promise<void> => {
       try {
@@ -64,15 +66,17 @@ export default function App() {
         setPosts((prev) => [saved, ...prev]);
       } catch (err) {
         if (err instanceof AuthError) {
-          logout(); // session expired/invalid — return to signed-out state
+          logout();
         }
-        throw err; // let the AdminPanel surface the failure
+
+        throw err;
       }
     },
     [logout]
   );
 
-  // Delete: confirm server-side first, then remove from cached state.
+  // Delete: confirm server-side first,
+  // then remove from cached state.
   const handleDeletePost = useCallback(
     async (id: string): Promise<void> => {
       try {
@@ -82,6 +86,7 @@ export default function App() {
         if (err instanceof AuthError) {
           logout();
         }
+
         throw err;
       }
     },
@@ -99,9 +104,11 @@ export default function App() {
   const handleLogin = useCallback(
     async (password: string): Promise<boolean> => {
       const success = await login(password);
+
       if (success) {
         setShowLogin(false);
       }
+
       return success;
     },
     [login]
@@ -141,10 +148,11 @@ export default function App() {
 
         <main>
           <Hero
-            gameLink={gameLink}
+            gameLink={GAME_LINK}
             isAdmin={isAdmin}
-            onEditGameLink={() => setShowGameLink(true)}
+            onEditGameLink={() => {}}
           />
+
           <div id="feed">
             <Feed
               posts={posts}
@@ -162,7 +170,10 @@ export default function App() {
               <p className="text-xs text-slate-600">
                 © {new Date().getFullYear()} Picksaw. Crafted in the storm.
               </p>
-              <p className="text-xs text-slate-700">Rain intensifies as you scroll</p>
+
+              <p className="text-xs text-slate-700">
+                Rain intensifies as you scroll
+              </p>
             </div>
           </div>
         </footer>
@@ -170,25 +181,25 @@ export default function App() {
 
       {/* Login modal */}
       {showLogin && (
-        <LoginModal onLogin={handleLogin} onClose={() => setShowLogin(false)} />
+        <LoginModal
+          onLogin={handleLogin}
+          onClose={() => setShowLogin(false)}
+        />
       )}
 
       {/* Admin modal — only when logged in */}
       {showAdmin && isAdmin && (
-        <AdminPanel onAddPost={handleAddPost} onClose={() => setShowAdmin(false)} />
+        <AdminPanel
+          onAddPost={handleAddPost}
+          onClose={() => setShowAdmin(false)}
+        />
       )}
 
       {/* Post modal */}
       {selectedPost && (
-        <PostModal post={selectedPost} onClose={handleCloseModal} />
-      )}
-
-      {/* Game link modal — admin only */}
-      {showGameLink && isAdmin && (
-        <GameLinkModal
-          currentLink={gameLink}
-          onSave={handleSaveGameLink}
-          onClose={() => setShowGameLink(false)}
+        <PostModal
+          post={selectedPost}
+          onClose={handleCloseModal}
         />
       )}
     </div>

@@ -3,11 +3,9 @@ import GamePromo from "./GamePromo";
 
 interface HeroProps {
   gameLink: string;
-  isAdmin: boolean;
-  onEditGameLink: () => void;
 }
 
-export default function Hero({ gameLink, isAdmin, onEditGameLink }: HeroProps) {
+export default function Hero({ gameLink }: HeroProps) {
   return (
     <section
       id="top"
@@ -23,6 +21,7 @@ export default function Hero({ gameLink, isAdmin, onEditGameLink }: HeroProps) {
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-300 opacity-60" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-300" />
           </span>
+
           <span className="text-xs font-medium tracking-wide text-slate-300 sm:text-sm">
             Born From Static
           </span>
@@ -40,13 +39,14 @@ export default function Hero({ gameLink, isAdmin, onEditGameLink }: HeroProps) {
 
       <Reveal delay={160}>
         <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-slate-400 sm:text-lg">
-          Videos, music, and visuals — uploaded, curated, and experienced in the storm.
+          Videos, music, and visuals — uploaded, curated, and experienced in
+          the storm.
         </p>
       </Reveal>
 
-      {/* Game promo — right under the welcome message */}
+      {/* Game promo */}
       <div className="mt-10 w-full">
-        <GamePromo gameLink={gameLink} isAdmin={isAdmin} onEditLink={onEditGameLink} />
+        <GamePromo gameLink={gameLink} />
       </div>
 
       <Reveal delay={240}>
@@ -55,8 +55,19 @@ export default function Hero({ gameLink, isAdmin, onEditGameLink }: HeroProps) {
           className="mt-10 inline-flex items-center gap-2 rounded-2xl bg-white px-7 py-3.5 text-sm font-semibold text-slate-900 shadow-lg shadow-white/10 transition-all duration-300 hover:scale-[1.03] hover:shadow-white/20"
         >
           Browse the feed
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" />
+
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path
+              d="M19 9l-7 7-7-7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         </a>
       </Reveal>
