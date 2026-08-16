@@ -100,3 +100,21 @@ export async function deletePostApi(id: string): Promise<void> {
     throw new Error((data.error as string) || "Failed to delete post");
   }
 }
+
+/**
+ * PUBLIC: like or unlike a post. No admin token — likes are a public
+ * interaction. The Worker updates D1 and returns the new server-side count,
+ * which is shared across every device.
+ */
+export async function likePostApi(id: string, unlike = false): Promise<number> {
+  if (!ADMIN_API_BASE) throw new Error("API not configured");
+  const res = await fetch(
+    `${ADMIN_API_BASE}${unlike ? POSTS_ENDPOINTS.unlike(id) : POSTS_ENDPOINTS.like(id)}`,
+    { method: "POST" }
+  );
+  const data = await parseJson(res);
+  if (!res.ok || !data.success || typeof data.likes !== "number") {
+    throw new Error((data.error as string) || "Failed to update like");
+  }
+  return data.likes;
+}

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { type Post, typeLabels } from "../types";
+import { likePostApi } from "../api/posts";
 
 interface PostCardProps {
   post: Post;
@@ -8,21 +9,58 @@ interface PostCardProps {
   onDelete: (id: string) => void | Promise<void>;
 }
 
+// Per-device "I liked this" memory, so the heart stays filled on THIS
+// device/browser while the count itself is server-truth (shared everywhere).
+const likedStorageKey = (id: string) => `picksaw:liked:${id}`;
+
 export default function PostCard({ post, isAdmin, onClick, onDelete }: PostCardProps) {
-  const [liked, setLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(0);
-  const [hasLiked, setHasLiked] = useState(false);
+  const [liked, setLiked] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(likedStorageKey(post.id)) === "1";
+    } catch {
+      return false;
+    }
+  });
+  // Server truth: likes come from the Worker/D1, so every device sees the
+  // same count from the moment the page loads.
+  const [likeCount, setLikeCount] = useState<number>(post.likes ?? 0);
+  const [likeBusy, setLikeBusy] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const toggleLike = (e: React.MouseEvent) => {
+  const rememberLiked = (value: boolean) => {
+    try {
+      if (value) window.localStorage.setItem(likedStorageKey(post.id), "1");
+      else window.localStorage.removeItem(likedStorageKey(post.id));
+    } catch {
+      // Storage unavailable (private mode etc.) — the like still counts
+      // server-side; we just can't persist the UI flag.
+    }
+  };
+
+  const toggleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!liked) {
-      setLiked(true);
-      setHasLiked(true);
-      setLikeCount((c) => c + 1);
-    } else {
-      setLiked(false);
-      setLikeCount((c) => Math.max(0, c - 1));
+    if (likeBusy) return; // one in-flight request at a time
+
+    const next = !liked;
+    const prevCount = likeCount;
+    const prevLiked = liked;
+
+    // Optimistic UI: flip instantly, then sync with the server.
+    setLiked(next);
+    setLikeCount((c) => Math.max(0, c + (next ? 1 : -1)));
+    rememberLiked(next);
+    setLikeBusy(true);
+
+    try {
+      const serverLikes = await likePostApi(post.id, !next);
+      setLikeCount(serverLikes); // authoritative count from D1
+    } catch {
+      // Network/CORS/API failure — roll the UI back; server count untouched.
+      setLiked(prevLiked);
+      setLikeCount(prevCount);
+      rememberLiked(prevLiked);
+    } finally {
+      setLikeBusy(false);
     }
   };
 
@@ -217,7 +255,9 @@ export default function PostCard({ post, isAdmin, onClick, onDelete }: PostCardP
               strokeLinejoin="round"
             />
           </svg>
-          {hasLiked && <span className="text-xs font-medium tabular-nums">{likeCount}</span>}
+          {likeCount > 0 && (
+            <span className="text-xs font-medium tabular-nums">{likeCount}</span>
+          )}
         </button>
 
         <div className="text-[10px] text-slate-500 opacity-0 transition-opacity group-hover:opacity-100">

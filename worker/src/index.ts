@@ -358,7 +358,7 @@ async function getPostRow(env: Env, id: string): Promise<PostRow | null> {
 async function createPost(env: Env, input: PostInput) {
   const now = Date.now();
   const id =
-    (globalThis.crypto?.randomUUID?.() as string | undefined) ??
+    (crypto.randomUUID?.() as string | undefined) ??
     `${now}-${Math.random().toString(36).slice(2)}`;
 
   await env.DB.prepare(
@@ -415,6 +415,28 @@ async function deletePost(env: Env, id: string) {
   return changes > 0;
 }
 
+/**
+ * PUBLIC like/unlike.
+ *
+ * POST /api/posts/:id/like    → +1, returns the new count
+ * POST /api/posts/:id/unlike  → -1 (floored at 0), returns the new count
+ *
+ * No admin token required: likes are a public interaction (like any social
+ * site). The count lives in D1 so it is shared across ALL devices/browsers.
+ * (Simple increment for now — add rate limiting here later if ever needed.)
+ */
+async function changeLikes(
+  env: Env,
+  id: string,
+  delta: 1 | -1
+): Promise<{ notFound: true } | { likes: number }> {
+  const existing = await getPostRow(env, id);
+  if (!existing) return { notFound: true };
+  const likes = Math.max(0, existing.likes + delta);
+  await env.DB.prepare("UPDATE posts SET likes = ? WHERE id = ?").bind(likes, id).run();
+  return { likes };
+}
+
 // ---------- router ----------
 
 export default {
@@ -464,6 +486,34 @@ export default {
       try {
         const posts = await listPosts(env);
         return json({ success: true, posts }, request, env, 200);
+      } catch {
+        return json({ success: false, error: "Database error" }, request, env, 500);
+      }
+    }
+
+    // POST /api/posts/:id/like — PUBLIC. +1 like, returns new count.
+    const likeMatch = url.pathname.match(/^\/api\/posts\/([^/]+)\/like$/);
+    if (likeMatch && request.method === "POST") {
+      try {
+        const result = await changeLikes(env, decodeURIComponent(likeMatch[1]), 1);
+        if ("notFound" in result) {
+          return json({ success: false, error: "Not found" }, request, env, 404);
+        }
+        return json({ success: true, likes: result.likes }, request, env, 200);
+      } catch {
+        return json({ success: false, error: "Database error" }, request, env, 500);
+      }
+    }
+
+    // POST /api/posts/:id/unlike — PUBLIC. -1 like (floored at 0).
+    const unlikeMatch = url.pathname.match(/^\/api\/posts\/([^/]+)\/unlike$/);
+    if (unlikeMatch && request.method === "POST") {
+      try {
+        const result = await changeLikes(env, decodeURIComponent(unlikeMatch[1]), -1);
+        if ("notFound" in result) {
+          return json({ success: false, error: "Not found" }, request, env, 404);
+        }
+        return json({ success: true, likes: result.likes }, request, env, 200);
       } catch {
         return json({ success: false, error: "Database error" }, request, env, 500);
       }

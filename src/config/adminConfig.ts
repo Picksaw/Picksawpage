@@ -37,4 +37,6 @@ export const POSTS_ENDPOINTS = {
   list: "/api/posts", // GET  (public)
   create: "/api/posts", // POST (admin)
   item: (id: string) => `/api/posts/${encodeURIComponent(id)}`, // PUT/DELETE (admin)
+  like: (id: string) => `/api/posts/${encodeURIComponent(id)}/like`, // POST (public)
+  unlike: (id: string) => `/api/posts/${encodeURIComponent(id)}/unlike`, // POST (public)
 } as const;
