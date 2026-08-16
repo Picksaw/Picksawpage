@@ -147,11 +147,7 @@ export default function App() {
         />
 
         <main>
-          <Hero
-            gameLink={GAME_LINK}
-            isAdmin={isAdmin}
-            onEditGameLink={() => {}}
-          />
+          <Hero gameLink={GAME_LINK} />
 
           <div id="feed">
             <Feed
