@@ -1,0 +1,51 @@
+/**
+ * All site text in English and Farsi. Change values here to update across the site.
+ */
+export type Lang = "en" | "fa";
+
+export const SITE_TEXTS: Record<Lang, Record<string, string>> = {
+  en: {
+    siteName: "Picksaw",
+    siteSubtitle: "Website Templates",
+    heroTitle: "Website Templates",
+    heroSubtitle: "Beautiful, ready-to-use templates for creators, businesses, and agencies.",
+    heroCta: "Browse Templates",
+    feedLinkLabel: "Feed",
+    feedPageTitle: "The Feed & Game",
+    feedSubtitle: "Latest uploads, updates, and the featured game.",
+    templatesTitle: "Templates",
+    templatesSubtitle: "Click any template to visit the live site.",
+    navHome: "Home",
+    navTemplates: "Templates",
+    navFeed: "Feed",
+    langButtonEn: "English",
+    langButtonFa: "فارسی",
+    footerText: "© {year} Picksaw. Crafted in the storm.",
+    footerTagline: "Rain intensifies as you scroll",
+    playButton: "Play Now",
+    exploreButton: "Explore",
+    skipLink: "Skip to content",
+  },
+  fa: {
+    siteName: "پیکساو",
+    siteSubtitle: "قالب‌های وب‌سایت",
+    heroTitle: "قالب‌های وب‌سایت",
+    heroSubtitle: "قالب‌های زیبا و آماده برای خالقان، کسب‌وکارها و آژانس‌ها.",
+    heroCta: "مشاهده قالب‌ها",
+    feedLinkLabel: "فید",
+    feedPageTitle: "فید و بازی",
+    feedSubtitle: "آخرین آپلودها، به‌روزرسانی‌ها و بازی ویژه.",
+    templatesTitle: "قالب‌ها",
+    templatesSubtitle: "روی هر قالب کلیک کنید تا به سایت زنده بروید.",
+    navHome: "صفحه اصلی",
+    navTemplates: "قالب‌ها",
+    navFeed: "فید",
+    langButtonEn: "English",
+    langButtonFa: "فارسی",
+    footerText: "© {year} پیکساو. ساخته شده در طوفان.",
+    footerTagline: "باران با اسکرول شدیدتر می‌شود",
+    playButton: "بازی کنید",
+    exploreButton: "کاوش",
+    skipLink: "پرش به محتوا",
+  },
+};

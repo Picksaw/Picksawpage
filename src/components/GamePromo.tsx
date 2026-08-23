@@ -1,11 +1,15 @@
 import Reveal from "./Reveal";
+import { SITE_TEXTS, type Lang } from "../config/siteTexts";
+import { SITE_IMAGES } from "../config/siteImages";
 
 interface GamePromoProps {
   gameLink: string;
+  lang?: Lang;
 }
 
-export default function GamePromo({ gameLink }: GamePromoProps) {
+export default function GamePromo({ gameLink, lang = "en" }: GamePromoProps) {
   const hasLink = gameLink.trim().length > 0;
+  const t = SITE_TEXTS[lang];
 
   return (
     <section className="relative">
@@ -24,7 +28,7 @@ export default function GamePromo({ gameLink }: GamePromoProps) {
                 <div className="absolute inset-0 -m-2 animate-pulse-slow rounded-full bg-cyan-400/15 blur-xl" />
 
                 <img
-                  src="./images/stormblade-icon.png"
+                  src={SITE_IMAGES.gameIcon}
                   alt="Stormblade"
                   className="relative h-20 w-20 rounded-full border-2 border-cyan-400/30 object-cover shadow-[0_0_30px_rgba(34,211,238,0.25)] sm:h-24 sm:w-24"
                   draggable={false}
@@ -34,7 +38,7 @@ export default function GamePromo({ gameLink }: GamePromoProps) {
               {/* Text */}
               <div className="flex flex-1 flex-col items-center text-center sm:items-start sm:text-left">
                 <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.25em] text-cyan-400/80">
-                  Featured Game
+                  {lang === "fa" ? "بازی ویژه" : "Featured Game"}
                 </p>
 
                 <h3 className="text-2xl font-black tracking-tight text-white sm:text-3xl">
@@ -66,7 +70,7 @@ export default function GamePromo({ gameLink }: GamePromoProps) {
                   <path d="M8 5v14l11-7z" />
                 </svg>
 
-                Play Now
+                {t.playButton || (lang === "fa" ? "بازی کنید" : "Play Now")}
               </a>
             </div>
           </div>

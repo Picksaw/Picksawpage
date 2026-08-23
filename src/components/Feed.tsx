@@ -2,13 +2,22 @@ import { useState } from "react";
 import PostCard from "./PostCard";
 import Reveal from "./Reveal";
 import { type Post } from "../types";
+import { SITE_TEXTS, type Lang } from "../config/siteTexts";
 
 interface FeedProps {
   posts: Post[];
   isAdmin: boolean;
+  lang?: Lang;
   onPostClick: (post: Post) => void;
   onDeletePost: (id: string) => void | Promise<void>;
 }
+
+const filterLabels: Record<Filter, { en: string; fa: string }> = {
+  All: { en: "All", fa: "همه" },
+  Videos: { en: "Videos", fa: "ویدیوها" },
+  Images: { en: "Images", fa: "تصاویر" },
+  Music: { en: "Music", fa: "موسیقی" },
+};
 
 const filters = ["All", "Videos", "Images", "Music"] as const;
 type Filter = (typeof filters)[number];
@@ -19,7 +28,7 @@ const filterTypeMap: Record<Filter, Post["type"] | null> = {
   Music: "music",
 };
 
-export default function Feed({ posts, isAdmin, onPostClick, onDeletePost }: FeedProps) {
+export default function Feed({ posts, isAdmin, lang = "en", onPostClick, onDeletePost }: FeedProps) {
   const [active, setActive] = useState<Filter>("All");
 
   const filtered =
@@ -33,12 +42,12 @@ export default function Feed({ posts, isAdmin, onPostClick, onDeletePost }: Feed
           <div>
             <Reveal>
               <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl md:text-5xl">
-                The Feed
+                {SITE_TEXTS[lang].feedPageTitle || "The Feed"}
               </h2>
             </Reveal>
             <Reveal delay={60}>
               <p className="mt-3 max-w-lg text-base text-slate-400 sm:text-lg">
-                Videos, music, and visuals — straight from the storm.
+                {SITE_TEXTS[lang].feedSubtitle || "Videos, music, and visuals — straight from the storm."}
               </p>
             </Reveal>
           </div>
@@ -56,7 +65,7 @@ export default function Feed({ posts, isAdmin, onPostClick, onDeletePost }: Feed
                       : "text-slate-400 hover:text-white hover:bg-white/5"
                   }`}
                 >
-                  {f}
+                  {filterLabels[f][lang] || filterLabels[f].en}
                 </button>
               ))}
             </div>
@@ -71,9 +80,9 @@ export default function Feed({ posts, isAdmin, onPostClick, onDeletePost }: Feed
                 <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
-            <p className="text-lg font-medium text-slate-400">No posts yet</p>
+            <p className="text-lg font-medium text-slate-400">{lang === "fa" ? "هنوز پستی وجود ندارد" : "No posts yet"}</p>
             <p className="mt-1 text-sm text-slate-600">
-              {isAdmin ? "Click 'New post' to upload your first content." : "Check back later for new content."}
+              {isAdmin ? (lang === "fa" ? "روی 'پست جدید' کلیک کنید تا اولین محتوا را آپلود کنید." : "Click 'New post' to upload your first content.") : (lang === "fa" ? "بعداً برای محتوای جدید برگردید." : "Check back later for new content.")}
             </p>
           </div>
         ) : (

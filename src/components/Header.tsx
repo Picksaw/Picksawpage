@@ -1,14 +1,20 @@
 import { useState, useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
+import type { Lang } from "../config/siteTexts";
+import { SITE_TEXTS } from "../config/siteTexts";
 
 interface HeaderProps {
   isAdmin: boolean;
+  lang: Lang;
   onAdminOpen: () => void;
   onLoginOpen: () => void;
   onLogout: () => void;
+  onToggleLang: () => void;
 }
 
-export default function Header({ isAdmin, onAdminOpen, onLoginOpen, onLogout }: HeaderProps) {
+export default function Header({ isAdmin, lang, onAdminOpen, onLoginOpen, onLogout, onToggleLang }: HeaderProps) {
   const [scrolled, setScrolled] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 30);
@@ -16,6 +22,13 @@ export default function Header({ isAdmin, onAdminOpen, onLoginOpen, onLogout }: 
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  const t = SITE_TEXTS[lang];
+
+  const navLinks = [
+    { to: "/", label: t.navHome },
+    { to: "/feed", label: t.navFeed },
+  ];
 
   return (
     <header
@@ -32,34 +45,48 @@ export default function Header({ isAdmin, onAdminOpen, onLoginOpen, onLogout }: 
           }`}
           aria-label="Primary"
         >
-          {/* Logo — text only */}
-          <a href="#top" className="group flex items-center">
+          {/* Logo */}
+          <Link to="/" className="group flex items-center">
             <span className="text-lg font-bold tracking-tight text-white transition-transform duration-300 group-hover:scale-105">
               Pick<span className="text-cyan-300">saw</span>
             </span>
-          </a>
+          </Link>
 
           {/* Nav links */}
           <div className="hidden items-center gap-1 md:flex">
-            {[
-              { href: "#top", label: "Home" },
-              { href: "#feed", label: "Feed" },
-            ].map((l) => (
-              <a
-                key={l.href}
-                href={l.href}
-                className="rounded-lg px-3.5 py-2 text-sm text-slate-300 transition-colors duration-200 hover:bg-white/5 hover:text-white"
+            {navLinks.map((l) => (
+              <Link
+                key={l.to}
+                to={l.to}
+                className={`rounded-lg px-3.5 py-2 text-sm transition-colors duration-200 ${
+                  location.pathname === l.to
+                    ? "text-white bg-white/10"
+                    : "text-slate-300 hover:bg-white/5 hover:text-white"
+                }`}
               >
                 {l.label}
-              </a>
+              </Link>
             ))}
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {/* Language toggle */}
+            <button
+              type="button"
+              onClick={onToggleLang}
+              className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-300 transition-all hover:border-white/20 hover:bg-white/10 hover:text-white"
+              aria-label="Toggle language"
+              title={lang === "en" ? "فارسی" : "English"}
+            >
+              <span className="text-cyan-300">{lang.toUpperCase()}</span>
+              <span>/</span>
+              <span className="text-slate-500">{lang === "en" ? "fa" : "en"}</span>
+            </button>
+
             {isAdmin ? (
               <>
-                {/* Admin badge + new post */}
+                {/* Admin badge */}
                 <span className="hidden items-center gap-1.5 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-cyan-300 sm:flex">
                   <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
@@ -99,9 +126,6 @@ export default function Header({ isAdmin, onAdminOpen, onLoginOpen, onLogout }: 
               </>
             ) : (
               <>
-                {/* Sign in button — always shown. This is only a UI affordance;
-                    real authorization is enforced server-side by the Worker.
-                    If the Worker URL is not configured, login simply fails. */}
                 <button
                   type="button"
                   onClick={onLoginOpen}
@@ -115,14 +139,13 @@ export default function Header({ isAdmin, onAdminOpen, onLoginOpen, onLogout }: 
                   </svg>
                 </button>
 
-                {/* Explore CTA */}
-                <a
-                  href="#feed"
+                <Link
+                  to="/feed"
                   className="group relative overflow-hidden rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 shadow-lg shadow-white/10 transition-all duration-300 hover:shadow-white/20"
                 >
-                  <span className="relative z-10">Explore</span>
+                  <span className="relative z-10">{t.exploreButton}</span>
                   <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-cyan-200 via-white to-sky-200 transition-transform duration-500 group-hover:translate-x-0" />
-                </a>
+                </Link>
               </>
             )}
           </div>

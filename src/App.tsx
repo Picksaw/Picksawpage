@@ -1,13 +1,15 @@
 import { useState, useCallback, useEffect } from "react";
+import { Routes, Route } from "react-router-dom";
 import StormBackground from "./components/StormBackground";
 import GraffitiText from "./components/GraffitiText";
 import Header from "./components/Header";
-import Hero from "./components/Hero";
-import Feed from "./components/Feed";
+import HomePage from "./pages/HomePage";
+import FeedPage from "./pages/FeedPage";
 import AdminPanel from "./components/AdminPanel";
 import PostModal from "./components/PostModal";
 import LoginModal from "./components/LoginModal";
 import { useAdmin } from "./hooks/useAdmin";
+import { useLanguage } from "./hooks/useLanguage";
 import {
   fetchPosts,
   createPostApi,
@@ -16,15 +18,17 @@ import {
   type NewPostInput,
 } from "./api/posts";
 import { type Post } from "./types";
+import { SITE_TEXTS } from "./config/siteTexts";
 
 // ============================================================
 // GAME LINK
 // Change this URL whenever your StormBlade game URL changes.
 // Then rebuild/redeploy the website.
 // ============================================================
-const GAME_LINK = "https://stormblade.picksaw.ir";
+export const GAME_LINK = "https://stormblade.picksaw.ir";
 
 export default function App() {
+  const { lang, toggle, setLang } = useLanguage();
   const { isAdmin, login, logout } = useAdmin();
 
   const [posts, setPosts] = useState<Post[]>([]);
@@ -39,13 +43,10 @@ export default function App() {
     (async () => {
       try {
         const loaded = await fetchPosts();
-
         if (!cancelled) {
           setPosts(loaded);
         }
       } catch {
-        // Network/API error — leave posts empty;
-        // public site still renders.
         if (!cancelled) {
           setPosts([]);
         }
@@ -68,7 +69,6 @@ export default function App() {
         if (err instanceof AuthError) {
           logout();
         }
-
         throw err;
       }
     },
@@ -86,7 +86,6 @@ export default function App() {
         if (err instanceof AuthError) {
           logout();
         }
-
         throw err;
       }
     },
@@ -104,11 +103,9 @@ export default function App() {
   const handleLogin = useCallback(
     async (password: string): Promise<boolean> => {
       const success = await login(password);
-
       if (success) {
         setShowLogin(false);
       }
-
       return success;
     },
     [login]
@@ -126,6 +123,8 @@ export default function App() {
     logout();
   }, [logout]);
 
+  const t = SITE_TEXTS[lang];
+
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-slate-950 text-slate-100 antialiased">
       <StormBackground />
@@ -136,27 +135,42 @@ export default function App() {
           href="#top"
           className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-slate-900"
         >
-          Skip to content
+          {t.skipLink}
         </a>
 
         <Header
           isAdmin={isAdmin}
+          lang={lang}
           onAdminOpen={handleAdminOpen}
           onLoginOpen={() => setShowLogin(true)}
           onLogout={handleLogout}
+          onToggleLang={toggle}
         />
 
         <main>
-          <Hero gameLink={GAME_LINK} />
-
-          <div id="feed">
-            <Feed
-              posts={posts}
-              isAdmin={isAdmin}
-              onPostClick={handlePostClick}
-              onDeletePost={handleDeletePost}
+          <Routes>
+            <Route
+              path="/"
+              element={<HomePage lang={lang} />}
             />
-          </div>
+            <Route
+              path="/feed"
+              element={
+                <FeedPage
+                  lang={lang}
+                  posts={posts}
+                  isAdmin={isAdmin}
+                  onPostClick={handlePostClick}
+                  onDeletePost={handleDeletePost}
+                  gameLink={GAME_LINK}
+                />
+              }
+            />
+            <Route
+              path="*"
+              element={<HomePage lang={lang} />}
+            />
+          </Routes>
         </main>
 
         {/* Footer */}
@@ -164,12 +178,9 @@ export default function App() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
               <p className="text-xs text-slate-600">
-                © {new Date().getFullYear()} Picksaw. Crafted in the storm.
+                {t.footerText.replace("{year}", String(new Date().getFullYear()))}
               </p>
-
-              <p className="text-xs text-slate-700">
-                Rain intensifies as you scroll
-              </p>
+              <p className="text-xs text-slate-700">{t.footerTagline}</p>
             </div>
           </div>
         </footer>
