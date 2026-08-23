@@ -15,7 +15,7 @@ export const TEMPLATES: TemplateItem[] = [
   {
     id: "verda",
     name: { en: "Verda", fa: "وِردا" },
-    title: { en: "DERMATOLOGY", fa: "دکتر پوست" },
+    title: { en: "Verda", fa: "وِردا" },
     description: { en: "", fa: "" },
     url: "https://verda.picksaw.ir/",
     imageKey: "verda",
@@ -23,15 +23,15 @@ export const TEMPLATES: TemplateItem[] = [
   {
     id: "lumina",
     name: { en: "Lumina", fa: "لومینا" },
-    title: { en: "Dental clinic", fa: "دندانپزشکی" },
+    title: { en: "Lumina", fa: "لومینا" },
     description: { en: "", fa: "" },
     url: "https://lumina.picksaw.ir/",
     imageKey: "lumina",
   },
   {
     id: "clarity",
-    name: { en: "clarity", fa: "کلاریتی" },
-    title: { en: "Beauty Clinic", fa: "کلینیک زیبایی" },
+    name: { en: "Clarity", fa: "کلاریتی" },
+    title: { en: "Clarity", fa: "کلاریتی" },
     description: { en: "", fa: "" },
     url: "https://clarity.picksaw.ir/",
     imageKey: "clarity",
@@ -39,7 +39,7 @@ export const TEMPLATES: TemplateItem[] = [
   {
     id: "pulse",
     name: { en: "Pulse", fa: "پالس" },
-    title: { en: "Clinic", fa: "کلینیک" },
+    title: { en: "Pulse", fa: "پالس" },
     description: { en: "", fa: "" },
     url: "https://pulse.picksaw.ir/",
     imageKey: "pulse",
@@ -47,7 +47,7 @@ export const TEMPLATES: TemplateItem[] = [
 {
   id: "aurora",
   name: { en: "Aurora", fa: "آورورا" },
-  title: { en: "Clinic", fa: "کلینیک" },
+  title: { en: "Aurora", fa: "آورورا" },
   description: { en: "", fa: "" },
   url: "https://aurora.picksaw.ir/",  // <-- CHANGE THIS TO YOUR LINK
   imageKey: "aurora",
@@ -55,9 +55,9 @@ export const TEMPLATES: TemplateItem[] = [
 {
   id: "lumen",
   name: { en: "Lumen", fa: "لومن" },
-  title: { en: "Clinic", fa: "کلینیک" },
+  title: { en: "Lumen", fa: "لومن" },
   description: { en: "", fa: "" },
   url: "https://lumen.picksaw.ir/",  // <-- CHANGE THIS TO YOUR LINK
-  imageKey: "new-template",
+  imageKey: "lumen",
 },
 ];
