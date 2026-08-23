@@ -28,7 +28,7 @@ export default function TemplateGrid({ lang }: TemplateGridProps) {
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {TEMPLATES.map((item, i) => {
-            const imgUrl = TEMPLATE_IMAGE_MAP[item.imageKey] || "/images/template-portfolio.png";
+            const imgUrl = TEMPLATE_IMAGE_MAP[item.imageKey] || "images/template-portfolio.png";
             return (
               <Reveal key={item.id} delay={i * 80}>
                 <a

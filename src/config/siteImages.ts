@@ -4,7 +4,7 @@
  * After npm build, Vite copies public/images/ to dist/, so images load.
  */
 export const SITE_IMAGES = {
-  logo: "/images/picksaw-logo.png",
-  icon: "/images/picksaw-icon.png",
-  gameIcon: "/images/stormblade-icon.png",
+  logo: "images/picksaw-logo.png",
+  icon: "images/picksaw-icon.png",
+  gameIcon: "images/stormblade-icon.png",
 } as const;
