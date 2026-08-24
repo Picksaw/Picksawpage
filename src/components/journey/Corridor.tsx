@@ -1,16 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useFrame, type ThreeEvent } from "@react-three/fiber";
+import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { TEMPLATES, type TemplateItem } from "../../config/templatesConfig";
 import { TEMPLATE_IMAGE_MAP } from "../../config/templateImages";
+import { SITE_TEXTS, type Lang } from "../../config/siteTexts";
 
 /**
- * Corridor — the 3D gallery.
- * Camera stations: [P view, painting 1 focus, … painting N focus, exit].
- * Scroll progress maps to a smooth dolly through the stations —
- * forward to walk in, backward to walk out. Paintings hang along the
- * path with slight offsets like pieces in a private gallery; fog and
- * depth rain sell the space.
+ * Corridor V2 — the neon city walk.
+ *
+ * Layers, strictly one at a time:
+ *   station 0  the P + charging ring
+ *   station 1  the "Website Templates" headline floating in 3D
+ *   stations   one solo painting per template — nothing visible
+ *              behind or ahead of it (fog + distance fade)
+ *   exit       the walk ends, the page continues
+ *
+ * The path runs through a city: black building blocks with blue
+ * outlines and glowing cyan windows, different sizes, passing by as
+ * you move forward. Paintings auto-fit the viewport (mobile & PC)
+ * and stay centered — they never spill off the sides.
  */
 
 const N = TEMPLATES.length;
@@ -18,28 +26,39 @@ const PAINTING_W = 3.1;
 const PAINTING_H = 2.35;
 const FOCUS_DIST = 4.2;
 
-const PAINTING_X = [0, -1.5, 1.5, -1.1, 1.1, 0];
-const PAINTING_ROT = [0, 0.09, -0.09, 0.06, -0.06, 0];
+export const HEADLINE_Z = -13;
+export const paintingZ = (i: number) => -24 - i * 8;
 
-export const paintingZ = (i: number) => -6 - i * 6;
 export const stations: number[] = [
   4.6, // the P + ring
+  HEADLINE_Z + FOCUS_DIST, // the headline layer
   ...Array.from({ length: N }, (_, i) => paintingZ(i) + FOCUS_DIST),
   paintingZ(N - 1) - 1.6, // exit pull-through
 ];
 
+/** Painting index for the focus bar: -1 outside the gallery zone. */
 export function focusedIndex(progress: number): number {
   const u = progress * (stations.length - 1);
-  return Math.max(-1, Math.min(N - 1, Math.round(u) - 1));
+  const idx = Math.round(u) - 2;
+  if (u < 1.55 || u > stations.length - 1.4) return -1;
+  return Math.max(0, Math.min(N - 1, idx));
 }
 
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
 export function cameraZ(progress: number): number {
   const u = Math.max(0, Math.min(1, progress)) * (stations.length - 1);
   const k = Math.min(stations.length - 2, Math.floor(u));
   const t = smoothstep(u - k);
   return THREE.MathUtils.lerp(stations[k], stations[k + 1], t);
+}
+
+/** How visible a layer is — fades to zero well before the next appears. */
+function layerOpacity(camZ: number, layerZ: number): number {
+  const d = camZ - layerZ; // positive while approaching
+  if (d <= 0.2) return clamp01(d / 1.2); // fade as the camera reaches it
+  return clamp01((8.4 - d) / 2.2); // fully hidden by 8.4 units away
 }
 
 /** Camera dolly driven by shared scroll progress + mouse parallax. */
@@ -65,19 +84,37 @@ export function CameraRig({
   useFrame(({ camera }, delta) => {
     const dt = Math.min(delta, 0.05);
     const targetZ = cameraZ(progressRef.current ?? 0);
-    // critically-damped feel — never robotic, never laggy
     const k = 1 - Math.exp(-dt * 5.5);
     pos.current.z += (targetZ - pos.current.z) * k;
-    pos.current.x += (pointer.current.x * 0.28 - pos.current.x) * k * 0.6;
-    pos.current.y += (-pointer.current.y * 0.16 - pos.current.y) * k * 0.6;
+    pos.current.x += (pointer.current.x * 0.22 - pos.current.x) * k * 0.6;
+    pos.current.y += (-pointer.current.y * 0.12 - pos.current.y) * k * 0.6;
     camera.position.copy(pos.current);
     camera.lookAt(pos.current.x * 0.3, pos.current.y * 0.3, pos.current.z - 9);
   });
   return null;
 }
 
-/** Bake a painting texture: screenshot + caption strip. Falls back to a
- *  branded gradient if the image can't load. Returns [texture, update]. */
+/** Responsive fit: scale content so width×height fit the viewport at the
+ *  focus distance — paintings never spill off the sides, phone or PC. */
+function useFitScale(
+  baseW: number,
+  baseH: number,
+  focusDist: number,
+  maxWFrac = 0.94,
+  maxHFrac = 0.8
+): number {
+  const { size, camera } = useThree();
+  const [s, setS] = useState(1);
+  useEffect(() => {
+    const cam = camera as THREE.PerspectiveCamera;
+    const visH = 2 * focusDist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    const visW = visH * (size.width / size.height);
+    setS(Math.min((maxWFrac * visW) / baseW, (maxHFrac * visH) / baseH, 1.06));
+  }, [size, camera, baseW, baseH, focusDist, maxWFrac, maxHFrac]);
+  return s;
+}
+
+/** Bake a painting texture: screenshot + caption strip, branded fallback. */
 function usePaintingTexture(item: TemplateItem, lang: string): THREE.CanvasTexture {
   const [tex] = useState(() => {
     const c = document.createElement("canvas");
@@ -94,17 +131,12 @@ function usePaintingTexture(item: TemplateItem, lang: string): THREE.CanvasTextu
       const H = 720;
       const CAP = 74;
       ctx.clearRect(0, 0, W, H);
-
-      // image area
       if (img) {
         const iw = img.naturalWidth || 4;
         const ih = img.naturalHeight || 3;
         const scale = Math.max(W / iw, (H - CAP) / ih);
-        const dw = iw * scale;
-        const dh = ih * scale;
-        ctx.drawImage(img, (W - dw) / 2, (H - CAP - dh) / 2, dw, dh);
+        ctx.drawImage(img, (W - iw * scale) / 2, (H - CAP - ih * scale) / 2, iw * scale, ih * scale);
       } else {
-        // branded fallback
         const g = ctx.createLinearGradient(0, 0, W, H - CAP);
         g.addColorStop(0, "#0b1322");
         g.addColorStop(1, "#142238");
@@ -117,7 +149,6 @@ function usePaintingTexture(item: TemplateItem, lang: string): THREE.CanvasTextu
         ctx.fillText((item.name.en || "?")[0], W / 2, (H - CAP) / 2);
       }
 
-      // caption strip
       const cg = ctx.createLinearGradient(0, H - CAP, 0, H);
       cg.addColorStop(0, "rgba(4,7,14,0.88)");
       cg.addColorStop(1, "rgba(4,7,14,0.97)");
@@ -137,12 +168,10 @@ function usePaintingTexture(item: TemplateItem, lang: string): THREE.CanvasTextu
       ctx.fillStyle = "rgba(148,180,210,0.85)";
       ctx.font = "400 22px 'Sora Variable', sans-serif";
       ctx.fillText(host, 38, H - CAP / 2 + 22);
-      // "open" affordance on the right
       ctx.fillStyle = "#4fd8ff";
       ctx.font = "600 22px 'Sora Variable', sans-serif";
       ctx.textAlign = "right";
-      const openLabel = lang === "fa" ? "باز کردن ↗" : "OPEN ↗";
-      ctx.fillText(openLabel, W - 36, H - CAP / 2);
+      ctx.fillText(lang === "fa" ? "باز کردن ↗" : "OPEN ↗", W - 36, H - CAP / 2);
 
       tex.tex.needsUpdate = true;
     };
@@ -182,19 +211,34 @@ function Painting({
   onOpen: (item: TemplateItem) => void;
 }) {
   const group = useRef<THREE.Group>(null);
-  const glow = useRef<THREE.MeshBasicMaterial>(null);
+  const planeMat = useRef<THREE.MeshBasicMaterial>(null);
+  const frameMat = useRef<THREE.MeshStandardMaterial>(null);
+  const glowMat = useRef<THREE.MeshBasicMaterial>(null);
   const hovered = useRef(false);
   const focusAmt = useRef(0);
   const map = usePaintingTexture(item, lang);
+  const fit = useFitScale(PAINTING_W, PAINTING_H, FOCUS_DIST);
+  const z = paintingZ(index);
 
-  useFrame((_, delta) => {
+  useFrame(({ camera }, delta) => {
     const dt = Math.min(delta, 0.05);
-    const target = (focused ? 1 : 0) * 0.85 + (hovered.current ? 0.15 : 0);
-    focusAmt.current += (target - focusAmt.current) * Math.min(1, dt * 5);
-    if (glow.current) glow.current.opacity = 0.1 + focusAmt.current * 0.38;
+    const op = layerOpacity(camera.position.z, z);
+
+    // solo fade — material + glow + frame all obey it
+    if (planeMat.current) planeMat.current.opacity = op;
+    if (glowMat.current) {
+      const target = (focused ? 1 : 0) * 0.85 + (hovered.current ? 0.15 : 0);
+      focusAmt.current += (target - focusAmt.current) * Math.min(1, dt * 5);
+      glowMat.current.opacity = (0.1 + focusAmt.current * 0.38) * op;
+    }
+    if (frameMat.current) frameMat.current.opacity = op;
+
     if (group.current) {
-      const s = hovered.current ? 1.035 : 1;
+      const hoverS = hovered.current ? 1.03 : 1;
+      const s = fit * hoverS;
       group.current.scale.lerp(new THREE.Vector3(s, s, s), Math.min(1, dt * 8));
+      // parallax lean — tiny, never enough to spill
+      group.current.position.x = (camera.position.x || 0) * 0.06;
     }
   });
 
@@ -209,16 +253,12 @@ function Painting({
   };
 
   return (
-    <group
-      ref={group}
-      position={[PAINTING_X[index] ?? 0, 0, paintingZ(index)]}
-      rotation={[0, PAINTING_ROT[index] ?? 0, 0]}
-    >
-      {/* glow halo behind the frame — brightens when focused/hovered */}
+    <group ref={group} position={[0, 0, z]}>
+      {/* glow halo behind the frame */}
       <mesh position={[0, 0, -0.09]}>
         <planeGeometry args={[PAINTING_W + 0.55, PAINTING_H + 0.55]} />
         <meshBasicMaterial
-          ref={glow}
+          ref={glowMat}
           color="#4fd8ff"
           transparent
           opacity={0.1}
@@ -230,7 +270,14 @@ function Painting({
       {/* dark frame */}
       <mesh position={[0, 0, -0.05]}>
         <boxGeometry args={[PAINTING_W + 0.16, PAINTING_H + 0.16, 0.09]} />
-        <meshStandardMaterial color="#11182a" metalness={0.6} roughness={0.5} />
+        <meshStandardMaterial
+          ref={frameMat}
+          color="#11182a"
+          metalness={0.6}
+          roughness={0.5}
+          transparent
+          opacity={1}
+        />
       </mesh>
       {/* the painting itself */}
       <mesh
@@ -243,13 +290,246 @@ function Painting({
         }}
       >
         <planeGeometry args={[PAINTING_W, PAINTING_H]} />
-        <meshBasicMaterial map={map} toneMapped={false} />
+        <meshBasicMaterial map={map} toneMapped={false} transparent opacity={1} />
       </mesh>
     </group>
   );
 }
 
-/** Depth rain inside the corridor — cheap points, world-fixed. */
+/** The "Website Templates" layer — big typographic plane in space. */
+function HeadlineLayer({ lang }: { lang: Lang }) {
+  const t = SITE_TEXTS[lang];
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  const group = useRef<THREE.Group>(null);
+  const fit = useFitScale(5.6, 2.1, FOCUS_DIST, 0.9, 0.62);
+
+  const texture = useMemo(() => {
+    const c = document.createElement("canvas");
+    c.width = 1680;
+    c.height = 630;
+    const ctx = c.getContext("2d")!;
+    ctx.clearRect(0, 0, c.width, c.height);
+
+    const fa = lang === "fa";
+    ctx.direction = fa ? "rtl" : "ltr";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // main line — big, white, cyan glow
+    const title = t.heroTitle;
+    let size = 150;
+    ctx.font = `800 ${size}px '${fa ? "Vazirmatn Variable" : "Sora Variable"}', sans-serif`;
+    while (ctx.measureText(title).width > c.width - 140 && size > 60) {
+      size -= 6;
+      ctx.font = `800 ${size}px '${fa ? "Vazirmatn Variable" : "Sora Variable"}', sans-serif`;
+    }
+    ctx.shadowColor = "rgba(79,216,255,0.85)";
+    ctx.shadowBlur = 44;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(title, c.width / 2, 250);
+
+    // subtitle — quiet gray
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "transparent";
+    const sub = t.heroSubtitle;
+    let ssize = 40;
+    ctx.font = `500 ${ssize}px '${fa ? "Vazirmatn Variable" : "Sora Variable"}', sans-serif`;
+    while (ctx.measureText(sub).width > c.width - 200 && ssize > 20) {
+      ssize -= 2;
+      ctx.font = `500 ${ssize}px '${fa ? "Vazirmatn Variable" : "Sora Variable"}', sans-serif`;
+    }
+    ctx.fillStyle = "rgba(160,185,210,0.95)";
+    ctx.fillText(sub, c.width / 2, 430);
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    return tex;
+  }, [lang, t.heroTitle, t.heroSubtitle]);
+
+  useEffect(() => () => texture.dispose(), [texture]);
+
+  // fonts may land after first paint — rebuild once they're ready
+  const [, force] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    document.fonts?.ready.then(() => alive && force((n) => n + 1));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useFrame(({ camera }) => {
+    const op = layerOpacity(camera.position.z, HEADLINE_Z);
+    if (mat.current) mat.current.opacity = op;
+    if (group.current) group.current.scale.setScalar(fit);
+  });
+
+  return (
+    <group ref={group} position={[0, 0.1, HEADLINE_Z]}>
+      <mesh>
+        <planeGeometry args={[5.6, 2.1]} />
+        <meshBasicMaterial
+          ref={mat}
+          map={texture}
+          transparent
+          opacity={0}
+          toneMapped={false}
+          depthWrite={false}
+          fog={false}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+// ── the city ───────────────────────────────────────────────────────────────
+
+/** Window textures — mostly dark, sparse cyan lit windows. */
+function makeWindowTextures(): THREE.Texture[] {
+  const out: THREE.Texture[] = [];
+  for (let v = 0; v < 3; v++) {
+    const c = document.createElement("canvas");
+    c.width = 128;
+    c.height = 256;
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = "#04060c";
+    ctx.fillRect(0, 0, 128, 256);
+    const cols = 6;
+    const rows = 15;
+    const cw = 128 / cols;
+    const ch = 256 / rows;
+    for (let x = 0; x < cols; x++) {
+      for (let y = 0; y < rows; y++) {
+        const r = Math.random();
+        if (r < 0.26) {
+          const bright = 0.35 + Math.random() * 0.6;
+          ctx.fillStyle = `rgba(${120 + bright * 90}, ${210 + bright * 40}, 255, ${0.55 + bright * 0.4})`;
+          ctx.fillRect(x * cw + cw * 0.22, y * ch + ch * 0.28, cw * 0.5, ch * 0.36);
+        }
+      }
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.magFilter = THREE.NearestFilter;
+    out.push(tex);
+  }
+  return out;
+}
+
+interface Building {
+  x: number;
+  z: number;
+  w: number;
+  h: number;
+  d: number;
+  tex: number;
+}
+
+/** Deterministic per-session city layout: blocks flanking the path. */
+function makeCity(isMobile: boolean): Building[] {
+  const list: Building[] = [];
+  let seed = 20260824;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const startZ = 8;
+  const endZ = paintingZ(N - 1) - 12;
+  const step = isMobile ? 7 : 5;
+  for (let z = startZ; z > endZ; z -= step) {
+    for (const side of [-1, 1]) {
+      const rows = rnd() < 0.4 ? 2 : 1;
+      for (let r = 0; r < rows; r++) {
+        const w = 1.6 + rnd() * 2.6;
+        const d = 1.6 + rnd() * 2.6;
+        const h = 2 + rnd() * 7.5;
+        const x = side * (5.4 + r * 4.5 + rnd() * 2.2);
+        list.push({
+          x: x + (rnd() - 0.5) * 1.6,
+          z: z + (rnd() - 0.5) * step * 0.7,
+          w,
+          h,
+          d,
+          tex: Math.floor(rnd() * 3),
+        });
+      }
+    }
+  }
+  return list;
+}
+
+function City() {
+  const isMobile = useMemo(
+    () => window.matchMedia("(pointer: coarse)").matches,
+    []
+  );
+  const buildings = useMemo(() => makeCity(isMobile), [isMobile]);
+  const windowTexs = useMemo(() => makeWindowTextures(), []);
+
+  // merged resources: one material per window-texture variant
+  const mats = useMemo(
+    () =>
+      windowTexs.map(
+        (t) => new THREE.MeshBasicMaterial({ map: t, color: "#ffffff" })
+      ),
+    [windowTexs]
+  );
+  const edgeMat = useMemo(
+    () =>
+      new THREE.LineBasicMaterial({
+        color: "#2f7bff",
+        transparent: true,
+        opacity: 0.4,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    []
+  );
+
+  // build meshes imperatively once (many boxes, one draw call each)
+  const cityGroup = useMemo(() => {
+    const g = new THREE.Group();
+    for (const b of buildings) {
+      const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
+      const mesh = new THREE.Mesh(geo, mats[b.tex]);
+      mesh.position.set(b.x, -2.9 + b.h / 2, b.z);
+      g.add(mesh);
+
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
+      edges.position.copy(mesh.position);
+      g.add(edges);
+    }
+    return g;
+  }, [buildings, mats, edgeMat]);
+
+  useEffect(
+    () => () => {
+      cityGroup.traverse((o) => {
+        if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
+          o.geometry.dispose();
+        }
+      });
+      mats.forEach((m) => m.dispose());
+      edgeMat.dispose();
+      windowTexs.forEach((t) => t.dispose());
+    },
+    [cityGroup, mats, edgeMat, windowTexs]
+  );
+
+  return (
+    <>
+      {/* ground */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2.92, -26]}>
+        <planeGeometry args={[110, 150]} />
+        <meshBasicMaterial color="#04060d" />
+      </mesh>
+      <primitive object={cityGroup} />
+    </>
+  );
+}
+
+/** Depth rain inside the corridor. */
 function CorridorRain() {
   const ref = useRef<THREE.Points>(null);
   const count = 380;
@@ -260,7 +540,7 @@ function CorridorRain() {
     for (let i = 0; i < count; i++) {
       positions[i * 3] = (Math.random() - 0.5) * 15;
       positions[i * 3 + 1] = (Math.random() - 0.5) * 12;
-      positions[i * 3 + 2] = 6 - Math.random() * 48;
+      positions[i * 3 + 2] = 6 - Math.random() * 78;
       vels[i] = 2.2 + Math.random() * 2.6;
     }
     const g = new THREE.BufferGeometry();
@@ -299,32 +579,6 @@ function CorridorRain() {
   );
 }
 
-/** Faint guide rails along the path — depth cue, gallery lighting vibe. */
-function Rails() {
-  const mat = (
-    <meshBasicMaterial
-      color="#4fd8ff"
-      transparent
-      opacity={0.16}
-      blending={THREE.AdditiveBlending}
-      depthWrite={false}
-      fog={false}
-    />
-  );
-  return (
-    <group>
-      <mesh position={[-6.2, -2.9, -18]}>
-        <boxGeometry args={[0.025, 0.025, 50]} />
-        {mat}
-      </mesh>
-      <mesh position={[6.2, -2.9, -18]}>
-        <boxGeometry args={[0.025, 0.025, 50]} />
-        {mat}
-      </mesh>
-    </group>
-  );
-}
-
 export function CorridorScene({
   progressRef,
   focusedIdx,
@@ -340,7 +594,8 @@ export function CorridorScene({
     <>
       <CameraRig progressRef={progressRef} />
       <CorridorRain />
-      <Rails />
+      <City />
+      <HeadlineLayer lang={lang as Lang} />
       {TEMPLATES.map((item, i) => (
         <Painting
           key={item.id}

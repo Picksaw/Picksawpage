@@ -38,6 +38,8 @@ export default function PEmblem() {
 
   const group = useRef<THREE.Group>(null);
   const pGroup = useRef<THREE.Group>(null);
+  const pMat = useRef<THREE.MeshStandardMaterial>(null);
+  const sparkMat = useRef<THREE.MeshBasicMaterial>(null);
   const ring = useRef<THREE.Mesh>(null);
   const ringHalo = useRef<THREE.Mesh>(null);
   const orbitSpark = useRef<THREE.Mesh>(null);
@@ -116,9 +118,15 @@ export default function PEmblem() {
     charge.current = Math.min(1, charge.current + (fromStorm ? 0.16 : 0.11));
   };
 
-  useFrame((_state, delta) => {
+  useFrame((state, delta) => {
     const dt = Math.min(delta, 0.05);
     clock.current += dt;
+
+    // ── dive fades: the P dissolves as the camera reaches it; the ring
+    //    holds until the camera is through, then fades (portal exit) ──
+    const camZ = state.camera.position.z;
+    const pFade = Math.max(0, Math.min(1, (camZ - 1.2) / 2.6));
+    const ringFade = Math.max(0, Math.min(1, (camZ + 1.6) / 2.8));
 
     // ── formation: ring draws itself in shortly after mount ──
     if (clock.current > 1.0 && formation.current < 1) {
@@ -135,6 +143,8 @@ export default function PEmblem() {
       pGroup.current.rotation.x = -eased.current.y * 0.12;
       pGroup.current.position.y = Math.sin(clock.current * 0.9) * 0.06;
     }
+    if (pMat.current) pMat.current.opacity = pFade;
+    if (sparkMat.current) sparkMat.current.opacity = 0.9 * pFade;
 
     // ── charge dynamics ──
     charge.current = Math.max(0.25, charge.current - dt * 0.02);
@@ -148,7 +158,7 @@ export default function PEmblem() {
       ring.current.rotation.z += dt * 0.12;
       const s = (0.2 + 0.8 * fEase) * (1 + flash * 0.03);
       ring.current.scale.setScalar(s);
-      m.opacity = (0.35 + c * 0.6) * fEase;
+      m.opacity = (0.35 + c * 0.6) * fEase * ringFade;
       const col = new THREE.Color().lerpColors(
         new THREE.Color("#4fd8ff"),
         new THREE.Color("#eaffff"),
@@ -161,7 +171,7 @@ export default function PEmblem() {
       ringHalo.current.rotation.z -= dt * 0.06;
       const s = (0.2 + 0.8 * fEase) * (1 + flash * 0.06);
       ringHalo.current.scale.setScalar(s);
-      m.opacity = (0.08 + c * 0.16 + flash * 0.18) * fEase;
+      m.opacity = (0.08 + c * 0.16 + flash * 0.18) * fEase * ringFade;
     }
 
     // ── orbiting spark: draws the ring during formation, then keeps orbiting ──
@@ -173,7 +183,7 @@ export default function PEmblem() {
         0.05
       );
       const m = orbitSpark.current.material as THREE.MeshBasicMaterial;
-      m.opacity = fEase * (0.75 + flash * 0.25);
+      m.opacity = fEase * (0.75 + flash * 0.25) * ringFade;
       orbitSpark.current.scale.setScalar(0.9 + flash * 0.8);
     }
 
@@ -182,9 +192,9 @@ export default function PEmblem() {
       if (a.life > 0) {
         a.life = Math.max(0, a.life - dt * 2.1);
         const flicker = 0.75 + Math.random() * 0.25;
-        a.mat.opacity = a.life * flicker;
+        a.mat.opacity = a.life * flicker * ringFade;
         a.impact.scale.setScalar(0.25 + (1 - a.life) * 0.5);
-        (a.impact.material as THREE.SpriteMaterial).opacity = a.life * 0.9;
+        (a.impact.material as THREE.SpriteMaterial).opacity = a.life * 0.9 * ringFade;
       }
     }
 
@@ -201,12 +211,19 @@ export default function PEmblem() {
       {/* the P */}
       <group ref={pGroup}>
         <mesh geometry={pGeometry}>
-          <meshStandardMaterial color="#d9e6f5" metalness={0.92} roughness={0.24} />
+          <meshStandardMaterial
+            ref={pMat}
+            color="#d9e6f5"
+            metalness={0.92}
+            roughness={0.24}
+            transparent
+            opacity={1}
+          />
         </mesh>
         {/* spark in the bowl */}
         <mesh position={[-0.35, 0.53, 0.47]}>
           <sphereGeometry args={[0.085, 16, 16]} />
-          <meshBasicMaterial color="#bff1ff" toneMapped={false} />
+          <meshBasicMaterial ref={sparkMat} color="#bff1ff" toneMapped={false} transparent opacity={0.9} />
         </mesh>
       </group>
 

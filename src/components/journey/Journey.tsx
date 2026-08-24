@@ -22,36 +22,17 @@ import { getLenis } from "../../lib/lenis";
  *   Layer 0  the storm canvas (behind everything, as always)
  *   Layer 1  the 3D P + the energy ring forming around it; lightning
  *            arcs strike and charge the ring
- *   Layer 2  scrolling dollies FORWARD through the ring into the gallery
- *            corridor — one large solo painting per station
- *   Layer 3  click a painting (or the Open button) → fullscreen live
+ *   Layer 2  the "Website Templates" headline as its own layer in space
+ *   Layer 3  scrolling dollies FORWARD through the ring, past the
+ *            headline, into the neon city gallery — one solo painting
+ *            per station, nothing visible before or after it
+ *   Layer 4  click a painting (or the Open button) → fullscreen live
  *            preview where scrolling moves the template, not Picksaw
  *
  * A tall invisible spacer drives the scroll length; the camera follows
  * progress. When the walk ends, the canvas fades and the classic page
  * sections continue underneath.
  */
-
-function KineticTitle({ text, delay = 0 }: { text: string; delay?: number }) {
-  const words = text.split(" ");
-  return (
-    <span className="inline-block">
-      {words.map((w, i) => (
-        <span key={`${w}-${i}`} className="inline-block overflow-hidden pb-1 align-bottom">
-          <motion.span
-            className="inline-block"
-            initial={{ y: "110%", opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: delay + i * 0.09, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-          >
-            {w}
-            {i < words.length - 1 ? "\u00A0" : ""}
-          </motion.span>
-        </span>
-      ))}
-    </span>
-  );
-}
 
 export default function Journey({ lang }: { lang: Lang }) {
   const t = SITE_TEXTS[lang];
@@ -86,8 +67,12 @@ export default function Journey({ lang }: { lang: Lang }) {
     const el = spacerRef.current;
     const lenis = getLenis();
     if (el && lenis) {
-      const y = el.offsetTop + (el.offsetHeight * 1) / (stations.length - 1) - window.innerHeight * 0.28;
-      lenis.scrollTo(y, { duration: 1.8 });
+      // station 2 = first painting (station 1 is the headline layer)
+      const y =
+        el.offsetTop +
+        (el.offsetHeight * 2) / (stations.length - 1) -
+        window.innerHeight * 0.25;
+      lenis.scrollTo(y, { duration: 2.1 });
     } else if (el) {
       el.scrollIntoView({ behavior: "smooth" });
     }
@@ -103,12 +88,12 @@ export default function Journey({ lang }: { lang: Lang }) {
 
   return (
     <>
-      {/* scroll length for the walk */}
+      {/* scroll length for the walk: P → headline → 6 paintings → exit */}
       <div
         ref={spacerRef}
         id="templates"
         aria-hidden
-        style={{ height: `${100 + TEMPLATES.length * 92 + 55}vh` }}
+        style={{ height: `${100 + 100 + TEMPLATES.length * 92 + 55}vh` }}
       />
 
       {/* the 3D world */}
@@ -128,7 +113,7 @@ export default function Journey({ lang }: { lang: Lang }) {
             document.body.style.cursor = "";
           }}
         >
-          <fog attach="fog" args={["#06080f", 9, 30]} />
+          <fog attach="fog" args={["#06080f", 4.2, 8.8]} />
           <ambientLight intensity={0.5} />
           <directionalLight position={[-3, 5, 4]} intensity={1.4} color="#eaf6ff" />
           <pointLight position={[2.6, -0.6, 3.4]} intensity={22} color="#4fd8ff" />
@@ -144,60 +129,44 @@ export default function Journey({ lang }: { lang: Lang }) {
         </Canvas>
       </div>
 
-      {/* ── Layer: hero copy — floats over the P, sinks away on first scroll ── */}
+      {/* ── Layer: station-0 UI — badge + CTAs; the big headline itself
+             is now a 3D layer the walk passes through ── */}
       <motion.div
         style={{ opacity: heroOpacity, y: heroY, pointerEvents: heroPE }}
         className="pointer-events-none fixed inset-x-0 top-0 z-10 flex min-h-[100svh] flex-col items-center justify-center px-4 py-28 text-center"
       >
-        <div className="grid w-full max-w-6xl grid-cols-1 items-center gap-8 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="text-center lg:text-start">
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15, duration: 0.6 }}
-              className="glass-strong bolt-lit mb-6 inline-flex items-center gap-2 rounded-full px-4 py-1.5"
-            >
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-electric opacity-60" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-electric" />
-              </span>
-              <span className="text-xs font-medium tracking-wide text-slate-300 sm:text-sm">
-                {t.siteSubtitle}
-              </span>
-            </motion.div>
+        <div className="flex w-full max-w-3xl flex-col items-center">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15, duration: 0.6 }}
+            className="glass-strong bolt-lit mb-8 inline-flex items-center gap-2 rounded-full px-4 py-1.5"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-electric opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-electric" />
+            </span>
+            <span className="text-xs font-medium tracking-wide text-slate-300 sm:text-sm">
+              {t.siteSubtitle}
+            </span>
+          </motion.div>
 
-            <h1 className="bolt-text mx-auto max-w-3xl text-4xl font-bold leading-[1.12] tracking-tight text-white sm:text-6xl md:text-7xl lg:mx-0">
-              <KineticTitle text={t.heroTitle} delay={0.25} />
-            </h1>
-
-            <motion.p
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6, duration: 0.7 }}
-              className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-slate-300/90 sm:text-xl lg:mx-0"
-            >
-              {t.heroSubtitle}
-            </motion.p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8, duration: 0.7 }}
-              className="pointer-events-auto mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start"
-            >
-              <MagneticButton onClick={scrollToFirstPainting}>
-                {t.heroCta}
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M5 12h14m-6-6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </MagneticButton>
-              <MagneticButton variant="ghost" href="#/feed">
-                {t.exploreButton}
-              </MagneticButton>
-            </motion.div>
-          </div>
-          {/* right column intentionally empty — the 3D P lives there in space */}
-          <div className="hidden lg:block" />
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8, duration: 0.7 }}
+            className="pointer-events-auto flex flex-col items-center justify-center gap-4 sm:flex-row"
+          >
+            <MagneticButton onClick={scrollToFirstPainting}>
+              {t.heroCta}
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M5 12h14m-6-6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </MagneticButton>
+            <MagneticButton variant="ghost" href="#/feed">
+              {t.exploreButton}
+            </MagneticButton>
+          </motion.div>
         </div>
 
         {/* scroll hint */}
