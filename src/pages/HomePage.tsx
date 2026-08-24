@@ -80,62 +80,75 @@ export default function HomePage({ lang }: HomePageProps) {
           <div className="absolute left-1/2 top-1/2 h-[560px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-electric/8 blur-[130px] animate-pulse-slow" />
         </div>
 
-        {/* the 3D P — floating emblem behind the headline */}
         <motion.div
-          aria-hidden
-          style={{ scale: emblemScale, x: gyro.x * -14, y: gyro.y * 10 }}
-          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-20 sm:opacity-30"
+          style={{ y: contentY, opacity: contentOpacity }}
+          className="relative z-10 grid w-full max-w-6xl grid-cols-1 items-center gap-10 lg:grid-cols-[1.15fr_0.85fr]"
         >
-          <Logo3D size={380} />
-        </motion.div>
+          {/* ── text column ── */}
+          <div className="text-center lg:text-start">
+            {/* badge */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+              className="glass bolt-lit mb-7 inline-flex items-center gap-2 rounded-full px-4 py-1.5"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-electric opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-electric" />
+              </span>
+              <span className="text-xs font-medium tracking-wide text-slate-300 sm:text-sm">
+                {t.siteSubtitle}
+              </span>
+            </motion.div>
 
-        <motion.div style={{ y: contentY, opacity: contentOpacity }} className="relative z-10">
-          {/* badge */}
+            {/* cinematic headline */}
+            <h1 className="bolt-text mx-auto max-w-3xl text-4xl font-bold leading-[1.12] tracking-tight text-white sm:text-6xl md:text-7xl lg:mx-0">
+              <KineticTitle text={t.heroTitle} delay={0.25} />
+            </h1>
+
+            <motion.p
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-slate-400 sm:text-xl lg:mx-0"
+            >
+              {t.heroSubtitle}
+            </motion.p>
+
+            {/* physical CTAs */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start"
+            >
+              <MagneticButton onClick={() => scrollToTarget("#templates")}>
+                {t.heroCta}
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </MagneticButton>
+              <MagneticButton variant="ghost" href="#/feed">
+                {t.exploreButton}
+              </MagneticButton>
+            </motion.div>
+          </div>
+
+          {/* ── the 3D P — its own stage, no longer hiding behind text ── */}
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-            className="glass bolt-lit mb-7 inline-flex items-center gap-2 rounded-full px-4 py-1.5"
+            aria-hidden
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.5, duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+            className="relative mx-auto h-44 w-44 sm:h-56 sm:w-56 lg:h-[340px] lg:w-[340px]"
           >
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-electric opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-electric" />
-            </span>
-            <span className="text-xs font-medium tracking-wide text-slate-300 sm:text-sm">
-              {t.siteSubtitle}
-            </span>
-          </motion.div>
-
-          {/* cinematic headline */}
-          <h1 className="bolt-text mx-auto max-w-4xl text-4xl font-bold leading-[1.08] tracking-tight text-white sm:text-6xl md:text-7xl">
-            <KineticTitle text={t.heroTitle} delay={0.25} />
-          </h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-slate-400 sm:text-xl"
-          >
-            {t.heroSubtitle}
-          </motion.p>
-
-          {/* physical CTAs */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
-          >
-            <MagneticButton onClick={() => scrollToTarget("#templates")}>
-              {t.heroCta}
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </MagneticButton>
-            <MagneticButton variant="ghost" href="#/feed">
-              {t.exploreButton}
-            </MagneticButton>
+            <motion.div style={{ scale: emblemScale, x: gyro.x * -14, y: gyro.y * 10 }} className="h-full w-full">
+              {/* pedestal glow */}
+              <div className="absolute inset-0 rounded-full bg-electric/10 blur-3xl" />
+              <div className="absolute inset-5 rounded-full border border-electric/10" />
+              <Logo3D fill />
+            </motion.div>
           </motion.div>
         </motion.div>
 

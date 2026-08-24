@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import Lenis from "lenis";
 import StormBackground from "./components/StormBackground";
-import GraffitiText from "./components/GraffitiText";
 import Header from "./components/Header";
 import HomePage from "./pages/HomePage";
 import FeedPage from "./pages/FeedPage";
@@ -185,7 +184,6 @@ export default function App() {
       <div className="relative min-h-screen overflow-x-hidden bg-storm-950 text-slate-100 antialiased">
         {/* the storm never stops */}
         <StormBackground />
-        <GraffitiText />
 
         {/* film grain */}
         <div aria-hidden className="grain pointer-events-none fixed inset-0 z-[80] opacity-[0.05]" />

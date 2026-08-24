@@ -20,12 +20,22 @@ export default function ProcessTimeline({ lang }: { lang: Lang }) {
   });
   const progress = useSpring(scrollYProgress, { stiffness: 60, damping: 18 });
 
-  const dotLeft = useTransform(progress, [0, 1], ["2%", "98%"]);
+  // The spark travels exactly between node centers: in a 4-column grid
+  // those sit at 12.5% / 37.5% / 62.5% / 87.5% — so the dot starts ON the
+  // first node and ends ON the last one, never overshooting the rail.
+  // In RTL the first node sits on the right, so the current flows ←.
+  const ltr = lang !== "fa";
+  const dotLeft = useTransform(
+    progress,
+    [0, 1],
+    ltr ? ["12.5%", "87.5%"] : ["87.5%", "12.5%"]
+  );
+  const dotTopMobile = useTransform(progress, [0, 1], ["7%", "93%"]);
   const lineScale = progress;
   const [lit, setLit] = useState(0);
 
   useMotionValueEvent(progress, "change", (v) => {
-    const count = Math.min(4, Math.max(0, Math.floor(v * 4.4)));
+    const count = Math.min(4, Math.max(0, Math.floor(v * 3.4) + 1));
     setLit((prev) => (prev === count ? prev : count));
   });
 
@@ -53,26 +63,36 @@ export default function ProcessTimeline({ lang }: { lang: Lang }) {
         </div>
 
         <div className="relative">
-          {/* the rail */}
-          <div className="absolute start-0 end-0 top-9 hidden h-px bg-white/10 lg:block" aria-hidden>
+          {/* the rail — desktop (spans node centers only) */}
+          <div
+            className="absolute top-9 hidden h-px bg-white/10 lg:block left-[12.5%] right-[12.5%]"
+            aria-hidden
+          >
             <motion.div
-              className="h-full origin-left bg-gradient-to-r from-electric/40 via-electric to-white"
+              className="h-full origin-left bg-gradient-to-r from-electric/40 via-electric to-white rtl:origin-right rtl:bg-gradient-to-l"
               style={{ scaleX: lineScale }}
             />
-            {/* traveling spark */}
+            {/* traveling spark — always on the line */}
             <motion.div
-              className="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white"
+              className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white rtl:translate-x-1/2"
               style={{
                 left: dotLeft,
                 boxShadow: "0 0 12px 3px rgba(79,216,255,0.9), 0 0 30px 8px rgba(79,216,255,0.4)",
               }}
             />
           </div>
-          {/* vertical rail on mobile */}
+          {/* vertical rail + spark on mobile */}
           <div className="absolute bottom-4 start-[27px] top-4 w-px bg-white/10 lg:hidden" aria-hidden>
             <motion.div
               className="w-full origin-top bg-gradient-to-b from-electric/40 via-electric to-white"
               style={{ scaleY: lineScale }}
+            />
+            <motion.div
+              className="absolute start-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white"
+              style={{
+                top: dotTopMobile,
+                boxShadow: "0 0 12px 3px rgba(79,216,255,0.9), 0 0 30px 8px rgba(79,216,255,0.4)",
+              }}
             />
           </div>
 

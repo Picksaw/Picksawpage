@@ -150,9 +150,11 @@ function hasWebGL(): boolean {
 interface Logo3DProps {
   size?: number;
   className?: string;
+  /** Fill the parent container instead of using a fixed size. */
+  fill?: boolean;
 }
 
-export default function Logo3D({ size = 64, className }: Logo3DProps) {
+export default function Logo3D({ size = 64, className, fill = false }: Logo3DProps) {
   const boltRef = useRef(0);
   // one shared geometry — the extruded letter, ~2.1 world units tall
   const geometry = useMemo(() => makePGeometry(2.1 / 96), []);
@@ -190,12 +192,12 @@ export default function Logo3D({ size = 64, className }: Logo3DProps) {
     return (
       <div
         className={`flex items-center justify-center ${className ?? ""}`}
-        style={{ width: size, height: size }}
+        style={fill ? { width: "100%", height: "100%" } : { width: size, height: size }}
         onClick={handleClick}
         role="img"
         aria-label="Picksaw logo"
       >
-        <LogoFallback size={Math.round(size * 0.7)} />
+        <LogoFallback size={Math.round((fill ? 200 : size) * 0.7)} />
       </div>
     );
   }
@@ -204,7 +206,7 @@ export default function Logo3D({ size = 64, className }: Logo3DProps) {
     <div
       ref={wrapRef}
       className={className}
-      style={{ width: size, height: size }}
+      style={fill ? { width: "100%", height: "100%" } : { width: size, height: size }}
       onClick={handleClick}
       role="img"
       aria-label="Picksaw logo"

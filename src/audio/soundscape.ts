@@ -4,9 +4,13 @@
  *  STORM bus  : layered rain (far hiss / mid wash / near drops) whose level
  *               tracks storm intensity, wind gusts, and thunder bursts that
  *               trigger on real lightning strikes from the storm canvas.
- *  LOFI bus   : a generative lofi-hiphop loop — swung drums, warm e-piano
- *               chords, sub bass, vinyl crackle. Composed live in the
- *               browser, so there are no audio files and no licensing.
+ *  LOFI bus   : a generative lofi-hiphop arrangement — 8-bar form with a
+ *               borrowed-chord turnaround, arpeggiated rootless Rhodes
+ *               voicings, a call-and-response melody through tape echo,
+ *               boom-bap drums (ghost snares, open hats, swung 8ths),
+ *               walking bass, vinyl crackle, stereo placement and soft
+ *               tape saturation. Composed live in the browser — no audio
+ *               files, no licensing, never the same twice.
  *  SFX bus    : tiny UI blips for hovers, toggles and success states.
  *
  * Everything starts silent. Channels are enabled by the user (dock buttons)
@@ -51,22 +55,39 @@ function makeNoiseBuffer(ctx: AudioContext, seconds: number, kind: "white" | "br
   return buffer;
 }
 
-// ── lofi composition data ──────────────────────────────────────────────────
-// 74 BPM, swung 8ths. Dm9 → G13 → Cmaj9 → Am9 — a warm ii-V-I-vi loop.
+const midiToFreq = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
+
+// ── lofi arrangement data ──────────────────────────────────────────────────
+// 74 BPM · swung 8ths · 8-bar form:
+//   | Cmaj9 | Am9 | Fmaj9 | G13 | Cmaj9 | Am9 | Ebmaj9* | Dm9 |
+//   (*borrowed bII — the warm "produced" turnaround) → loops to C.
 
 const BPM = 74;
 const BEAT = 60 / BPM;
-const SWING = 0.016;
+const SWING = 0.055; // seconds of swing on off-beat 8ths (~15%)
+const STEPS_PER_BAR = 8; // eighth notes
+const BARS = 8;
+const TOTAL_STEPS = STEPS_PER_BAR * BARS;
 
-// Chord voicings as semitone offsets from C4-ish region (midi numbers).
-const PROGRESSION: { chord: number[]; bass: number }[] = [
-  { chord: [62, 65, 69, 72, 76], bass: 38 }, // Dm9  (D F A C E)
-  { chord: [55, 59, 64, 67, 74], bass: 31 }, // G13  (G B E G D)
-  { chord: [60, 64, 67, 71, 76], bass: 36 }, // Cmaj9 (C E G B E)
-  { chord: [57, 60, 64, 67, 72], bass: 33 }, // Am9  (A C E G C)
+interface BarChart {
+  chord: number[]; // rootless voicing (midi)
+  bass: number; // bass root (midi, low)
+  bassFifth: number; // for walking moments
+}
+
+const CHART: BarChart[] = [
+  { chord: [64, 67, 71, 74], bass: 36, bassFifth: 43 }, // Cmaj9  (E G B D)
+  { chord: [60, 64, 67, 71], bass: 33, bassFifth: 40 }, // Am9    (C E G B)
+  { chord: [65, 69, 72, 76], bass: 41, bassFifth: 48 }, // Fmaj9  (F A C E)
+  { chord: [59, 62, 64, 69], bass: 43, bassFifth: 50 }, // G13    (B D E A)
+  { chord: [64, 67, 71, 74], bass: 36, bassFifth: 43 }, // Cmaj9
+  { chord: [60, 64, 67, 71], bass: 33, bassFifth: 40 }, // Am9
+  { chord: [63, 67, 70, 74], bass: 39, bassFifth: 46 }, // Ebmaj9 (borrowed)
+  { chord: [62, 65, 69, 72], bass: 38, bassFifth: 45 }, // Dm9    (turnaround)
 ];
 
-const midiToFreq = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
+// Melody pool — C major pentatonic + colour tones, two octaves.
+const MELODY_SCALE = [72, 74, 76, 79, 81, 84, 86, 88, 91];
 
 // ── engine ─────────────────────────────────────────────────────────────────
 
@@ -89,8 +110,10 @@ export class SoundscapeEngine {
   // lofi scheduler
   private schedulerId: number | null = null;
   private nextNoteTime = 0;
-  private step = 0; // 8th-note steps, 8 per bar → 4 bars loop = 32 steps
+  private step = 0;
   private lofiRunning = false;
+  private melodyEcho: GainNode | null = null; // send for the lead voice
+  private melodyWalk = 4; // random-walk index into MELODY_SCALE
 
   private stormLevel = 0; // 0..1 target used by rain mixer
   private prefs: SavedPrefs = loadPrefs();
@@ -115,6 +138,7 @@ export class SoundscapeEngine {
       this.master.gain.value = 0.9;
       this.master.connect(ctx.destination);
 
+      // STORM chain
       this.stormBus = ctx.createGain();
       this.stormBus.gain.value = 0;
       const stormWarmth = ctx.createBiquadFilter();
@@ -122,16 +146,33 @@ export class SoundscapeEngine {
       stormWarmth.frequency.value = 60;
       this.stormBus.connect(stormWarmth).connect(this.master);
 
+      // LOFI chain — warmth filters + gentle tape saturation
       this.lofiBus = ctx.createGain();
       this.lofiBus.gain.value = 0;
-      // gentle warmth on the music bus
       const lp = ctx.createBiquadFilter();
       lp.type = "lowpass";
       lp.frequency.value = 5200;
       const hp = ctx.createBiquadFilter();
       hp.type = "highpass";
       hp.frequency.value = 45;
-      this.lofiBus.connect(lp).connect(hp).connect(this.master);
+      const sat = ctx.createWaveShaper();
+      sat.curve = makeSaturationCurve(1.6);
+      sat.oversample = "2x";
+      this.lofiBus.connect(lp).connect(hp).connect(sat).connect(this.master);
+
+      // tape echo for the melody — dotted 8th, dark repeats
+      const delay = ctx.createDelay(1.5);
+      delay.delayTime.value = BEAT * 0.75; // dotted 8th
+      const feedback = ctx.createGain();
+      feedback.gain.value = 0.34;
+      const echoTone = ctx.createBiquadFilter();
+      echoTone.type = "lowpass";
+      echoTone.frequency.value = 2200;
+      this.melodyEcho = ctx.createGain();
+      this.melodyEcho.gain.value = 0.55;
+      this.melodyEcho.connect(delay);
+      delay.connect(echoTone).connect(feedback).connect(delay); // loop
+      delay.connect(this.lofiBus);
 
       this.sfxBus = ctx.createGain();
       this.sfxBus.gain.value = 0.5;
@@ -266,7 +307,7 @@ export class SoundscapeEngine {
     sub.stop(t0 + 1.6);
   }
 
-  // ── generative lofi ──────────────────────────────────────────────────────
+  // ── generative lofi — the arrangement ────────────────────────────────────
 
   private startLofi() {
     if (this.lofiRunning) return;
@@ -277,10 +318,10 @@ export class SoundscapeEngine {
       if (!this.lofiRunning) return;
       const ctx = this.ctx!;
       while (this.nextNoteTime < ctx.currentTime + 0.65) {
-        this.scheduleStep(this.step, this.nextNoteTime);
         const swing = this.step % 2 === 1 ? SWING : 0;
-        this.nextNoteTime += BEAT / 2 + (this.step % 2 === 0 ? swing : -swing);
-        this.step = (this.step + 1) % 32;
+        this.scheduleStep(this.step, this.nextNoteTime + swing);
+        this.nextNoteTime += BEAT / 2 + (this.step % 2 === 0 ? SWING : -SWING);
+        this.step = (this.step + 1) % TOTAL_STEPS;
       }
       this.schedulerId = window.setTimeout(tick, 180);
     };
@@ -296,78 +337,173 @@ export class SoundscapeEngine {
   }
 
   private scheduleStep(step: number, time: number) {
-    const bar = Math.floor(step / 8);
-    const isOffbeat = step % 2 === 1;
-    const { chord, bass } = PROGRESSION[bar];
+    const bar = Math.floor(step / STEPS_PER_BAR) % BARS;
+    const inBar = step % STEPS_PER_BAR; // 0..7 (eighth notes)
+    const chart = CHART[bar];
+    const isBeat1 = inBar === 0;
+    const isBeat2 = inBar === 2;
+    const isBeat3 = inBar === 4;
+    const isBeat4 = inBar === 6;
+    const isOff = inBar % 2 === 1;
+    const bBar = bar % 2 === 1; // alternate drum pattern per bar
 
-    // drums
-    if (step % 8 === 0 || (step % 8 === 6 && Math.random() < 0.22)) this.kick(time, 0.8 + Math.random() * 0.15);
-    if (step % 8 === 4) this.snare(time, 0.5 + Math.random() * 0.2);
-    this.hat(time, step % 8 === 2 ? 0.4 : 0.16 + Math.random() * 0.12, isOffbeat);
+    // ── drums (boom-bap, humanized) ─────────────────────────
+    if (isBeat1 || (inBar === 5 && Math.random() < 0.85) || (bBar && inBar === 3 && Math.random() < 0.3)) {
+      this.kick(time, 0.78 + Math.random() * 0.18);
+    }
+    if (isBeat2 || isBeat4) {
+      this.snare(time, 0.5 + Math.random() * 0.18, false);
+    }
+    // ghost snare
+    if ((inBar === 1 || inBar === 7) && Math.random() < 0.16) {
+      this.snare(time, 0.16 + Math.random() * 0.08, true);
+    }
+    // hats — swung 8ths, accented on beats, open hat end of every 2nd bar
+    const openHat = inBar === 7 && bar % 2 === 1;
+    this.hat(time, isOff ? 0.14 + Math.random() * 0.08 : 0.24 + Math.random() * 0.12, openHat);
 
-    // bass on 1 and 3
-    if (step % 8 === 0) this.bassNote(midiToFreq(bass), time, BEAT * 0.9);
-    if (step % 8 === 4 && Math.random() < 0.6)
-      this.bassNote(midiToFreq(bass + (Math.random() < 0.5 ? 7 : 5)), time, BEAT * 0.6);
-
-    // e-piano chord on the downbeat + occasional soft re-hit
-    if (step % 8 === 0) this.epiano(chord, time, 0.9);
-    if ((step % 8 === 3 || step % 8 === 5) && Math.random() < 0.3)
-      this.epiano(chord.slice(1), time, 0.32);
-
-    // sparse melody — pentatonic fragments over the chord
-    if (Math.random() < 0.12) {
-      const note = chord[Math.floor(Math.random() * chord.length)] + 12;
-      this.epiano([note], time + SWING, 0.3);
+    // ── bass — walking roots with approach notes ────────────
+    if (isBeat1) this.bassNote(midiToFreq(chart.bass), time, BEAT * 1.1, 0.16);
+    if (isBeat3) {
+      const fifth = Math.random() < 0.45;
+      this.bassNote(midiToFreq(fifth ? chart.bassFifth : chart.bass), time, BEAT * 0.8, 0.12);
+    }
+    // approach note into the next bar's root
+    if (inBar === 7 && Math.random() < 0.4) {
+      const next = CHART[(bar + 1) % BARS].bass;
+      const approach = Math.random() < 0.5 ? next + 1 : next - 1;
+      this.bassNote(midiToFreq(approach), time, BEAT * 0.45, 0.09);
     }
 
-    // vinyl crackle
+    // ── Rhodes — arpeggiated rootless voicing on the downbeat,
+    //    soft re-hit mid-bar ──────────────────────────────────
+    if (isBeat1) {
+      this.rhodes(chart.chord, time, 0.95);
+    }
+    if (inBar === 4 && Math.random() < 0.35) {
+      this.rhodes(chart.chord.slice(1), time, 0.3);
+    }
+
+    // ── melody — call & response over the 8-bar form ────────
+    // Calls on even-bar downbeats, answers sprinkled on off-beats.
+    if (isBeat1 && bar % 2 === 0 && Math.random() < 0.85) {
+      const notes = 3 + Math.floor(Math.random() * 3);
+      let t = time;
+      for (let n = 0; n < notes; n++) {
+        // random walk over the scale, occasionally leaping
+        const move = Math.random() < 0.22 ? (Math.random() < 0.5 ? -3 : 3) : Math.random() < 0.5 ? -1 : 1;
+        this.melodyWalk = Math.max(0, Math.min(MELODY_SCALE.length - 1, this.melodyWalk + move));
+        this.lead(midiToFreq(MELODY_SCALE[this.melodyWalk]), t, 0.55 + Math.random() * 0.4);
+        t += (BEAT / 2) * (Math.random() < 0.3 ? 2 : 1);
+      }
+    } else if (isOff && bar % 2 === 1 && Math.random() < 0.14) {
+      this.melodyWalk = Math.max(0, Math.min(MELODY_SCALE.length - 1, this.melodyWalk + (Math.random() < 0.5 ? -2 : 2)));
+      this.lead(midiToFreq(MELODY_SCALE[this.melodyWalk]), time, 0.4);
+    }
+
+    // ── vinyl crackle ────────────────────────────────────────
     if (Math.random() < 0.5) this.crackle(time);
   }
 
-  private epiano(notes: number[], time: number, vel: number) {
+  /** Warm Rhodes-ish voice: staggered notes = a hand, not a chord block. */
+  private rhodes(notes: number[], time: number, vel: number) {
     const ctx = this.ctx!;
-    for (const midi of notes) {
+    notes.forEach((midi, i) => {
+      const t = time + i * 0.035; // arpeggiated by ~35ms
       const freq = midiToFreq(midi);
       const g = ctx.createGain();
+      const humanize = 0.85 + Math.random() * 0.3;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.075 * vel * humanize, t + 0.025);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
       const filter = ctx.createBiquadFilter();
       filter.type = "lowpass";
       filter.frequency.value = 1750;
-      g.gain.setValueAtTime(0.0001, time);
-      g.gain.exponentialRampToValueAtTime(0.085 * vel, time + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, time + 1.5);
-      // two slightly detuned voices = warm electric-piano shimmer
+
       const o1 = ctx.createOscillator();
       o1.type = "sine";
       o1.frequency.value = freq;
       const o2 = ctx.createOscillator();
       o2.type = "triangle";
-      o2.frequency.value = freq * 1.004;
+      o2.frequency.value = freq * 1.005;
       o2.detune.value = 4;
       const o2g = ctx.createGain();
-      o2g.gain.value = 0.35;
+      o2g.gain.value = 0.4;
       o1.connect(filter);
       o2.connect(o2g).connect(filter);
-      filter.connect(g).connect(this.lofiBus!);
-      o1.start(time);
-      o2.start(time);
-      o1.stop(time + 1.7);
-      o2.stop(time + 1.7);
+      filter.connect(g);
+
+      // place the Rhodes slightly left
+      this.connectPanned(g, -0.18);
+
+      o1.start(t);
+      o2.start(t);
+      o1.stop(t + 1.8);
+      o2.stop(t + 1.8);
+    });
+  }
+
+  /** Lead voice with vibrato character + tape-echo send. */
+  private lead(freq: number, time: number, vel: number) {
+    const ctx = this.ctx!;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(0.06 * vel, time + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + 0.9);
+
+    const o = ctx.createOscillator();
+    o.type = "sine";
+    o.frequency.value = freq;
+    // gentle vibrato
+    const vib = ctx.createOscillator();
+    vib.frequency.value = 5.2;
+    const vibGain = ctx.createGain();
+    vibGain.gain.value = freq * 0.004;
+    vib.connect(vibGain).connect(o.frequency);
+
+    o.connect(g);
+    this.connectPanned(g, 0.22); // melody sits right
+    g.connect(this.melodyEcho!); // …and feeds the tape echo
+
+    o.start(time);
+    vib.start(time);
+    o.stop(time + 1.1);
+    vib.stop(time + 1.1);
+  }
+
+  /** Connect through a StereoPanner when available (Safari-safe). */
+  private connectPanned(node: AudioNode, pan: number) {
+    const ctx = this.ctx!;
+    if (typeof ctx.createStereoPanner === "function") {
+      const p = ctx.createStereoPanner();
+      p.pan.value = pan;
+      node.connect(p).connect(this.lofiBus!);
+    } else {
+      node.connect(this.lofiBus!);
     }
   }
 
-  private bassNote(freq: number, time: number, dur: number) {
+  private bassNote(freq: number, time: number, dur: number, vel: number) {
     const ctx = this.ctx!;
     const o = ctx.createOscillator();
     o.type = "sine";
     o.frequency.value = freq;
+    const o2 = ctx.createOscillator();
+    o2.type = "triangle";
+    o2.frequency.value = freq * 2; // soft harmonic so it reads on phones
+    const o2g = ctx.createGain();
+    o2g.gain.value = 0.18;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, time);
-    g.gain.exponentialRampToValueAtTime(0.16, time + 0.03);
+    g.gain.exponentialRampToValueAtTime(vel, time + 0.03);
     g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
-    o.connect(g).connect(this.lofiBus!);
+    o.connect(g);
+    o2.connect(o2g).connect(g);
+    g.connect(this.lofiBus!);
     o.start(time);
+    o2.start(time);
     o.stop(time + dur + 0.1);
+    o2.stop(time + dur + 0.1);
   }
 
   private kick(time: number, vel: number) {
@@ -378,31 +514,32 @@ export class SoundscapeEngine {
     o.frequency.exponentialRampToValueAtTime(42, time + 0.11);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, time);
-    g.gain.exponentialRampToValueAtTime(0.32 * vel, time + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.3 * vel, time + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0001, time + 0.22);
     o.connect(g).connect(this.lofiBus!);
     o.start(time);
     o.stop(time + 0.3);
   }
 
-  private snare(time: number, vel: number) {
+  private snare(time: number, vel: number, ghost: boolean) {
     const ctx = this.ctx!;
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuffers!.white;
     const f = ctx.createBiquadFilter();
     f.type = "bandpass";
-    f.frequency.value = 1900;
+    f.frequency.value = ghost ? 2600 : 1900;
     f.Q.value = 0.8;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, time);
-    g.gain.exponentialRampToValueAtTime(0.09 * vel, time + 0.004);
-    g.gain.exponentialRampToValueAtTime(0.0001, time + 0.16);
-    src.connect(f).connect(g).connect(this.lofiBus!);
+    g.gain.exponentialRampToValueAtTime(0.085 * vel, time + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + (ghost ? 0.07 : 0.16));
+    src.connect(f).connect(g);
+    this.connectPanned(g, 0.06);
     src.start(time, Math.random() * 2);
     src.stop(time + 0.25);
   }
 
-  private hat(time: number, vel: number, off: boolean) {
+  private hat(time: number, vel: number, open: boolean) {
     const ctx = this.ctx!;
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuffers!.white;
@@ -411,13 +548,15 @@ export class SoundscapeEngine {
     f.type = "highpass";
     f.frequency.value = 8200;
     const g = ctx.createGain();
-    const v = 0.035 * vel * (off ? 1.2 : 1);
+    const v = 0.032 * vel;
+    const dur = open ? 0.22 : 0.05;
     g.gain.setValueAtTime(0.0001, time);
     g.gain.exponentialRampToValueAtTime(v, time + 0.002);
-    g.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
-    src.connect(f).connect(g).connect(this.lofiBus!);
-    src.start(time, Math.random() * 2);
-    src.stop(time + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+    src.connect(f).connect(g);
+    this.connectPanned(g, 0.18);
+    src.start(time, Math.random() * 3);
+    src.stop(time + dur + 0.05);
   }
 
   private crackle(time: number) {
@@ -429,7 +568,7 @@ export class SoundscapeEngine {
     f.frequency.value = 4800;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, time);
-    g.gain.exponentialRampToValueAtTime(0.02 + Math.random() * 0.02, time + 0.001);
+    g.gain.exponentialRampToValueAtTime(0.018 + Math.random() * 0.018, time + 0.001);
     g.gain.exponentialRampToValueAtTime(0.0001, time + 0.012);
     src.connect(f).connect(g).connect(this.lofiBus!);
     src.start(time, Math.random() * 3);
@@ -499,7 +638,6 @@ export class SoundscapeEngine {
     if (this.prefs.storm) {
       this.setStormLevel(this.stormLevel);
     } else {
-      // fade layers down
       for (const l of [this.rainFar, this.rainMid, this.rainNear]) {
         l!.gain.gain.setTargetAtTime(0, t, 0.4);
       }
@@ -507,23 +645,27 @@ export class SoundscapeEngine {
     }
 
     // LOFI
-    this.lofiBus!.gain.setTargetAtTime(this.prefs.lofi ? 0.85 : 0, t, 0.5);
+    this.lofiBus!.gain.setTargetAtTime(this.prefs.lofi ? 0.9 : 0, t, 0.5);
     if (this.prefs.lofi) {
       this.startLofi();
-    } else if (!this.prefs.lofi) {
+    } else {
       // stop scheduling; scheduled notes ring out naturally
       window.setTimeout(() => {
         if (!this.prefs.lofi) this.stopLofi();
       }, 900);
     }
   }
+}
 
-  /** Restore saved prefs without enabling audio (autoplay-safe). */
-  preflight() {
-    // Called on mount — nothing audible happens until a user gesture
-    // reaches toggle(). We deliberately do NOT auto-resume here.
-    return this.prefs;
+/** Soft tanh saturation curve for the music bus. */
+function makeSaturationCurve(k: number): Float32Array<ArrayBuffer> {
+  const n = 1024;
+  const curve = new Float32Array(new ArrayBuffer(n * 4));
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    curve[i] = Math.tanh(k * x) / Math.tanh(k);
   }
+  return curve;
 }
 
 export const soundscape = new SoundscapeEngine();

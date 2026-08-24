@@ -10,50 +10,63 @@ import {
 } from "../lib/stormStore";
 
 // ============================================================
-// StormBackground V2 — three-depth-layer cinematic storm
-// ------------------------------------------------------------7
+// StormBackground V2.1 — three-depth-layer cinematic storm
+// ------------------------------------------------------------
 // Depth layers:
 //   FAR   — fine distant rain, thin/faint/slow, no interaction
 //   MID   — medium rain, slight parallax, gentle cursor wind
 //   NEAR  — foreground rain: thick/bright/fast drops that are
 //           repelled by the cursor and catch lightning reflections
 //
-// Lightning:
-//   Strikes every 8–20s (random), independent of scroll. Each
-//   strike spikes a `--bolt` CSS variable on <html> (0..1) that
-//   the whole UI uses to illuminate glass, buttons, logo and
-//   cards — the storm literally lights the interface. Rare
-//   (~7%) "intense event": multi-bolt + bigger flash.
+// Lightning: strikes every 8–20s; each spikes a `--bolt` CSS var
+// that illuminates the whole UI. The var is only written while a
+// strike is actually decaying (writing it every frame forces a
+// full-page style recalc — the #1 scroll-fps killer in V2.0).
 //
-// The scroll-driven storm LEVEL still ramps rain/wind density.
-//
-// Perf rules kept from V1 (all of them):
-//   1. No ctx.shadowBlur — glow is layered strokes.
-//   2. Rain batched into bucket strokes per layer (≈9 strokes/frame).
-//   3. Gradients cached; sky rebuilt only on storm buckets.
-//   4. Lower res + capped DPR on phones; fewer drops on mobile.
-//   5. Adaptive framerate (drop to ~30fps if a frame is slow).
-//   6. prefers-reduced-motion → static sky, no loop.
+// Perf budget (learned via dev-mode FPS meter):
+//   • --bolt CSS var writes gated to lightning windows only
+//   • scrollHeight cached (refreshed every ~2s, not per frame)
+//   • rain buckets are precomputed numeric arrays (no string keys)
+//   • zero per-frame allocations beyond 6 small path arrays
+//   • cards no longer use backdrop-filter (see index.css .glass)
+//   • adaptive framerate, cached gradients, mobile profile,
+//     reduced-motion static sky — all kept from V1
 // ============================================================
 
 type LayerName = "far" | "mid" | "near";
 
-const LAYERS: {
-  name: LayerName;
-  buckets: number;
+interface LayerDef {
+  layer: LayerName;
   share: number; // fraction of total drop budget
   opacity: [number, number];
   thickness: [number, number];
   speed: [number, number];
   len: [number, number];
-}[] = [
+}
+
+const LAYERS: LayerDef[] = [
   // fine distant rain
-  { name: "far", buckets: 2, share: 0.45, opacity: [0.08, 0.18], thickness: [0.4, 0.8], speed: [3.5, 6], len: [10, 20] },
+  { layer: "far", share: 0.45, opacity: [0.08, 0.18], thickness: [0.4, 0.8], speed: [3.5, 6], len: [10, 20] },
   // medium rain — parallax layer
-  { name: "mid", buckets: 2, share: 0.33, opacity: [0.14, 0.34], thickness: [0.8, 1.6], speed: [6, 10], len: [16, 34] },
+  { layer: "mid", share: 0.33, opacity: [0.14, 0.34], thickness: [0.8, 1.6], speed: [6, 10], len: [16, 34] },
   // foreground rain — hero drops
-  { name: "near", buckets: 2, share: 0.22, opacity: [0.22, 0.5], thickness: [1.4, 2.8], speed: [10, 16], len: [26, 52] },
+  { layer: "near", share: 0.22, opacity: [0.22, 0.5], thickness: [1.4, 2.8], speed: [10, 16], len: [26, 52] },
 ];
+
+// Bucket style table, precomputed once: 3 layers × 2 buckets = 6.
+const LAYER_DEFS: { layer: LayerName; style: { op: number; th: number } }[] = [];
+for (const def of LAYERS) {
+  for (let b = 0; b < 2; b++) {
+    const L = b;
+    LAYER_DEFS.push({
+      layer: def.layer,
+      style: {
+        op: def.opacity[0] + (def.opacity[1] - def.opacity[0]) * L,
+        th: def.thickness[0] + (def.thickness[1] - def.thickness[0]) * L,
+      },
+    });
+  }
+}
 
 interface Drop {
   x: number;
@@ -61,7 +74,8 @@ interface Drop {
   len: number;
   speed: number;
   layer: LayerName;
-  bucket: number; // 0..1 within layer (style interpolation)
+  bucketIndex: number; // 0..5 — direct index into bucket arrays
+  repelled: boolean; // participates in cursor repulsion?
 }
 
 interface Splash {
@@ -167,7 +181,8 @@ export default function StormBackground() {
     let bolts: Bolt[] = [];
     let clouds: CloudPuff[] = [];
     let flash = 0;
-    let boltCss = 0; // drives --bolt
+    let boltCss = 0; // drives --bolt (only written while > 0)
+    let boltCssDirty = false;
     let animId = 0;
     let running = true;
     let elapsed = 0;
@@ -180,13 +195,14 @@ export default function StormBackground() {
     let cursorVX = 0;
 
     // lightning cadence — every 8–20s
-    let nextBoltAt = 2.5 + Math.random() * 5; // first strike comes sooner
+    let nextBoltAt = 2.5 + Math.random() * 5;
     let lastStormDispatch = 0;
 
-    // adaptive framerate
+    // adaptive framerate + cached layout
     let frameCount = 0;
     let renderEveryN = isMobile ? 2 : 1;
     let emaCost = 10;
+    let cachedMaxScroll = 1;
 
     // cached gradients
     let skyGrad: CanvasGradient | null = null;
@@ -205,17 +221,17 @@ export default function StormBackground() {
       sprite: cloudSprites[(Math.random() * cloudSprites.length) | 0],
     });
 
-    function createDrop(layer: LayerName, bucket: number, fromTop: boolean): Drop {
-      const def = LAYERS.find((l) => l.name === layer)!;
-      const L = bucket;
+    function createDrop(layerIdx: number, bucketIdx: number, fromTop: boolean): Drop {
+      const def = LAYERS[layerIdx];
       const r = (a: number, b: number) => a + Math.random() * (b - a);
       return {
         x: Math.random() * w * 1.2 - w * 0.1,
         y: fromTop ? -Math.random() * h * 0.4 : Math.random() * h,
         len: r(def.len[0], def.len[1]),
         speed: r(def.speed[0], def.speed[1]),
-        layer,
-        bucket: L,
+        layer: def.layer,
+        bucketIndex: layerIdx * 2 + bucketIdx,
+        repelled: def.layer !== "far",
       };
     }
 
@@ -230,21 +246,23 @@ export default function StormBackground() {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       const divisor = isMobile ? 4200 : 2800;
-      const cap = isMobile ? 210 : 400;
+      const cap = isMobile ? 210 : 340;
       const targetCount = Math.min(Math.floor((w * h) / divisor), cap);
 
       drops = [];
-      for (const layer of LAYERS) {
+      LAYERS.forEach((layer, layerIdx) => {
         const count = Math.round(targetCount * layer.share);
         for (let i = 0; i < count; i++) {
-          drops.push(createDrop(layer.name, Math.random(), false));
+          drops.push(createDrop(layerIdx, Math.random() < 0.5 ? 0 : 1, false));
         }
-      }
+      });
 
       if (clouds.length === 0) {
         const count = isMobile ? 5 : 7;
         for (let i = 0; i < count; i++) clouds.push(createCloud());
       }
+
+      cachedMaxScroll = document.documentElement.scrollHeight - window.innerHeight;
 
       lastSkyBucket = -1;
       skyGrad = null;
@@ -343,6 +361,7 @@ export default function StormBackground() {
           if (i === 0) {
             dispatchLightning(peak * (intense ? 1.2 : 1));
             boltCss = Math.min(1, 0.85 * (intense ? 1.2 : 1));
+            boltCssDirty = true;
           }
         }, i * (60 + Math.random() * 140));
       }
@@ -365,8 +384,11 @@ export default function StormBackground() {
       const t0 = performance.now();
 
       // ── storm level (scroll + overrides) ────────────────────
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      const scrollTarget = maxScroll > 0 ? Math.min(window.scrollY / maxScroll, 1) : 0;
+      // scrollHeight forces layout — refresh the cache rarely.
+      if (frameCount % 120 === 0) {
+        cachedMaxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      }
+      const scrollTarget = cachedMaxScroll > 0 ? Math.min(window.scrollY / cachedMaxScroll, 1) : 0;
       const storm = getStorm();
       storm.level = storm.level + (scrollTarget - storm.level) * Math.min(1, dtN * 0.03);
       const s = stormIntensity();
@@ -412,21 +434,24 @@ export default function StormBackground() {
         return b.life < b.maxLife;
       });
 
-      // ── rain — three layers, batched strokes ─────────────────
+      // ── rain — three layers, 6 numeric buckets ───────────────
       const speedMul = 0.55 + s * 1.3;
       const windBase = Math.sin(elapsed * 0.108) * (1.2 + s * 2.5);
       const cursorWind = isMobile ? 0 : Math.max(-3, Math.min(3, cursorVX * 0.06));
-      cursorVX *= Math.pow(0.94, dtN); // wind decays
+      cursorVX *= Math.pow(0.94, dtN);
 
-      const REPULSION_R = isMobile ? 0 : 110; // px — cursor pushes near-layer rain
+      const REPULSION_R = isMobile ? 0 : 110;
+      const R2 = REPULSION_R * REPULSION_R;
+      const R_MID = REPULSION_R * 0.55;
+      const R_MID2 = R_MID * R_MID;
 
-      const bucketPaths = new Map<string, { x: number; y: number; x2: number; y2: number }[]>();
-      const bucketStyle = (layer: LayerName, bucket: number) => {
-        const def = LAYERS.find((l) => l.name === layer)!;
-        const op = def.opacity[0] + (def.opacity[1] - def.opacity[0]) * bucket;
-        const th = def.thickness[0] + (def.thickness[1] - def.thickness[0]) * bucket;
-        return { op, th };
-      };
+      const b0: { x: number; y: number; x2: number; y2: number }[] = [];
+      const b1: { x: number; y: number; x2: number; y2: number }[] = [];
+      const b2: { x: number; y: number; x2: number; y2: number }[] = [];
+      const b3: { x: number; y: number; x2: number; y2: number }[] = [];
+      const b4: { x: number; y: number; x2: number; y2: number }[] = [];
+      const b5: { x: number; y: number; x2: number; y2: number }[] = [];
+      const bucketPaths = [b0, b1, b2, b3, b4, b5];
 
       for (let i = 0; i < drops.length; i++) {
         const d = drops[i];
@@ -435,20 +460,17 @@ export default function StormBackground() {
 
         d.y += d.speed * speedMul * dtN;
 
-        // per-layer wind: near reacts to cursor velocity, mid drifts
         let wind = windBase;
         if (isNear) wind += cursorWind * 1.6;
         if (isMid) wind += cursorWind * 0.6 + Math.sin(elapsed * 0.31 + i) * 0.15;
 
-        // cursor repulsion on near + mid drops
-        if (REPULSION_R > 0 && (isNear || isMid) && mx > -100) {
+        if (d.repelled && mx > -100) {
           const dx = d.x - mx;
           const dy = d.y - my;
           const dist2 = dx * dx + dy * dy;
-          const R = isNear ? REPULSION_R : REPULSION_R * 0.55;
-          if (dist2 < R * R) {
+          if (isNear ? dist2 < R2 : dist2 < R_MID2) {
             const dist = Math.sqrt(dist2) || 1;
-            const force = (1 - dist / R) * (isNear ? 2.6 : 1.1);
+            const force = (1 - dist / (isNear ? REPULSION_R : R_MID)) * (isNear ? 2.6 : 1.1);
             d.x += (dx / dist) * force * dtN * 3.2;
             wind += (dx / dist) * force * 0.9;
           }
@@ -457,12 +479,11 @@ export default function StormBackground() {
         d.x += wind * (0.3 + d.speed * 0.045) * dtN;
 
         if (d.y > h + 16 || d.x < -40 || d.x > w + 40) {
-          const nd = createDrop(d.layer, d.bucket, true);
+          const nd = createDrop((d.bucketIndex / 2) | 0, d.bucketIndex % 2, true);
           d.x = nd.x;
           d.y = nd.y;
           d.len = nd.len;
           d.speed = nd.speed;
-          // ground splashes only for near-layer drops
           if (isNear && Math.random() < 0.1 && splashes.length < (isMobile ? 14 : 30)) {
             splashes.push({
               x: d.x + (Math.random() - 0.5) * 16,
@@ -475,13 +496,7 @@ export default function StormBackground() {
           continue;
         }
 
-        const key = d.layer + Math.round(d.bucket);
-        let arr = bucketPaths.get(key);
-        if (!arr) {
-          arr = [];
-          bucketPaths.set(key, arr);
-        }
-        arr.push({
+        bucketPaths[d.bucketIndex].push({
           x: d.x,
           y: d.y,
           x2: d.x + wind * 1.3,
@@ -490,21 +505,20 @@ export default function StormBackground() {
       }
 
       ctx.lineCap = "round";
-      for (const [key, pts] of bucketPaths) {
+      for (let b = 0; b < 6; b++) {
+        const pts = bucketPaths[b];
         if (pts.length === 0) continue;
-        const layer = key.slice(0, key.length - 1) as LayerName;
-        const bucket = Number(key.slice(-1)) / 1;
-        const { op, th } = bucketStyle(layer, bucket);
-        // near drops catch lightning reflections during flashes
-        const boost = layer === "near" ? 1 + flash * 1.8 : layer === "mid" ? 1 + flash * 0.7 : 1;
+        const def = LAYER_DEFS[b];
+        const boost =
+          def.layer === "near" ? 1 + flash * 1.8 : def.layer === "mid" ? 1 + flash * 0.7 : 1;
         ctx.beginPath();
         for (let i = 0; i < pts.length; i++) {
           const p = pts[i];
           ctx.moveTo(p.x, p.y);
           ctx.lineTo(p.x2, p.y2);
         }
-        ctx.strokeStyle = `rgba(150, 190, 235, ${Math.min(0.9, op * boost)})`;
-        ctx.lineWidth = th;
+        ctx.strokeStyle = `rgba(150, 190, 235, ${Math.min(0.9, def.style.op * boost)})`;
+        ctx.lineWidth = def.style.th;
         ctx.stroke();
       }
 
@@ -543,14 +557,17 @@ export default function StormBackground() {
       ctx.fillStyle = vignetteGrad!;
       ctx.fillRect(0, 0, w, h);
 
-      // ── --bolt CSS var drives UI illumination ───────────────
-      if (boltCss > 0.002) {
+      // ── --bolt CSS var — ONLY while a strike is decaying ────
+      // (a per-frame write forces a full-page style recalc)
+      if (boltCssDirty) {
         boltCss *= Math.pow(0.9, dtN);
-      } else {
-        boltCss = 0;
+        if (boltCss <= 0.004) {
+          boltCss = 0;
+          boltCssDirty = false;
+        }
+        setBolt(boltCss);
+        document.documentElement.style.setProperty("--bolt", boltCss.toFixed(3));
       }
-      setBolt(boltCss);
-      document.documentElement.style.setProperty("--bolt", boltCss.toFixed(3));
 
       // ── adaptive framerate ───────────────────────────────────
       const cost = performance.now() - t0;
