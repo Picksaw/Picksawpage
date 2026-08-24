@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { onLightning } from "../lib/stormEvents";
+import { makePGeometry } from "../lib/pGeometry";
+import { hasWebGL } from "../lib/webgl";
 import { getStorm, setDevMode } from "../lib/stormStore";
 
 /**
@@ -15,43 +17,6 @@ import { getStorm, setDevMode } from "../lib/stormStore";
  * size prop scales the container; the canvas renders on demand when
  * offscreen and stops entirely for reduced-motion users (single frame).
  */
-
-/**
- * A real typographic "P": outer contour + bowl counter (hole),
- * extruded with beveled edges — reads as a letter from any angle.
- * Built on a 0..100 grid, centered, then scaled to world units.
- */
-function makePGeometry(scale: number): THREE.BufferGeometry {
-  const shape = new THREE.Shape();
-  // stem + bowl outline
-  shape.moveTo(14, 4);
-  shape.lineTo(36, 4);
-  shape.lineTo(36, 48);
-  // bowl outer — elliptical arc from (36,48) over the right to (36,100)
-  shape.absellipse(36, 74, 56, 26, -Math.PI / 2, Math.PI / 2, false);
-  shape.lineTo(14, 100);
-  shape.lineTo(14, 4);
-  shape.closePath();
-
-  // the counter (hole inside the bowl) — D-shaped
-  const hole = new THREE.Path();
-  hole.absellipse(36, 74, 31, 12.5, -Math.PI / 2, Math.PI / 2, false);
-  hole.closePath();
-  shape.holes.push(hole);
-
-  const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: 26,
-    bevelEnabled: true,
-    bevelThickness: 3,
-    bevelSize: 2.4,
-    bevelSegments: 2,
-    curveSegments: 22,
-  });
-  geo.translate(-50, -52, -13); // center on origin
-  geo.scale(scale, scale, scale);
-  geo.computeVertexNormals();
-  return geo;
-}
 
 function PShape({ boltRef, geometry }: { boltRef: React.RefObject<number>; geometry: THREE.BufferGeometry }) {
   const group = useRef<THREE.Group>(null);
@@ -135,16 +100,6 @@ function LogoFallback({ size }: { size: number }) {
       />
     </svg>
   );
-}
-
-/** WebGL availability probe (cached). */
-function hasWebGL(): boolean {
-  try {
-    const c = document.createElement("canvas");
-    return !!(c.getContext("webgl2") ?? c.getContext("webgl"));
-  } catch {
-    return false;
-  }
 }
 
 interface Logo3DProps {

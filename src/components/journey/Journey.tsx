@@ -1,0 +1,268 @@
+import { useCallback, useRef, useState } from "react";
+import { Canvas } from "@react-three/fiber";
+import {
+  AnimatePresence,
+  motion,
+  useMotionValueEvent,
+  useScroll,
+  useTransform,
+} from "motion/react";
+import { SITE_TEXTS, type Lang } from "../../config/siteTexts";
+import { TEMPLATES, type TemplateItem } from "../../config/templatesConfig";
+import PEmblem from "./PEmblem";
+import { CorridorScene, focusedIndex, stations } from "./Corridor";
+import PreviewModal from "../PreviewModal";
+import MagneticButton from "../ui/MagneticButton";
+import { useSound } from "../../audio/SoundProvider";
+import { getLenis } from "../../lib/lenis";
+
+/**
+ * Journey — Picksaw's 3D layers.
+ *
+ *   Layer 0  the storm canvas (behind everything, as always)
+ *   Layer 1  the 3D P + the energy ring forming around it; lightning
+ *            arcs strike and charge the ring
+ *   Layer 2  scrolling dollies FORWARD through the ring into the gallery
+ *            corridor — one large solo painting per station
+ *   Layer 3  click a painting (or the Open button) → fullscreen live
+ *            preview where scrolling moves the template, not Picksaw
+ *
+ * A tall invisible spacer drives the scroll length; the camera follows
+ * progress. When the walk ends, the canvas fades and the classic page
+ * sections continue underneath.
+ */
+
+function KineticTitle({ text, delay = 0 }: { text: string; delay?: number }) {
+  const words = text.split(" ");
+  return (
+    <span className="inline-block">
+      {words.map((w, i) => (
+        <span key={`${w}-${i}`} className="inline-block overflow-hidden pb-1 align-bottom">
+          <motion.span
+            className="inline-block"
+            initial={{ y: "110%", opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: delay + i * 0.09, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {w}
+            {i < words.length - 1 ? "\u00A0" : ""}
+          </motion.span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+export default function Journey({ lang }: { lang: Lang }) {
+  const t = SITE_TEXTS[lang];
+  const { blip } = useSound();
+  const spacerRef = useRef<HTMLDivElement>(null);
+  const progressRef = useRef(0);
+
+  const [focusedIdx, setFocusedIdx] = useState(-1);
+  const [faded, setFaded] = useState(false);
+  const [selected, setSelected] = useState<TemplateItem | null>(null);
+
+  const { scrollYProgress } = useScroll({
+    target: spacerRef,
+    offset: ["start start", "end end"],
+  });
+
+  useMotionValueEvent(scrollYProgress, "change", (v) => {
+    progressRef.current = v;
+    const idx = focusedIndex(v);
+    setFocusedIdx((prev) => (prev === idx ? prev : idx));
+    // the walk ends → hand the page back to normal sections
+    const endFaded = v > 0.955;
+    setFaded((prev) => (prev === endFaded ? prev : endFaded));
+  });
+
+  // Hero copy sinks away as the camera starts moving forward
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.085], [1, 0]);
+  const heroY = useTransform(scrollYProgress, [0, 0.085], [0, -70]);
+  const heroPE = useTransform(heroOpacity, (o) => (o < 0.05 ? "none" : "auto"));
+
+  const scrollToFirstPainting = useCallback(() => {
+    const el = spacerRef.current;
+    const lenis = getLenis();
+    if (el && lenis) {
+      const y = el.offsetTop + (el.offsetHeight * 1) / (stations.length - 1) - window.innerHeight * 0.28;
+      lenis.scrollTo(y, { duration: 1.8 });
+    } else if (el) {
+      el.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
+
+  // when the modal opens, exit pointer interactions on the canvas are gone
+  const openItem = useCallback((item: TemplateItem) => {
+    blip("click");
+    setSelected(item);
+  }, [blip]);
+
+  const focusedItem = focusedIdx >= 0 ? TEMPLATES[focusedIdx] : null;
+
+  return (
+    <>
+      {/* scroll length for the walk */}
+      <div
+        ref={spacerRef}
+        id="templates"
+        aria-hidden
+        style={{ height: `${100 + TEMPLATES.length * 92 + 55}vh` }}
+      />
+
+      {/* the 3D world */}
+      <div
+        className={`fixed inset-0 z-[2] transition-opacity duration-700 ${
+          faded ? "pointer-events-none opacity-0" : "opacity-100"
+        }`}
+        aria-hidden={faded}
+      >
+        <Canvas
+          dpr={[1, 1.75]}
+          frameloop={faded ? "never" : "always"}
+          camera={{ position: [0, 0, stations[0]], fov: 42, near: 0.1, far: 90 }}
+          gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+          style={{ background: "transparent", touchAction: "pan-y" }}
+          onPointerMissed={() => {
+            document.body.style.cursor = "";
+          }}
+        >
+          <fog attach="fog" args={["#06080f", 9, 30]} />
+          <ambientLight intensity={0.5} />
+          <directionalLight position={[-3, 5, 4]} intensity={1.4} color="#eaf6ff" />
+          <pointLight position={[2.6, -0.6, 3.4]} intensity={22} color="#4fd8ff" />
+          <pointLight position={[-3, -2.4, -2]} intensity={9} color="#2a6cff" />
+
+          <PEmblem />
+          <CorridorScene
+            progressRef={progressRef}
+            focusedIdx={focusedIdx}
+            lang={lang}
+            onOpen={openItem}
+          />
+        </Canvas>
+      </div>
+
+      {/* ── Layer: hero copy — floats over the P, sinks away on first scroll ── */}
+      <motion.div
+        style={{ opacity: heroOpacity, y: heroY, pointerEvents: heroPE }}
+        className="pointer-events-none fixed inset-x-0 top-0 z-10 flex min-h-[100svh] flex-col items-center justify-center px-4 py-28 text-center"
+      >
+        <div className="grid w-full max-w-6xl grid-cols-1 items-center gap-8 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="text-center lg:text-start">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15, duration: 0.6 }}
+              className="glass-strong bolt-lit mb-6 inline-flex items-center gap-2 rounded-full px-4 py-1.5"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-electric opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-electric" />
+              </span>
+              <span className="text-xs font-medium tracking-wide text-slate-300 sm:text-sm">
+                {t.siteSubtitle}
+              </span>
+            </motion.div>
+
+            <h1 className="bolt-text mx-auto max-w-3xl text-4xl font-bold leading-[1.12] tracking-tight text-white sm:text-6xl md:text-7xl lg:mx-0">
+              <KineticTitle text={t.heroTitle} delay={0.25} />
+            </h1>
+
+            <motion.p
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6, duration: 0.7 }}
+              className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-slate-300/90 sm:text-xl lg:mx-0"
+            >
+              {t.heroSubtitle}
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8, duration: 0.7 }}
+              className="pointer-events-auto mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start"
+            >
+              <MagneticButton onClick={scrollToFirstPainting}>
+                {t.heroCta}
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M5 12h14m-6-6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </MagneticButton>
+              <MagneticButton variant="ghost" href="#/feed">
+                {t.exploreButton}
+              </MagneticButton>
+            </motion.div>
+          </div>
+          {/* right column intentionally empty — the 3D P lives there in space */}
+          <div className="hidden lg:block" />
+        </div>
+
+        {/* scroll hint */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.4 }}
+          className="absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2"
+        >
+          <span className="text-[10px] font-medium uppercase tracking-[0.24em] text-slate-400">
+            {t.scrollHint}
+          </span>
+          <span className="flex h-10 w-6 items-start justify-center rounded-full border border-white/15 p-1.5">
+            <span className="h-2 w-1 animate-scroll-dot rounded-full bg-electric/80" />
+          </span>
+        </motion.div>
+      </motion.div>
+
+      {/* ── Layer: focus bar — the solo painting's action ── */}
+      <AnimatePresence>
+        {focusedItem && !faded && !selected && (
+          <motion.div
+            key="focus-bar"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            transition={{ type: "spring", stiffness: 280, damping: 24 }}
+            className="fixed inset-x-0 bottom-6 z-20 flex justify-center px-4"
+          >
+            <div className="glass-strong bolt-lit flex items-center gap-4 rounded-2xl px-4 py-3 sm:gap-6 sm:px-6">
+              <div className="text-start" dir={lang === "fa" ? "rtl" : "ltr"}>
+                <div className="text-sm font-bold text-white sm:text-base">
+                  {focusedItem.title[lang] || focusedItem.name.en}
+                </div>
+                <div className="text-[11px] text-slate-400" dir="ltr">
+                  {(() => {
+                    try {
+                      return new URL(focusedItem.url).hostname;
+                    } catch {
+                      return focusedItem.url;
+                    }
+                  })()}
+                </div>
+              </div>
+              <MagneticButton
+                onClick={() => openItem(focusedItem)}
+                className="!rounded-xl !px-5 !py-2.5"
+                ariaLabel={`${t.openLiveLabel} ${focusedItem.name.en}`}
+              >
+                {t.openLiveLabel}
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M7 17l9.2-9.2M17 17V7H7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </MagneticButton>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Layer: the template itself — scroll belongs to it now ── */}
+      <AnimatePresence>
+        {selected && (
+          <PreviewModal item={selected} lang={lang} onClose={() => setSelected(null)} />
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
