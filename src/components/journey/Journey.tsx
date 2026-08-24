@@ -56,7 +56,8 @@ export default function Journey({ lang }: { lang: Lang }) {
     const idx = focusedIndex(v);
     setFocusedIdx((prev) => (prev === idx ? prev : idx));
     // the walk ends → hand the page back to normal sections
-    const endFaded = v > 0.955;
+    // (early enough that no painting can catch clicks near the end)
+    const endFaded = v > 0.93;
     setFaded((prev) => (prev === endFaded ? prev : endFaded));
     // station UI phases: u<0.6 → P, then headline, then gallery (solo)
     const u = v * (stations.length - 1);
@@ -102,6 +103,7 @@ export default function Journey({ lang }: { lang: Lang }) {
         className={`fixed inset-0 z-[2] transition-opacity duration-700 ${
           faded ? "pointer-events-none opacity-0" : "opacity-100"
         }`}
+        style={{ pointerEvents: faded ? "none" : undefined }}
         aria-hidden={faded}
       >
         <Canvas

@@ -138,13 +138,17 @@ export class SoundscapeEngine {
       this.master.gain.value = 0.9;
       this.master.connect(ctx.destination);
 
-      // STORM chain
+      // STORM chain — highshelf tames top-end hiss so rain stays soft
       this.stormBus = ctx.createGain();
       this.stormBus.gain.value = 0;
+      const stormHiss = ctx.createBiquadFilter();
+      stormHiss.type = "highshelf";
+      stormHiss.frequency.value = 3400;
+      stormHiss.gain.value = -4;
       const stormWarmth = ctx.createBiquadFilter();
       stormWarmth.type = "highpass";
       stormWarmth.frequency.value = 60;
-      this.stormBus.connect(stormWarmth).connect(this.master);
+      this.stormBus.connect(stormHiss).connect(stormWarmth).connect(this.master);
 
       // LOFI chain — warmth filters + gentle tape saturation
       this.lofiBus = ctx.createGain();
@@ -218,14 +222,33 @@ export class SoundscapeEngine {
       return { gain, filter };
     };
 
-    // Layer 1 — distant fine rain: airy hiss
-    this.rainFar = layer(2600, 0.4, "bandpass");
-    // Layer 2 — mid wash
-    this.rainMid = layer(900, 0.35, "lowpass");
+    // Layer 1 — distant rain: SOFT rolled-off wash (no bandpass peak —
+    // bandpassed noise is what sounded like TV static)
+    this.rainFar = layer(2100, 0.25, "lowpass");
+    // Layer 2 — the body of the rain
+    this.rainMid = layer(850, 0.3, "lowpass");
     // Layer 3 — near heavy drops: darker, fatter
     this.rainNear = layer(300, 0.4, "lowpass");
 
-    // wind gusts — slow LFO opening the mid layer
+    // ── organic life: constant-level noise reads as "static", real rain
+    // swells and recedes. Slow LFOs at incommensurate rates on each layer.
+    const swell = (rate: number, depth: number, target: AudioParam) => {
+      const osc = ctx.createOscillator();
+      osc.frequency.value = rate;
+      const g = ctx.createGain();
+      g.gain.value = depth;
+      osc.connect(g).connect(target);
+      osc.start();
+      this.sources.push(osc as unknown as AudioBufferSourceNode);
+    };
+    swell(0.11, 0.028, this.rainFar.gain.gain); // distant breathing
+    swell(0.073, 0.045, this.rainMid.gain.gain); // main swell
+    swell(0.053, 0.02, this.rainNear.gain.gain);
+    // droplet patter — light fast modulation on the near layer
+    swell(3.3, 0.018, this.rainNear.gain.gain);
+    swell(5.1, 0.012, this.rainNear.gain.gain);
+
+    // wind gusts — slow LFO opening the mid filter (gentle)
     const lfo = ctx.createOscillator();
     lfo.frequency.value = 0.07;
     this.windLfoGain = ctx.createGain();
@@ -241,16 +264,15 @@ export class SoundscapeEngine {
     if (!this.ctx || !this.prefs.storm) return;
     const t = this.ctx.currentTime;
     const s = this.stormLevel;
-    // Base mix is clearly audible even at the top of the page (calm rain),
-    // and deepens as the storm grows with scroll.
+    // Background rain: smooth and low — present, never fatiguing.
     const ramp = (g: GainNode, v: number) =>
-      g.gain.setTargetAtTime(v, t, 0.6);
-    ramp(this.rainFar!.gain, 0.16 + s * 0.12);
-    ramp(this.rainMid!.gain, 0.26 + s * 0.24);
-    ramp(this.rainNear!.gain, 0.13 + s * 0.18);
-    this.rainMid!.filter.frequency.setTargetAtTime(800 + s * 900, t, 0.8);
-    this.rainNear!.filter.frequency.setTargetAtTime(240 + s * 280, t, 0.8);
-    this.windLfoGain!.gain.setTargetAtTime(140 + s * 460, t, 0.8);
+      g.gain.setTargetAtTime(v, t, 0.8);
+    ramp(this.rainFar!.gain, 0.075 + s * 0.05);
+    ramp(this.rainMid!.gain, 0.14 + s * 0.13);
+    ramp(this.rainNear!.gain, 0.08 + s * 0.09);
+    this.rainMid!.filter.frequency.setTargetAtTime(800 + s * 850, t, 0.9);
+    this.rainNear!.filter.frequency.setTargetAtTime(240 + s * 260, t, 0.9);
+    this.windLfoGain!.gain.setTargetAtTime(90 + s * 300, t, 0.9);
   }
 
   /** Thunder burst synced to a lightning strike. intensity 0..1+ */

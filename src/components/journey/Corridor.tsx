@@ -33,7 +33,7 @@ export const stations: number[] = [
   4.6, // the P + ring
   HEADLINE_Z + FOCUS_DIST, // the headline layer
   ...Array.from({ length: N }, (_, i) => paintingZ(i) + FOCUS_DIST),
-  paintingZ(N - 1) - 1.6, // exit pull-through
+  paintingZ(N - 1) + 1.2, // exit — dissolves into the page (never clips through)
 ];
 
 /** Painting index for the focus bar: -1 outside the gallery zone. */
@@ -252,6 +252,9 @@ function Painting({
     document.body.style.cursor = "";
   };
 
+  // Only the FOCUSED painting is interactive — a painting must never
+  // catch clicks when it isn't the solo layer (this is what made the end
+  // of the site open the last template from anywhere).
   return (
     <group ref={group} position={[0, 0, z]}>
       {/* glow halo behind the frame */}
@@ -282,12 +285,16 @@ function Painting({
       {/* the painting itself */}
       <mesh
         position={[0, 0, 0.012]}
-        onPointerOver={over}
-        onPointerOut={out}
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpen(item);
-        }}
+        onPointerOver={focused ? over : undefined}
+        onPointerOut={focused ? out : undefined}
+        onClick={
+          focused
+            ? (e) => {
+                e.stopPropagation();
+                onOpen(item);
+              }
+            : undefined
+        }
       >
         <planeGeometry args={[PAINTING_W, PAINTING_H]} />
         <meshBasicMaterial map={map} toneMapped={false} transparent opacity={1} />
@@ -385,7 +392,7 @@ function HeadlineLayer({ lang }: { lang: Lang }) {
 
 // ── the city ───────────────────────────────────────────────────────────────
 
-/** Window textures — every building lit, dense cyan windows. */
+/** Window textures — every single window lit, brightness varies. */
 function makeWindowTextures(): THREE.Texture[] {
   const out: THREE.Texture[] = [];
   for (let v = 0; v < 3; v++) {
@@ -401,20 +408,13 @@ function makeWindowTextures(): THREE.Texture[] {
     const ch = 256 / rows;
     for (let x = 0; x < cols; x++) {
       for (let y = 0; y < rows; y++) {
-        const r = Math.random();
-        if (r < 0.58) {
-          // lit window — most of the grid glows, varying brightness
-          const bright = 0.4 + Math.random() * 0.6;
-          const whiteBlue = Math.random() < 0.22;
-          ctx.fillStyle = whiteBlue
-            ? `rgba(${215 + bright * 40}, ${240 + bright * 15}, 255, ${0.75 + bright * 0.25})`
-            : `rgba(${100 + bright * 70}, ${200 + bright * 45}, 255, ${0.6 + bright * 0.4})`;
-          ctx.fillRect(x * cw + cw * 0.16, y * ch + ch * 0.22, cw * 0.62, ch * 0.45);
-        } else if (r < 0.72) {
-          // dim window — structure reads even when unlit
-          ctx.fillStyle = "rgba(60, 110, 170, 0.28)";
-          ctx.fillRect(x * cw + cw * 0.2, y * ch + ch * 0.26, cw * 0.55, ch * 0.4);
-        }
+        // 100% lit — brightness varies so the facade stays organic
+        const bright = 0.3 + Math.random() * 0.7;
+        const whiteBlue = Math.random() < 0.24;
+        ctx.fillStyle = whiteBlue
+          ? `rgba(${210 + bright * 45}, ${238 + bright * 17}, 255, ${0.65 + bright * 0.35})`
+          : `rgba(${90 + bright * 80}, ${195 + bright * 50}, 255, ${0.5 + bright * 0.5})`;
+        ctx.fillRect(x * cw + cw * 0.16, y * ch + ch * 0.22, cw * 0.62, ch * 0.45);
       }
     }
     const tex = new THREE.CanvasTexture(c);
