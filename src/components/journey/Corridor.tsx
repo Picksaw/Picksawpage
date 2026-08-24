@@ -476,10 +476,12 @@ function City() {
   const windowTexs = useMemo(() => makeWindowTextures(), []);
 
   // merged resources: one material per window-texture variant
+  // fog:false — windows and outlines glow from ANY distance, like a real
+  // city skyline at night; the fog keeps the paintings' solo fade instead.
   const mats = useMemo(
     () =>
       windowTexs.map(
-        (t) => new THREE.MeshBasicMaterial({ map: t, color: "#ffffff" })
+        (t) => new THREE.MeshBasicMaterial({ map: t, color: "#ffffff", fog: false })
       ),
     [windowTexs]
   );
@@ -488,9 +490,10 @@ function City() {
       new THREE.LineBasicMaterial({
         color: "#2f7bff",
         transparent: true,
-        opacity: 0.4,
+        opacity: 0.45,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
+        fog: false,
       }),
     []
   );

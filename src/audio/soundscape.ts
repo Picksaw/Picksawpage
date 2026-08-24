@@ -222,10 +222,18 @@ export class SoundscapeEngine {
       return { gain, filter };
     };
 
-    // Layer 1 — distant rain: SOFT rolled-off wash (no bandpass peak —
-    // bandpassed noise is what sounded like TV static)
-    this.rainFar = layer(2100, 0.25, "lowpass");
-    // Layer 2 — the body of the rain
+    // Layer 1 — distant rain: BROWN noise (deep, soft rumble-wash —
+    // white noise here is what read as TV static)
+    const farSrc = this.loopNoise(this.noiseBuffers!.brown);
+    const farFilter = ctx.createBiquadFilter();
+    farFilter.type = "lowpass";
+    farFilter.frequency.value = 900;
+    farFilter.Q.value = 0.3;
+    const farGain = ctx.createGain();
+    farGain.gain.value = 0;
+    farSrc.connect(farFilter).connect(farGain).connect(this.stormBus!);
+    this.rainFar = { gain: farGain, filter: farFilter };
+    // Layer 2 — the body of the rain (white, softened)
     this.rainMid = layer(850, 0.3, "lowpass");
     // Layer 3 — near heavy drops: darker, fatter
     this.rainNear = layer(300, 0.4, "lowpass");
@@ -241,12 +249,12 @@ export class SoundscapeEngine {
       osc.start();
       this.sources.push(osc as unknown as AudioBufferSourceNode);
     };
-    swell(0.11, 0.028, this.rainFar.gain.gain); // distant breathing
-    swell(0.073, 0.045, this.rainMid.gain.gain); // main swell
-    swell(0.053, 0.02, this.rainNear.gain.gain);
+    swell(0.11, 0.014, this.rainFar.gain.gain); // distant breathing
+    swell(0.073, 0.024, this.rainMid.gain.gain); // main swell
+    swell(0.053, 0.011, this.rainNear.gain.gain);
     // droplet patter — light fast modulation on the near layer
-    swell(3.3, 0.018, this.rainNear.gain.gain);
-    swell(5.1, 0.012, this.rainNear.gain.gain);
+    swell(3.3, 0.009, this.rainNear.gain.gain);
+    swell(5.1, 0.006, this.rainNear.gain.gain);
 
     // wind gusts — slow LFO opening the mid filter (gentle)
     const lfo = ctx.createOscillator();
@@ -264,15 +272,16 @@ export class SoundscapeEngine {
     if (!this.ctx || !this.prefs.storm) return;
     const t = this.ctx.currentTime;
     const s = this.stormLevel;
-    // Background rain: smooth and low — present, never fatiguing.
+    // Background rain — genuinely LOW: felt more than heard at calm,
+    // a soft presence at full storm.
     const ramp = (g: GainNode, v: number) =>
-      g.gain.setTargetAtTime(v, t, 0.8);
-    ramp(this.rainFar!.gain, 0.075 + s * 0.05);
-    ramp(this.rainMid!.gain, 0.14 + s * 0.13);
-    ramp(this.rainNear!.gain, 0.08 + s * 0.09);
-    this.rainMid!.filter.frequency.setTargetAtTime(800 + s * 850, t, 0.9);
-    this.rainNear!.filter.frequency.setTargetAtTime(240 + s * 260, t, 0.9);
-    this.windLfoGain!.gain.setTargetAtTime(90 + s * 300, t, 0.9);
+      g.gain.setTargetAtTime(v, t, 0.9);
+    ramp(this.rainFar!.gain, 0.032 + s * 0.03);
+    ramp(this.rainMid!.gain, 0.07 + s * 0.07);
+    ramp(this.rainNear!.gain, 0.042 + s * 0.05);
+    this.rainMid!.filter.frequency.setTargetAtTime(750 + s * 800, t, 1.0);
+    this.rainNear!.filter.frequency.setTargetAtTime(230 + s * 240, t, 1.0);
+    this.windLfoGain!.gain.setTargetAtTime(70 + s * 220, t, 1.0);
   }
 
   /** Thunder burst synced to a lightning strike. intensity 0..1+ */
@@ -292,7 +301,7 @@ export class SoundscapeEngine {
       cf.frequency.value = 1400;
       const cg = ctx.createGain();
       cg.gain.setValueAtTime(0.0001, t0);
-      cg.gain.exponentialRampToValueAtTime(0.28 * i, t0 + 0.012);
+      cg.gain.exponentialRampToValueAtTime(0.2 * i, t0 + 0.012);
       cg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
       crack.connect(cf).connect(cg).connect(out);
       crack.start(t0, Math.random() * 2, 0.4);
@@ -309,7 +318,7 @@ export class SoundscapeEngine {
     rf.frequency.exponentialRampToValueAtTime(55, t0 + 2.6);
     const rg = ctx.createGain();
     rg.gain.setValueAtTime(0.0001, t0);
-    rg.gain.exponentialRampToValueAtTime(0.5 * i, t0 + 0.09 + Math.random() * 0.12);
+    rg.gain.exponentialRampToValueAtTime(0.4 * i, t0 + 0.09 + Math.random() * 0.12);
     rg.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.4 + Math.random() * 1.6);
     rumble.connect(rf).connect(rg).connect(out);
     rumble.start(t0, Math.random() * 2);
@@ -322,7 +331,7 @@ export class SoundscapeEngine {
     sub.frequency.exponentialRampToValueAtTime(30, t0 + 1.1);
     const sg = ctx.createGain();
     sg.gain.setValueAtTime(0.0001, t0);
-    sg.gain.exponentialRampToValueAtTime(0.3 * i, t0 + 0.06);
+    sg.gain.exponentialRampToValueAtTime(0.22 * i, t0 + 0.06);
     sg.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.4);
     sub.connect(sg).connect(out);
     sub.start(t0);
@@ -645,7 +654,7 @@ export class SoundscapeEngine {
     this.applyChannels();
     // Immediate feedback so enabling never feels like a dead button
     if (channel === "storm" && this.prefs.storm) {
-      window.setTimeout(() => this.thunder(0.55), 350);
+      window.setTimeout(() => this.thunder(0.45), 350);
     }
     return this.prefs[channel];
   }
@@ -656,7 +665,7 @@ export class SoundscapeEngine {
     const t = ctx.currentTime;
 
     // STORM
-    this.stormBus!.gain.setTargetAtTime(this.prefs.storm ? 1 : 0, t, 0.4);
+    this.stormBus!.gain.setTargetAtTime(this.prefs.storm ? 0.85 : 0, t, 0.5);
     if (this.prefs.storm) {
       this.setStormLevel(this.stormLevel);
     } else {

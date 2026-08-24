@@ -14,17 +14,18 @@ import { onLightning } from "../../lib/stormEvents";
  * Scrolling forward dives the camera THROUGH this ring into the city.
  */
 
-const RING_R = 1.62;
+const RING_R = 1.38; // smaller — never reaches the screen edges
 const ARC_POINTS = 18;
 const BRANCH_POINTS = 8;
 const ARC_COUNT = 5;
 const STATION_DIST = 4.6;
+const RING_SPAN = RING_R * 1.13 * 2; // includes the halo ring
 
-/** Responsive emblem scale — the P + ring fit narrow screens too. */
+/** Responsive emblem scale — fits BOTH width and height on any screen. */
 function emblemFit(cam: THREE.PerspectiveCamera): number {
   const visH = 2 * STATION_DIST * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
   const visW = visH * cam.aspect;
-  return Math.min(1, (visW * 0.92) / 3.5);
+  return Math.min(1, (visW * 0.85) / RING_SPAN, (visH * 0.7) / RING_SPAN);
 }
 
 /** Soft horizontal gradient — the bolt's cross-section. */
@@ -154,7 +155,7 @@ function mkRibbon(tex: THREE.Texture, n: number, width: number, color: string, o
 }
 
 export default function PEmblem() {
-  const pGeometry = useMemo(() => makePGeometry(2.35 / 96), []);
+  const pGeometry = useMemo(() => makePGeometry(1.95 / 96), []);
   const { camera } = useThree();
 
   const group = useRef<THREE.Group>(null);
@@ -380,7 +381,7 @@ export default function PEmblem() {
             opacity={1}
           />
         </mesh>
-        <mesh position={[-0.35, 0.53, 0.47]}>
+        <mesh position={[-0.29, 0.44, 0.4]}>
           <sphereGeometry args={[0.085, 16, 16]} />
           <meshBasicMaterial ref={sparkMat} color="#bff1ff" toneMapped={false} transparent opacity={0.9} />
         </mesh>

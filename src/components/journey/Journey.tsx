@@ -103,7 +103,10 @@ export default function Journey({ lang }: { lang: Lang }) {
         className={`fixed inset-0 z-[2] transition-opacity duration-700 ${
           faded ? "pointer-events-none opacity-0" : "opacity-100"
         }`}
-        style={{ pointerEvents: faded ? "none" : undefined }}
+        style={{
+          pointerEvents: faded ? "none" : undefined,
+          visibility: faded ? "hidden" : "visible", // triple lock — can never catch a click
+        }}
         aria-hidden={faded}
       >
         <Canvas
@@ -161,7 +164,7 @@ export default function Journey({ lang }: { lang: Lang }) {
             initial={{ opacity: 0, y: 46 }}
             animate={{ opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } }}
             exit={{ opacity: 0, y: 34, transition: { duration: 0.35 } }}
-            className="fixed inset-x-0 bottom-0 z-10 flex flex-col items-center gap-5 px-4 pb-14"
+            className="pointer-events-none fixed inset-x-0 bottom-0 z-10 flex flex-col items-center gap-5 px-4 pb-14"
           >
             <motion.div
               initial={{ opacity: 0, y: 14 }}
@@ -177,7 +180,7 @@ export default function Journey({ lang }: { lang: Lang }) {
               </span>
             </motion.div>
 
-            <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <div className="pointer-events-auto flex flex-col items-center justify-center gap-4 sm:flex-row">
               <MagneticButton onClick={scrollToFirstPainting}>
                 {t.heroCta}
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -201,9 +204,9 @@ export default function Journey({ lang }: { lang: Lang }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 24 }}
             transition={{ type: "spring", stiffness: 280, damping: 24 }}
-            className="fixed inset-x-0 bottom-6 z-20 flex justify-center px-4"
+            className="pointer-events-none fixed inset-x-0 bottom-6 z-20 flex justify-center px-4"
           >
-            <div className="glass-strong bolt-lit flex items-center gap-4 rounded-2xl px-4 py-3 sm:gap-6 sm:px-6">
+            <div className="glass-strong bolt-lit pointer-events-auto flex items-center gap-4 rounded-2xl px-4 py-3 sm:gap-6 sm:px-6">
               <div className="text-start" dir={lang === "fa" ? "rtl" : "ltr"}>
                 <div className="text-sm font-bold text-white sm:text-base">
                   {focusedItem.title[lang] || focusedItem.name.en}
