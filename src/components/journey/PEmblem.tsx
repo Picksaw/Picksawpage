@@ -7,30 +7,48 @@ import { onLightning } from "../../lib/stormEvents";
 /**
  * PEmblem — the journey's opening layer.
  * The metallic P floats at the corridor entrance. Moments after the
- * interface fades in, an energy ring FORMS around it (scale + sweep +
- * orbiting spark). From then on, lightning arcs strike the ring —
- * each hit charges it brighter (charge accumulates, then slowly
- * bleeds off). Scrolling forward dives the camera THROUGH this
- * charged ring into the gallery.
+ * interface fades in, an energy ring FORMS around it. From then on,
+ * lightning arcs strike the ring — each hit is a full production:
+ * jagged main bolt + branch, impact flash, ring kick, and a real light
+ * flash that illuminates the P's metal. Hits charge the ring brighter.
+ * Scrolling forward dives the camera THROUGH this ring into the city.
  */
 
-const RING_R = 1.62; // fits the fov-42 opening framing with margin
-const ARC_POINTS = 16;
-const ARC_COUNT = 3;
+const RING_R = 1.62;
+const ARC_POINTS = 18;
+const ARC_COUNT = 5;
+const STATION_DIST = 4.6; // camera distance while framing the P
+
+/** Responsive emblem scale — the P + ring fit narrow screens too. */
+function emblemFit(cam: THREE.PerspectiveCamera): number {
+  const visH = 2 * STATION_DIST * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+  const visW = visH * cam.aspect;
+  return Math.min(1, (visW * 0.92) / 3.5);
+}
 
 function makeRadialSprite(): THREE.Texture {
   const c = document.createElement("canvas");
   c.width = c.height = 128;
   const cx = c.getContext("2d")!;
   const g = cx.createRadialGradient(64, 64, 0, 64, 64, 64);
-  g.addColorStop(0, "rgba(220, 245, 255, 1)");
-  g.addColorStop(0.25, "rgba(159, 232, 255, 0.7)");
+  g.addColorStop(0, "rgba(230, 248, 255, 1)");
+  g.addColorStop(0.25, "rgba(159, 232, 255, 0.75)");
   g.addColorStop(1, "rgba(79, 216, 255, 0)");
   cx.fillStyle = g;
   cx.fillRect(0, 0, 128, 128);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+interface ArcSlot {
+  main: THREE.Line;
+  branch: THREE.Line;
+  mat: THREE.LineBasicMaterial;
+  impact: THREE.Sprite;
+  impact2: THREE.Sprite;
+  life: number;
+  angle: number;
 }
 
 export default function PEmblem() {
@@ -43,25 +61,16 @@ export default function PEmblem() {
   const ring = useRef<THREE.Mesh>(null);
   const ringHalo = useRef<THREE.Mesh>(null);
   const orbitSpark = useRef<THREE.Mesh>(null);
+  const strikeLight = useRef<THREE.PointLight>(null);
 
-  // lightning state
-  const arcs = useRef<
-    {
-      line: THREE.Line;
-      mat: THREE.LineBasicMaterial;
-      impact: THREE.Sprite;
-      life: number;
-      angle: number;
-    }[]
-  >([]);
+  const arcs = useRef<ArcSlot[]>([]);
   const charge = useRef(0.25);
   const ringFlash = useRef(0);
-  const nextStrike = useRef(1.6);
+  const nextStrike = useRef(1.4);
   const clock = useRef(0);
-  const formation = useRef(0); // 0..1 ring formation
+  const formation = useRef(0);
   const spriteTex = useMemo(() => makeRadialSprite(), []);
 
-  // pointer tilt (shared feeling with the header logo)
   const pointer = useRef({ x: 0, y: 0 });
   const eased = useRef({ x: 0, y: 0 });
 
@@ -82,7 +91,6 @@ export default function PEmblem() {
   const strike = (fromStorm: boolean) => {
     const pool = arcs.current;
     if (pool.length === 0) return;
-    // pick the least-active arc slot
     let slot = pool[0];
     for (const a of pool) if (a.life < slot.life) slot = a;
 
@@ -99,22 +107,47 @@ export default function PEmblem() {
       -0.6 + Math.random() * 0.8
     );
 
+    // main jagged bolt
     const pts: THREE.Vector3[] = [];
+    let branchAnchor = new THREE.Vector3();
     for (let i = 0; i < ARC_POINTS; i++) {
       const t = i / (ARC_POINTS - 1);
       const p = start.clone().lerp(hit, t);
-      // jagged offset, strongest mid-path
-      const jag = Math.sin(t * Math.PI) * 0.34;
+      const jag = Math.sin(t * Math.PI) * 0.4;
       p.x += (Math.random() - 0.5) * jag * 2;
       p.y += (Math.random() - 0.5) * jag * 2;
       pts.push(p);
+      if (i === Math.floor(ARC_POINTS * 0.45)) {
+        branchAnchor = p.clone();
+      }
     }
-    slot.line.geometry.setFromPoints(pts);
+    slot.main.geometry.setFromPoints(pts);
+
+    // branch bolt — diverges from mid-path to another ring point
+    const bAngle = angle + (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.5);
+    const bHit = new THREE.Vector3(
+      Math.cos(bAngle) * RING_R,
+      Math.sin(bAngle) * RING_R,
+      0
+    );
+    const bPts: THREE.Vector3[] = [branchAnchor];
+    const bLen = 7;
+    for (let i = 1; i < bLen; i++) {
+      const t = i / (bLen - 1);
+      const p = branchAnchor.clone().lerp(bHit, t);
+      p.x += (Math.random() - 0.5) * 0.55 * Math.sin(t * Math.PI);
+      p.y += (Math.random() - 0.5) * 0.55 * Math.sin(t * Math.PI);
+      bPts.push(p);
+    }
+    slot.branch.geometry.setFromPoints(bPts);
+
+    // impacts — one at each contact point
     slot.impact.position.copy(hit);
+    slot.impact2.position.copy(bHit);
     slot.life = 1;
     slot.angle = angle;
 
-    ringFlash.current = 1;
+    ringFlash.current = Math.min(1.35, 1);
     charge.current = Math.min(1, charge.current + (fromStorm ? 0.16 : 0.11));
   };
 
@@ -122,18 +155,27 @@ export default function PEmblem() {
     const dt = Math.min(delta, 0.05);
     clock.current += dt;
 
-    // ── dive fades: the P dissolves as the camera reaches it; the ring
-    //    holds until the camera is through, then fades (portal exit) ──
-    const camZ = state.camera.position.z;
+    const cam = state.camera as THREE.PerspectiveCamera;
+
+    // ── dive fades ──
+    const camZ = cam.position.z;
     const pFade = Math.max(0, Math.min(1, (camZ - 1.2) / 2.6));
     const ringFade = Math.max(0, Math.min(1, (camZ + 1.6) / 2.8));
 
+    // ── responsive fit (phones / narrow windows) ──
+    if (group.current) {
+      const fit = emblemFit(cam);
+      const cur = group.current.scale.x || fit;
+      const next = cur + (fit - cur) * Math.min(1, dt * 6);
+      group.current.scale.setScalar(next);
+    }
+
     // ── formation: ring draws itself in shortly after mount ──
-    if (clock.current > 1.0 && formation.current < 1) {
+    if (clock.current > 0.8 && formation.current < 1) {
       formation.current = Math.min(1, formation.current + dt / 1.5);
     }
     const f = formation.current;
-    const fEase = 1 - Math.pow(1 - f, 3); // easeOutCubic
+    const fEase = 1 - Math.pow(1 - f, 3);
 
     // ── gentle P float + cursor tilt ──
     eased.current.x += (pointer.current.x - eased.current.x) * Math.min(1, dt * 4);
@@ -152,11 +194,16 @@ export default function PEmblem() {
     const c = charge.current;
     const flash = ringFlash.current;
 
+    // ── strike light — real illumination on the metal, spikes on hits ──
+    if (strikeLight.current) {
+      strikeLight.current.intensity = (5 + c * 9 + flash * 95) * Math.max(pFade, ringFade);
+    }
+
     // ── the ring ──
     if (ring.current) {
       const m = ring.current.material as THREE.MeshBasicMaterial;
-      ring.current.rotation.z += dt * 0.12;
-      const s = (0.2 + 0.8 * fEase) * (1 + flash * 0.03);
+      ring.current.rotation.z += dt * (0.12 + flash * 0.9); // kick spins with strikes
+      const s = (0.2 + 0.8 * fEase) * (1 + flash * 0.08);
       ring.current.scale.setScalar(s);
       m.opacity = (0.35 + c * 0.6) * fEase * ringFade;
       const col = new THREE.Color().lerpColors(
@@ -169,12 +216,12 @@ export default function PEmblem() {
     if (ringHalo.current) {
       const m = ringHalo.current.material as THREE.MeshBasicMaterial;
       ringHalo.current.rotation.z -= dt * 0.06;
-      const s = (0.2 + 0.8 * fEase) * (1 + flash * 0.06);
+      const s = (0.2 + 0.8 * fEase) * (1 + flash * 0.12);
       ringHalo.current.scale.setScalar(s);
-      m.opacity = (0.08 + c * 0.16 + flash * 0.18) * fEase * ringFade;
+      m.opacity = (0.08 + c * 0.16 + flash * 0.28) * fEase * ringFade;
     }
 
-    // ── orbiting spark: draws the ring during formation, then keeps orbiting ──
+    // ── orbiting spark ──
     if (orbitSpark.current) {
       const a = f < 1 ? fEase * Math.PI * 2 : clock.current * 1.4;
       orbitSpark.current.position.set(
@@ -184,7 +231,7 @@ export default function PEmblem() {
       );
       const m = orbitSpark.current.material as THREE.MeshBasicMaterial;
       m.opacity = fEase * (0.75 + flash * 0.25) * ringFade;
-      orbitSpark.current.scale.setScalar(0.9 + flash * 0.8);
+      orbitSpark.current.scale.setScalar(0.9 + flash * 1.1);
     }
 
     // ── arcs decay ──
@@ -193,16 +240,23 @@ export default function PEmblem() {
         a.life = Math.max(0, a.life - dt * 2.1);
         const flicker = 0.75 + Math.random() * 0.25;
         a.mat.opacity = a.life * flicker * ringFade;
-        a.impact.scale.setScalar(0.25 + (1 - a.life) * 0.5);
-        (a.impact.material as THREE.SpriteMaterial).opacity = a.life * 0.9 * ringFade;
+        const grown = 0.3 + (1 - a.life) * 0.9;
+        a.impact.scale.setScalar(grown);
+        a.impact2.scale.setScalar(grown * 0.7);
+        (a.impact.material as THREE.SpriteMaterial).opacity = a.life * ringFade;
+        (a.impact2.material as THREE.SpriteMaterial).opacity = a.life * 0.8 * ringFade;
       }
     }
 
     // ── own strike cadence — quickens as the ring charges ──
     if (formation.current >= 1 && clock.current >= nextStrike.current) {
       strike(false);
+      if (Math.random() < 0.3) {
+        // double strike — the storm shows off
+        window.setTimeout(() => strike(false), 90 + Math.random() * 120);
+      }
       const interval = 2.6 + Math.random() * 3.2 - c * 1.2;
-      nextStrike.current = clock.current + Math.max(1.1, interval);
+      nextStrike.current = clock.current + Math.max(0.9, interval);
     }
   });
 
@@ -259,26 +313,27 @@ export default function PEmblem() {
         <meshBasicMaterial color="#eaffff" transparent opacity={0} toneMapped={false} fog={false} />
       </mesh>
 
-      {/* lightning arcs — registered imperatively so useFrame can drive them */}
+      {/* strike light — lightning genuinely illuminates the emblem */}
+      <pointLight
+        ref={strikeLight}
+        position={[0.8, 0.9, 1.6]}
+        intensity={5}
+        color="#bfefff"
+        distance={12}
+      />
+
+      {/* lightning arcs — built once, driven imperatively */}
       <Arcs arcsRef={arcs} spriteTex={spriteTex} />
     </group>
   );
 }
 
-/** Arc pool: built once; positions filled on strike by the parent. */
+/** Arc pool: 5 slots, each a main bolt + branch + dual impact flashes. */
 function Arcs({
   arcsRef,
   spriteTex,
 }: {
-  arcsRef: React.RefObject<
-    {
-      line: THREE.Line;
-      mat: THREE.LineBasicMaterial;
-      impact: THREE.Sprite;
-      life: number;
-      angle: number;
-    }[]
-  >;
+  arcsRef: React.RefObject<ArcSlot[]>;
   spriteTex: THREE.Texture;
 }) {
   const made = useRef(false);
@@ -287,43 +342,54 @@ function Arcs({
   useEffect(() => {
     if (made.current || !host.current) return;
     made.current = true;
-    const pool: typeof arcsRef.current = [];
+    const pool: ArcSlot[] = [];
     for (let i = 0; i < ARC_COUNT; i++) {
-      const geo = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(),
-        new THREE.Vector3(),
-      ]);
       const mat = new THREE.LineBasicMaterial({
-        color: "#cdefff",
+        color: "#dcf4ff",
         transparent: true,
         opacity: 0,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         fog: false,
       });
-      const line = new THREE.Line(geo, mat);
-      line.frustumCulled = false;
-      line.renderOrder = 5;
+      const mkLine = () => {
+        const geo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(),
+          new THREE.Vector3(),
+        ]);
+        const line = new THREE.Line(geo, mat);
+        line.frustumCulled = false;
+        line.renderOrder = 5;
+        return line;
+      };
+      const mkImpact = () => {
+        const m = new THREE.SpriteMaterial({
+          map: spriteTex,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        const s = new THREE.Sprite(m);
+        s.scale.setScalar(0.4);
+        return s;
+      };
 
-      const impactMat = new THREE.SpriteMaterial({
-        map: spriteTex,
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      const impact = new THREE.Sprite(impactMat);
-      impact.scale.setScalar(0.4);
-
-      host.current.add(line, impact);
-      pool.push({ line, mat, impact, life: 0, angle: 0 });
+      const main = mkLine();
+      const branch = mkLine();
+      const impact = mkImpact();
+      const impact2 = mkImpact();
+      host.current.add(main, branch, impact, impact2);
+      pool.push({ main, branch, mat, impact, impact2, life: 0, angle: 0 });
     }
     arcsRef.current = pool;
     return () => {
       for (const a of pool) {
-        a.line.geometry.dispose();
+        a.main.geometry.dispose();
+        a.branch.geometry.dispose();
         a.mat.dispose();
         a.impact.material.dispose();
+        a.impact2.material.dispose();
       }
       arcsRef.current = [];
     };

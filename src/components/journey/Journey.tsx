@@ -5,7 +5,6 @@ import {
   motion,
   useMotionValueEvent,
   useScroll,
-  useTransform,
 } from "motion/react";
 import { SITE_TEXTS, type Lang } from "../../config/siteTexts";
 import { TEMPLATES, type TemplateItem } from "../../config/templatesConfig";
@@ -43,6 +42,9 @@ export default function Journey({ lang }: { lang: Lang }) {
   const [focusedIdx, setFocusedIdx] = useState(-1);
   const [faded, setFaded] = useState(false);
   const [selected, setSelected] = useState<TemplateItem | null>(null);
+  /** 'p' while framing the P, 'headline' on the text layer, then 'gallery'.
+   *  State-driven (not transform-driven) so station UI can never linger. */
+  const [phase, setPhase] = useState<"p" | "headline" | "gallery">("p");
 
   const { scrollYProgress } = useScroll({
     target: spacerRef,
@@ -56,12 +58,11 @@ export default function Journey({ lang }: { lang: Lang }) {
     // the walk ends → hand the page back to normal sections
     const endFaded = v > 0.955;
     setFaded((prev) => (prev === endFaded ? prev : endFaded));
+    // station UI phases: u<0.6 → P, then headline, then gallery (solo)
+    const u = v * (stations.length - 1);
+    const ph = u < 0.6 ? "p" : u < 1.45 ? "headline" : "gallery";
+    setPhase((prev) => (prev === ph ? prev : ph));
   });
-
-  // Hero copy sinks away as the camera starts moving forward
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.085], [1, 0]);
-  const heroY = useTransform(scrollYProgress, [0, 0.085], [0, -70]);
-  const heroPE = useTransform(heroOpacity, (o) => (o < 0.05 ? "none" : "auto"));
 
   const scrollToFirstPainting = useCallback(() => {
     const el = spacerRef.current;
@@ -129,61 +130,65 @@ export default function Journey({ lang }: { lang: Lang }) {
         </Canvas>
       </div>
 
-      {/* ── Layer: station-0 UI — badge + CTAs; the big headline itself
-             is now a 3D layer the walk passes through ── */}
-      <motion.div
-        style={{ opacity: heroOpacity, y: heroY, pointerEvents: heroPE }}
-        className="pointer-events-none fixed inset-x-0 top-0 z-10 flex min-h-[100svh] flex-col items-center justify-center px-4 py-28 text-center"
-      >
-        <div className="flex w-full max-w-3xl flex-col items-center">
+      {/* ── P layer UI — just the scroll invitation ── */}
+      <AnimatePresence>
+        {phase === "p" && !faded && (
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15, duration: 0.6 }}
-            className="glass-strong bolt-lit mb-8 inline-flex items-center gap-2 rounded-full px-4 py-1.5"
+            key="p-hint"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: { delay: 1.2, duration: 0.8 } }}
+            exit={{ opacity: 0, transition: { duration: 0.35 } }}
+            className="pointer-events-none fixed inset-x-0 bottom-8 z-10 flex flex-col items-center gap-2"
           >
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-electric opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-electric" />
+            <span className="text-[10px] font-medium uppercase tracking-[0.24em] text-slate-400">
+              {t.scrollHint}
             </span>
-            <span className="text-xs font-medium tracking-wide text-slate-300 sm:text-sm">
-              {t.siteSubtitle}
+            <span className="flex h-10 w-6 items-start justify-center rounded-full border border-white/15 p-1.5">
+              <span className="h-2 w-1 animate-scroll-dot rounded-full bg-electric/80" />
             </span>
           </motion.div>
+        )}
+      </AnimatePresence>
 
+      {/* ── headline layer UI — badge + CTAs live HERE (the layer after
+             the P) and only here; the gallery never shows them ── */}
+      <AnimatePresence>
+        {phase === "headline" && !faded && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8, duration: 0.7 }}
-            className="pointer-events-auto flex flex-col items-center justify-center gap-4 sm:flex-row"
+            key="headline-ui"
+            initial={{ opacity: 0, y: 46 }}
+            animate={{ opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } }}
+            exit={{ opacity: 0, y: 34, transition: { duration: 0.35 } }}
+            className="fixed inset-x-0 bottom-0 z-10 flex flex-col items-center gap-5 px-4 pb-14"
           >
-            <MagneticButton onClick={scrollToFirstPainting}>
-              {t.heroCta}
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M5 12h14m-6-6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </MagneticButton>
-            <MagneticButton variant="ghost" href="#/feed">
-              {t.exploreButton}
-            </MagneticButton>
-          </motion.div>
-        </div>
+            <motion.div
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0, transition: { delay: 0.15, duration: 0.5 } }}
+              className="glass-strong bolt-lit inline-flex items-center gap-2 rounded-full px-4 py-1.5"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-electric opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-electric" />
+              </span>
+              <span className="text-xs font-medium tracking-wide text-slate-300 sm:text-sm">
+                {t.siteSubtitle}
+              </span>
+            </motion.div>
 
-        {/* scroll hint */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.4 }}
-          className="absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2"
-        >
-          <span className="text-[10px] font-medium uppercase tracking-[0.24em] text-slate-400">
-            {t.scrollHint}
-          </span>
-          <span className="flex h-10 w-6 items-start justify-center rounded-full border border-white/15 p-1.5">
-            <span className="h-2 w-1 animate-scroll-dot rounded-full bg-electric/80" />
-          </span>
-        </motion.div>
-      </motion.div>
+            <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <MagneticButton onClick={scrollToFirstPainting}>
+                {t.heroCta}
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M5 12h14m-6-6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </MagneticButton>
+              <MagneticButton variant="ghost" href="#/feed">
+                {t.exploreButton}
+              </MagneticButton>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Layer: focus bar — the solo painting's action ── */}
       <AnimatePresence>

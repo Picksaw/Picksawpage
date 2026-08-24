@@ -385,7 +385,7 @@ function HeadlineLayer({ lang }: { lang: Lang }) {
 
 // ── the city ───────────────────────────────────────────────────────────────
 
-/** Window textures — mostly dark, sparse cyan lit windows. */
+/** Window textures — every building lit, dense cyan windows. */
 function makeWindowTextures(): THREE.Texture[] {
   const out: THREE.Texture[] = [];
   for (let v = 0; v < 3; v++) {
@@ -395,17 +395,25 @@ function makeWindowTextures(): THREE.Texture[] {
     const ctx = c.getContext("2d")!;
     ctx.fillStyle = "#04060c";
     ctx.fillRect(0, 0, 128, 256);
-    const cols = 6;
-    const rows = 15;
+    const cols = 5;
+    const rows = 12;
     const cw = 128 / cols;
     const ch = 256 / rows;
     for (let x = 0; x < cols; x++) {
       for (let y = 0; y < rows; y++) {
         const r = Math.random();
-        if (r < 0.26) {
-          const bright = 0.35 + Math.random() * 0.6;
-          ctx.fillStyle = `rgba(${120 + bright * 90}, ${210 + bright * 40}, 255, ${0.55 + bright * 0.4})`;
-          ctx.fillRect(x * cw + cw * 0.22, y * ch + ch * 0.28, cw * 0.5, ch * 0.36);
+        if (r < 0.58) {
+          // lit window — most of the grid glows, varying brightness
+          const bright = 0.4 + Math.random() * 0.6;
+          const whiteBlue = Math.random() < 0.22;
+          ctx.fillStyle = whiteBlue
+            ? `rgba(${215 + bright * 40}, ${240 + bright * 15}, 255, ${0.75 + bright * 0.25})`
+            : `rgba(${100 + bright * 70}, ${200 + bright * 45}, 255, ${0.6 + bright * 0.4})`;
+          ctx.fillRect(x * cw + cw * 0.16, y * ch + ch * 0.22, cw * 0.62, ch * 0.45);
+        } else if (r < 0.72) {
+          // dim window — structure reads even when unlit
+          ctx.fillStyle = "rgba(60, 110, 170, 0.28)";
+          ctx.fillRect(x * cw + cw * 0.2, y * ch + ch * 0.26, cw * 0.55, ch * 0.4);
         }
       }
     }
