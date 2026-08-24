@@ -32,7 +32,8 @@ interface DockAction {
 
 export default function FloatingDock({ lang }: { lang: Lang }) {
   const t = SITE_TEXTS[lang];
-  const { stormOn, lofiOn, toggleStorm, toggleLofi, blip } = useSound();
+  const { stormOn, lofiOn, stormVol, lofiVol, toggleStorm, toggleLofi, setStormVol, setLofiVol, blip } =
+    useSound();
   const [open, setOpen] = useState(false);
   const [flash, setFlash] = useState(0);
   const [hint, setHint] = useState(false);
@@ -190,19 +191,46 @@ export default function FloatingDock({ lang }: { lang: Lang }) {
               }}
               className="flex items-center gap-3"
             >
-              {/* tooltip */}
+              {/* tooltip + live volume slider for sound channels */}
               <motion.span
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 8 }}
                 transition={{ delay: 0.12 + (actions.length - 1 - i) * 0.045 }}
-                className="glass-strong bolt-lit rounded-xl px-3 py-1.5 text-xs font-medium text-slate-200 shadow-lg"
+                className={cn(
+                  "glass-strong bolt-lit flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-medium text-slate-200 shadow-lg",
+                  action.active === false && "opacity-70"
+                )}
               >
                 {action.label}
                 {action.active !== undefined && (
-                  <span className={cn("ml-2 text-[10px] font-bold", action.active ? "text-electric" : "text-slate-500")}>
+                  <span className={cn("text-[10px] font-bold", action.active ? "text-electric" : "text-slate-500")}>
                     {action.active ? "ON" : "OFF"}
                   </span>
+                )}
+                {action.id === "storm" && action.active && (
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round(stormVol * 100)}
+                    onChange={(e) => setStormVol(Number(e.target.value) / 100)}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="dock-slider w-20 sm:w-24"
+                    aria-label={`${action.label} volume`}
+                  />
+                )}
+                {action.id === "lofi" && action.active && (
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round(lofiVol * 100)}
+                    onChange={(e) => setLofiVol(Number(e.target.value) / 100)}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="dock-slider w-20 sm:w-24"
+                    aria-label={`${action.label} volume`}
+                  />
                 )}
               </motion.span>
 

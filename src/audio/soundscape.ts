@@ -24,16 +24,25 @@ const STORAGE_KEY = "picksaw:sound";
 interface SavedPrefs {
   storm: boolean;
   lofi: boolean;
+  stormVol: number;
+  lofiVol: number;
 }
 
 function loadPrefs(): SavedPrefs {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { storm: false, lofi: false, ...JSON.parse(raw) };
+    if (raw)
+      return {
+        storm: false,
+        lofi: false,
+        stormVol: 0.75,
+        lofiVol: 0.8,
+        ...JSON.parse(raw),
+      };
   } catch {
     /* ignore */
   }
-  return { storm: false, lofi: false };
+  return { storm: false, lofi: false, stormVol: 0.75, lofiVol: 0.8 };
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -120,6 +129,34 @@ export class SoundscapeEngine {
 
   get enabled() {
     return { storm: this.prefs.storm, lofi: this.prefs.lofi };
+  }
+
+  get volumes() {
+    return { storm: this.prefs.stormVol, lofi: this.prefs.lofiVol };
+  }
+
+  /** Live per-channel volume (0..1), persisted. */
+  setVolume(channel: Channel, v: number) {
+    const key = channel === "storm" ? "stormVol" : "lofiVol";
+    this.prefs[key] = Math.max(0, Math.min(1, v));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.prefs));
+    } catch {
+      /* ignore */
+    }
+    if (this.ctx) {
+      const t = this.ctx.currentTime;
+      this.stormBus!.gain.setTargetAtTime(
+        this.prefs.storm ? 0.85 * this.prefs.stormVol : 0,
+        t,
+        0.25
+      );
+      this.lofiBus!.gain.setTargetAtTime(
+        this.prefs.lofi ? 0.9 * this.prefs.lofiVol : 0,
+        t,
+        0.25
+      );
+    }
   }
 
   // ── lifecycle ────────────────────────────────────────────────────────────
@@ -222,21 +259,22 @@ export class SoundscapeEngine {
       return { gain, filter };
     };
 
-    // Layer 1 — distant rain: BROWN noise (deep, soft rumble-wash —
-    // white noise here is what read as TV static)
+    // Layer 1 — DEEP distant bed: brown noise, very low cutoff. Reads as
+    // the rumble UNDER rain — kept quiet so it never reads as "wind".
     const farSrc = this.loopNoise(this.noiseBuffers!.brown);
     const farFilter = ctx.createBiquadFilter();
     farFilter.type = "lowpass";
-    farFilter.frequency.value = 900;
+    farFilter.frequency.value = 480;
     farFilter.Q.value = 0.3;
     const farGain = ctx.createGain();
     farGain.gain.value = 0;
     farSrc.connect(farFilter).connect(farGain).connect(this.stormBus!);
     this.rainFar = { gain: farGain, filter: farFilter };
-    // Layer 2 — the body of the rain (white, softened)
-    this.rainMid = layer(850, 0.3, "lowpass");
-    // Layer 3 — near heavy drops: darker, fatter
-    this.rainNear = layer(300, 0.4, "lowpass");
+    // Layer 2 — THE RAIN: bright enough to read as falling water
+    // (droplet texture lives in this band) but still soft.
+    this.rainMid = layer(1400, 0.3, "lowpass");
+    // Layer 3 — near drops: fatter tick, slightly brighter than before
+    this.rainNear = layer(520, 0.4, "lowpass");
 
     // ── organic life: constant-level noise reads as "static", real rain
     // swells and recedes. Slow LFOs at incommensurate rates on each layer.
@@ -249,16 +287,17 @@ export class SoundscapeEngine {
       osc.start();
       this.sources.push(osc as unknown as AudioBufferSourceNode);
     };
-    swell(0.11, 0.014, this.rainFar.gain.gain); // distant breathing
-    swell(0.073, 0.024, this.rainMid.gain.gain); // main swell
-    swell(0.053, 0.011, this.rainNear.gain.gain);
-    // droplet patter — light fast modulation on the near layer
-    swell(3.3, 0.009, this.rainNear.gain.gain);
-    swell(5.1, 0.006, this.rainNear.gain.gain);
+    swell(0.11, 0.008, this.rainFar.gain.gain); // distant breathing
+    swell(0.073, 0.03, this.rainMid.gain.gain); // main rain swell
+    swell(0.053, 0.013, this.rainNear.gain.gain);
+    // droplet patter — the rain texture, on both body + near layers
+    swell(3.3, 0.014, this.rainNear.gain.gain);
+    swell(5.1, 0.009, this.rainNear.gain.gain);
+    swell(4.2, 0.01, this.rainMid.gain.gain);
 
-    // wind gusts — slow LFO opening the mid filter (gentle)
+    // wind gusts — heavily reduced: a seasoning, not the main dish
     const lfo = ctx.createOscillator();
-    lfo.frequency.value = 0.07;
+    lfo.frequency.value = 0.06;
     this.windLfoGain = ctx.createGain();
     this.windLfoGain.gain.value = 0;
     lfo.connect(this.windLfoGain).connect(this.rainMid.filter.frequency);
@@ -272,16 +311,15 @@ export class SoundscapeEngine {
     if (!this.ctx || !this.prefs.storm) return;
     const t = this.ctx.currentTime;
     const s = this.stormLevel;
-    // Background rain — genuinely LOW: felt more than heard at calm,
-    // a soft presence at full storm.
+    // Rain-forward background mix: unmistakably rain, still low.
     const ramp = (g: GainNode, v: number) =>
       g.gain.setTargetAtTime(v, t, 0.9);
-    ramp(this.rainFar!.gain, 0.032 + s * 0.03);
-    ramp(this.rainMid!.gain, 0.07 + s * 0.07);
-    ramp(this.rainNear!.gain, 0.042 + s * 0.05);
-    this.rainMid!.filter.frequency.setTargetAtTime(750 + s * 800, t, 1.0);
-    this.rainNear!.filter.frequency.setTargetAtTime(230 + s * 240, t, 1.0);
-    this.windLfoGain!.gain.setTargetAtTime(70 + s * 220, t, 1.0);
+    ramp(this.rainFar!.gain, 0.018 + s * 0.018);
+    ramp(this.rainMid!.gain, 0.095 + s * 0.095);
+    ramp(this.rainNear!.gain, 0.05 + s * 0.055);
+    this.rainMid!.filter.frequency.setTargetAtTime(1350 + s * 500, t, 1.0);
+    this.rainNear!.filter.frequency.setTargetAtTime(500 + s * 260, t, 1.0);
+    this.windLfoGain!.gain.setTargetAtTime(25 + s * 95, t, 1.0);
   }
 
   /** Thunder burst synced to a lightning strike. intensity 0..1+ */
@@ -665,7 +703,11 @@ export class SoundscapeEngine {
     const t = ctx.currentTime;
 
     // STORM
-    this.stormBus!.gain.setTargetAtTime(this.prefs.storm ? 0.85 : 0, t, 0.5);
+    this.stormBus!.gain.setTargetAtTime(
+      this.prefs.storm ? 0.85 * this.prefs.stormVol : 0,
+      t,
+      0.5
+    );
     if (this.prefs.storm) {
       this.setStormLevel(this.stormLevel);
     } else {
@@ -676,7 +718,11 @@ export class SoundscapeEngine {
     }
 
     // LOFI
-    this.lofiBus!.gain.setTargetAtTime(this.prefs.lofi ? 0.9 : 0, t, 0.5);
+    this.lofiBus!.gain.setTargetAtTime(
+      this.prefs.lofi ? 0.9 * this.prefs.lofiVol : 0,
+      t,
+      0.5
+    );
     if (this.prefs.lofi) {
       this.startLofi();
     } else {

@@ -420,6 +420,8 @@ function makeWindowTextures(): THREE.Texture[] {
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.magFilter = THREE.NearestFilter;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
     out.push(tex);
   }
   return out;
@@ -432,6 +434,12 @@ interface Building {
   h: number;
   d: number;
   tex: number;
+  tier: boolean; // smaller crown block on top
+  antenna: boolean; // mast + tip light
+  tintR: number; // slight facade tint variance
+  tintG: number;
+  uRep: number; // window grid density variation
+  vRep: number;
 }
 
 /** Deterministic per-session city layout: blocks flanking the path. */
@@ -453,6 +461,7 @@ function makeCity(isMobile: boolean): Building[] {
         const d = 1.6 + rnd() * 2.6;
         const h = 2 + rnd() * 7.5;
         const x = side * (5.4 + r * 4.5 + rnd() * 2.2);
+        const tall = h > 6.5;
         list.push({
           x: x + (rnd() - 0.5) * 1.6,
           z: z + (rnd() - 0.5) * step * 0.7,
@@ -460,6 +469,12 @@ function makeCity(isMobile: boolean): Building[] {
           h,
           d,
           tex: Math.floor(rnd() * 3),
+          tier: tall || rnd() < 0.3,
+          antenna: tall && rnd() < 0.75,
+          tintR: 0.86 + rnd() * 0.14,
+          tintG: 0.92 + rnd() * 0.08,
+          uRep: 1 + Math.floor(rnd() * 2),
+          vRep: 1 + Math.floor(rnd() * 3),
         });
       }
     }
@@ -467,24 +482,26 @@ function makeCity(isMobile: boolean): Building[] {
   return list;
 }
 
+interface DimTarget {
+  mat: THREE.MeshBasicMaterial;
+  tipMat?: THREE.MeshBasicMaterial;
+  z: number;
+  tintR: number;
+  tintG: number;
+}
+
 function City() {
   const isMobile = useMemo(
     () => window.matchMedia("(pointer: coarse)").matches,
     []
   );
+  const step = isMobile ? 7 : 5;
+  const litRange = step * 4; // the front 4 rows stay fully lit
   const buildings = useMemo(() => makeCity(isMobile), [isMobile]);
   const windowTexs = useMemo(() => makeWindowTextures(), []);
+  const dimTargets = useRef<DimTarget[]>([]);
+  const dimClock = useRef(0);
 
-  // merged resources: one material per window-texture variant
-  // fog:false — windows and outlines glow from ANY distance, like a real
-  // city skyline at night; the fog keeps the paintings' solo fade instead.
-  const mats = useMemo(
-    () =>
-      windowTexs.map(
-        (t) => new THREE.MeshBasicMaterial({ map: t, color: "#ffffff", fog: false })
-      ),
-    [windowTexs]
-  );
   const edgeMat = useMemo(
     () =>
       new THREE.LineBasicMaterial({
@@ -498,35 +515,112 @@ function City() {
     []
   );
 
-  // build meshes imperatively once (many boxes, one draw call each)
+  // build meshes imperatively — each building gets its OWN material so
+  // windows can be dimmed by distance (front rows bright, far fade).
   const cityGroup = useMemo(() => {
     const g = new THREE.Group();
+    const targets: DimTarget[] = [];
+
+    const scaleUV = (geo: THREE.BufferGeometry, u: number, v: number) => {
+      const uv = geo.getAttribute("uv") as THREE.BufferAttribute | undefined;
+      if (!uv) return;
+      for (let i = 0; i < uv.count; i++) {
+        uv.setXY(i, uv.getX(i) * u, uv.getY(i) * v);
+      }
+      uv.needsUpdate = true;
+    };
+
     for (const b of buildings) {
+      // per-building material (cloned map ref, own color for dim/tint)
+      const mat = new THREE.MeshBasicMaterial({
+        map: windowTexs[b.tex],
+        color: "#ffffff",
+        fog: false,
+      });
       const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
-      const mesh = new THREE.Mesh(geo, mats[b.tex]);
+      scaleUV(geo, b.uRep, b.vRep); // varied window densities per facade
+      const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(b.x, -2.9 + b.h / 2, b.z);
       g.add(mesh);
 
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
       edges.position.copy(mesh.position);
       g.add(edges);
+
+      // crown tier — a second, smaller block on taller buildings
+      if (b.tier) {
+        const tw = b.w * 0.68;
+        const td = b.d * 0.68;
+        const th = b.h * 0.32;
+        const tGeo = new THREE.BoxGeometry(tw, th, td);
+        scaleUV(tGeo, Math.max(1, b.uRep - 1), 1);
+        const tMesh = new THREE.Mesh(tGeo, mat); // shares material → dims together
+        tMesh.position.set(b.x, -2.9 + b.h + th / 2, b.z);
+        g.add(tMesh);
+      }
+
+      // antenna mast + tip light
+      let tipMat: THREE.MeshBasicMaterial | undefined;
+      if (b.antenna) {
+        const mastH = 0.9 + Math.random() * 0.8;
+        const mast = new THREE.Mesh(
+          new THREE.BoxGeometry(0.045, mastH, 0.045),
+          new THREE.MeshBasicMaterial({ color: "#16233c", fog: false })
+        );
+        const topY = -2.9 + b.h + (b.tier ? b.h * 0.32 : 0);
+        mast.position.set(b.x, topY + mastH / 2, b.z);
+        g.add(mast);
+        tipMat = new THREE.MeshBasicMaterial({
+          color: "#9fe8ff",
+          fog: false,
+          toneMapped: false,
+        });
+        const tip = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), tipMat);
+        tip.position.set(b.x, topY + mastH + 0.05, b.z);
+        g.add(tip);
+      }
+
+      targets.push({ mat, tipMat, z: b.z, tintR: b.tintR, tintG: b.tintG });
     }
+    dimTargets.current = targets;
     return g;
-  }, [buildings, mats, edgeMat]);
+  }, [buildings, windowTexs, edgeMat]);
 
   useEffect(
     () => () => {
       cityGroup.traverse((o) => {
         if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
           o.geometry.dispose();
+          const m = o.material;
+          if (Array.isArray(m)) m.forEach((x) => x.dispose());
+          else if (m !== edgeMat) m.dispose();
         }
       });
-      mats.forEach((m) => m.dispose());
       edgeMat.dispose();
       windowTexs.forEach((t) => t.dispose());
     },
-    [cityGroup, mats, edgeMat, windowTexs]
+    [cityGroup, edgeMat, windowTexs]
   );
+
+  // ── depth lighting: the front rows glow fully; far buildings sink
+  //    back into the night (the "old fade"). Throttled — cheap.
+  useFrame(({ camera }, delta) => {
+    dimClock.current += delta;
+    if (dimClock.current < 0.12) return;
+    dimClock.current = 0;
+    const camZ = camera.position.z;
+    for (const t of dimTargets.current) {
+      const dist = Math.abs(camZ - t.z);
+      let f: number;
+      if (dist <= litRange) f = 1;
+      else {
+        const k = Math.min(1, (dist - litRange) / 34);
+        f = 1 - k * 0.88; // fade down to 12%
+      }
+      t.mat.color.setRGB(f * t.tintR, f * t.tintG, f);
+      if (t.tipMat) t.tipMat.color.setRGB(0.62 * f, 0.91 * f, f);
+    }
+  });
 
   return (
     <>
