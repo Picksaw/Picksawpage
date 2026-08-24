@@ -28,7 +28,7 @@ import { SITE_TEXTS } from "./config/siteTexts";
 export const GAME_LINK = "https://stormblade.picksaw.ir";
 
 export default function App() {
-  const { lang, toggle, setLang } = useLanguage();
+  const { lang, toggle } = useLanguage();
   const { isAdmin, login, logout } = useAdmin();
 
   const [posts, setPosts] = useState<Post[]>([]);

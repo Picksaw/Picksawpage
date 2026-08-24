@@ -1,5 +1,4 @@
 import { SITE_TEXTS, type Lang } from "../config/siteTexts";
-import { SITE_IMAGES } from "../config/siteImages";
 import TemplateGrid from "../components/TemplateGrid";
 import Reveal from "../components/Reveal";
 
