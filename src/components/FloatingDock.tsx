@@ -38,6 +38,7 @@ export default function FloatingDock({ lang }: { lang: Lang }) {
   const [hint, setHint] = useState(false);
   const hoverTimer = useRef<number | null>(null);
   const leaveTimer = useRef<number | null>(null);
+  const hovered = useRef(false);
 
   // orb flashes on real lightning
   useEffect(() => {
@@ -53,7 +54,8 @@ export default function FloatingDock({ lang }: { lang: Lang }) {
     };
   }, []);
 
-  // one-time attention hint (per session)
+  // one-time attention hint — the dock opens itself so the sound
+  // channels are discovered (per session, only if never used)
   useEffect(() => {
     let seen = false;
     try {
@@ -61,25 +63,31 @@ export default function FloatingDock({ lang }: { lang: Lang }) {
     } catch {
       /* ignore */
     }
-    if (!seen) {
-      const id = window.setTimeout(() => {
-        setHint(true);
-        window.setTimeout(() => setHint(false), 2600);
-        try {
-          sessionStorage.setItem("picksaw:dockhint", "1");
-        } catch {
-          /* ignore */
-        }
-      }, 3200);
-      return () => window.clearTimeout(id);
-    }
+    if (seen) return;
+    const id = window.setTimeout(() => {
+      setOpen(true);
+      setHint(true);
+      try {
+        sessionStorage.setItem("picksaw:dockhint", "1");
+      } catch {
+        /* ignore */
+      }
+      const closeId = window.setTimeout(() => {
+        setHint(false);
+        if (!hovered.current) setOpen(false);
+      }, 5600);
+      leaveTimer.current = closeId;
+    }, 2800);
+    return () => window.clearTimeout(id);
   }, []);
 
   const openNow = () => {
+    hovered.current = true;
     window.clearTimeout(leaveTimer.current ?? undefined);
     setOpen(true);
   };
   const closeSoon = () => {
+    hovered.current = false;
     leaveTimer.current = window.setTimeout(() => setOpen(false), 450);
   };
 

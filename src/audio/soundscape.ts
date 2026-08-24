@@ -200,14 +200,16 @@ export class SoundscapeEngine {
     if (!this.ctx || !this.prefs.storm) return;
     const t = this.ctx.currentTime;
     const s = this.stormLevel;
+    // Base mix is clearly audible even at the top of the page (calm rain),
+    // and deepens as the storm grows with scroll.
     const ramp = (g: GainNode, v: number) =>
       g.gain.setTargetAtTime(v, t, 0.6);
-    ramp(this.rainFar!.gain, 0.05 + s * 0.1);
-    ramp(this.rainMid!.gain, 0.08 + s * 0.22);
-    ramp(this.rainNear!.gain, 0.03 + s * 0.16);
-    this.rainMid!.filter.frequency.setTargetAtTime(700 + s * 900, t, 0.8);
-    this.rainNear!.filter.frequency.setTargetAtTime(220 + s * 260, t, 0.8);
-    this.windLfoGain!.gain.setTargetAtTime(120 + s * 420, t, 0.8);
+    ramp(this.rainFar!.gain, 0.16 + s * 0.12);
+    ramp(this.rainMid!.gain, 0.26 + s * 0.24);
+    ramp(this.rainNear!.gain, 0.13 + s * 0.18);
+    this.rainMid!.filter.frequency.setTargetAtTime(800 + s * 900, t, 0.8);
+    this.rainNear!.filter.frequency.setTargetAtTime(240 + s * 280, t, 0.8);
+    this.windLfoGain!.gain.setTargetAtTime(140 + s * 460, t, 0.8);
   }
 
   /** Thunder burst synced to a lightning strike. intensity 0..1+ */
@@ -480,6 +482,10 @@ export class SoundscapeEngine {
       /* ignore */
     }
     this.applyChannels();
+    // Immediate feedback so enabling never feels like a dead button
+    if (channel === "storm" && this.prefs.storm) {
+      window.setTimeout(() => this.thunder(0.55), 350);
+    }
     return this.prefs[channel];
   }
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { onLightning } from "../lib/stormEvents";
@@ -16,11 +16,47 @@ import { getStorm, setDevMode } from "../lib/stormStore";
  * offscreen and stops entirely for reduced-motion users (single frame).
  */
 
-function PShape({ boltRef }: { boltRef: React.MutableRefObject<number> }) {
+/**
+ * A real typographic "P": outer contour + bowl counter (hole),
+ * extruded with beveled edges — reads as a letter from any angle.
+ * Built on a 0..100 grid, centered, then scaled to world units.
+ */
+function makePGeometry(scale: number): THREE.BufferGeometry {
+  const shape = new THREE.Shape();
+  // stem + bowl outline
+  shape.moveTo(14, 4);
+  shape.lineTo(36, 4);
+  shape.lineTo(36, 48);
+  // bowl outer — elliptical arc from (36,48) over the right to (36,100)
+  shape.absellipse(36, 74, 56, 26, -Math.PI / 2, Math.PI / 2, false);
+  shape.lineTo(14, 100);
+  shape.lineTo(14, 4);
+  shape.closePath();
+
+  // the counter (hole inside the bowl) — D-shaped
+  const hole = new THREE.Path();
+  hole.absellipse(36, 74, 31, 12.5, -Math.PI / 2, Math.PI / 2, false);
+  hole.closePath();
+  shape.holes.push(hole);
+
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: 26,
+    bevelEnabled: true,
+    bevelThickness: 3,
+    bevelSize: 2.4,
+    bevelSegments: 2,
+    curveSegments: 22,
+  });
+  geo.translate(-50, -52, -13); // center on origin
+  geo.scale(scale, scale, scale);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function PShape({ boltRef, geometry }: { boltRef: React.RefObject<number>; geometry: THREE.BufferGeometry }) {
   const group = useRef<THREE.Group>(null);
-  const rim = useRef<THREE.MeshStandardMaterial>(null);
   const spark = useRef<THREE.MeshStandardMaterial>(null);
-  const storm = getStorm();
+  const flashLight = useRef<THREE.PointLight>(null);
 
   // pointer target (normalized -1..1), eased in useFrame
   const target = useRef({ x: 0, y: 0 });
@@ -46,52 +82,30 @@ function PShape({ boltRef }: { boltRef: React.MutableRefObject<number> }) {
     g.rotation.y = current.current.x * 0.09; // ≈5°
     g.rotation.x = -current.current.y * 0.05; // ≈3°
 
-    // idle float
+    // idle float + slight stance
     g.position.y = Math.sin(t * 0.9) * 0.05;
 
-    // lightning decay
+    // lightning decay → spark + light flare
     boltRef.current = Math.max(0, boltRef.current - delta * 2.4);
     const b = boltRef.current;
-    if (rim.current) {
-      rim.current.emissiveIntensity = 0.55 + b * 4.5 + storm.bolt * 2;
-    }
     if (spark.current) {
       const pulse = 0.9 + Math.sin(t * 2.2) * 0.25;
       spark.current.emissiveIntensity = pulse * (1.2 + b * 5);
+    }
+    if (flashLight.current) {
+      flashLight.current.intensity = 6 + b * 60;
     }
   });
 
   return (
     <group ref={group}>
-      {/* stem */}
-      <mesh position={[-0.52, 0, 0]}>
-        <boxGeometry args={[0.34, 2.1, 0.34]} />
-        <meshStandardMaterial color="#c7d5e8" metalness={0.95} roughness={0.28} />
+      <mesh geometry={geometry}>
+        <meshStandardMaterial color="#d9e6f5" metalness={0.92} roughness={0.24} />
       </mesh>
 
-      {/* bowl — half torus opening toward the stem */}
-      <mesh position={[0.18, 0.52, 0]} rotation={[0, 0, 0]}>
-        <torusGeometry args={[0.7, 0.17, 24, 48, Math.PI]} />
-        <meshStandardMaterial color="#c7d5e8" metalness={0.95} roughness={0.28} />
-      </mesh>
-
-      {/* cyan rim light ring behind the bowl */}
-      <mesh position={[0.18, 0.52, -0.02]}>
-        <torusGeometry args={[0.7, 0.045, 12, 48, Math.PI]} />
-        <meshStandardMaterial
-          ref={rim}
-          color="#4fd8ff"
-          emissive="#4fd8ff"
-          emissiveIntensity={0.55}
-          metalness={0.4}
-          roughness={0.4}
-          toneMapped={false}
-        />
-      </mesh>
-
-      {/* spark core floating in the bowl */}
-      <mesh position={[0.3, 0.5, 0.05]}>
-        <sphereGeometry args={[0.09, 20, 20]} />
+      {/* spark core floating in the bowl's counter */}
+      <mesh position={[-0.31, 0.48, 0.42]}>
+        <sphereGeometry args={[0.075, 20, 20]} />
         <meshStandardMaterial
           ref={spark}
           color="#bff1ff"
@@ -100,6 +114,9 @@ function PShape({ boltRef }: { boltRef: React.MutableRefObject<number> }) {
           toneMapped={false}
         />
       </mesh>
+
+      {/* lightning flash light */}
+      <pointLight ref={flashLight} position={[1.4, 0.6, 1.8]} intensity={6} color="#9fe8ff" distance={9} />
     </group>
   );
 }
@@ -137,6 +154,8 @@ interface Logo3DProps {
 
 export default function Logo3D({ size = 64, className }: Logo3DProps) {
   const boltRef = useRef(0);
+  // one shared geometry — the extruded letter, ~2.1 world units tall
+  const geometry = useMemo(() => makePGeometry(2.1 / 96), []);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(true);
   const [reduced] = useState(
@@ -201,7 +220,7 @@ export default function Logo3D({ size = 64, className }: Logo3DProps) {
         <directionalLight position={[-3, 4, 3]} intensity={1.5} color="#eaf6ff" />
         <pointLight position={[3, -1, 2]} intensity={18} color="#4fd8ff" />
         <pointLight position={[-2, -2, -2]} intensity={10} color="#2a6cff" />
-        <PShape boltRef={boltRef} />
+        <PShape boltRef={boltRef} geometry={geometry} />
       </Canvas>
     </div>
   );

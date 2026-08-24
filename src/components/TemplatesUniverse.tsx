@@ -37,39 +37,22 @@ function domainOf(url: string) {
 }
 
 /** Lazy auto-scrolling live preview (iframe is mounted only when `live`).
- *  `tall` renders at 2× and scales down — desktop-quality layout inside
- *  any container — while the inner iframe auto-scrolls. */
-function LivePreview({ url, tall = false, duration = 22 }: { url: string; tall?: boolean; duration?: number }) {
+ *  Travel is capped at 45% of a 200%-tall viewport so it can never
+ *  scroll past the bottom of a page and expose empty space. */
+function LivePreview({ url, duration = 22 }: { url: string; duration?: number }) {
   const [loaded, setLoaded] = useState(false);
   return (
     <div className="absolute inset-0 overflow-hidden">
       {!loaded && <div className="skeleton absolute inset-0" />}
-      {tall ? (
-        <div
-          className="absolute start-0 top-0 origin-top-left"
-          style={{ width: "200%", height: "400%", transform: "scale(0.5)" }}
-        >
-          <iframe
-            src={url}
-            title={`Live preview of ${domainOf(url)}`}
-            loading="lazy"
-            onLoad={() => setLoaded(true)}
-            className="preview-autoscroll h-1/2 w-full border-0"
-            style={{ "--preview-duration": `${duration}s`, "--preview-shift": "-50%" } as React.CSSProperties}
-            tabIndex={-1}
-          />
-        </div>
-      ) : (
-        <iframe
-          src={url}
-          title={`Live preview of ${domainOf(url)}`}
-          loading="lazy"
-          onLoad={() => setLoaded(true)}
-          className="preview-autoscroll h-[230%] w-full border-0"
-          style={{ "--preview-duration": `${duration}s`, "--preview-shift": "-56.5%" } as React.CSSProperties}
-          tabIndex={-1}
-        />
-      )}
+      <iframe
+        src={url}
+        title={`Live preview of ${domainOf(url)}`}
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+        className="preview-autoscroll h-[200%] w-full border-0 bg-white"
+        style={{ "--preview-duration": `${duration}s`, "--preview-shift": "-45%" } as React.CSSProperties}
+        tabIndex={-1}
+      />
     </div>
   );
 }
@@ -77,14 +60,12 @@ function LivePreview({ url, tall = false, duration = 22 }: { url: string; tall?:
 interface CardProps {
   item: TemplateItem;
   lang: Lang;
-  featured: boolean;
   hidden: boolean;
   onOpen: (item: TemplateItem) => void;
   layoutKey: string;
-  index: number;
 }
 
-function TemplateCard({ item, lang, featured, hidden, onOpen, layoutKey, index }: CardProps) {
+function TemplateCard({ item, lang, hidden, onOpen, layoutKey }: CardProps) {
   const t = SITE_TEXTS[lang];
   const { blip } = useSound();
   const [hoverTimer, setHoverTimer] = useState<number | null>(null);
@@ -109,19 +90,12 @@ function TemplateCard({ item, lang, featured, hidden, onOpen, layoutKey, index }
     <motion.div
       layoutId={layoutKey}
       className={cn(
-        "transition-opacity",
+        "h-full transition-opacity",
         hidden && "opacity-0"
       )}
       style={{ visibility: hidden ? "hidden" : undefined }}
     >
-      <TiltCard
-        as="article"
-        maxTilt={featured ? 5 : 8}
-        className={cn(
-          "h-full rounded-3xl",
-          index % 3 === 1 && "lg:translate-y-8"
-        )}
-      >
+      <TiltCard as="article" maxTilt={8} className="h-full rounded-3xl">
         <button
           type="button"
           onClick={() => {
@@ -136,10 +110,10 @@ function TemplateCard({ item, lang, featured, hidden, onOpen, layoutKey, index }
           onFocus={startLive}
           onBlur={stopLive}
           aria-label={`${item.name[lang] ?? item.name.en} — ${t.openLiveLabel}`}
-          className="glass bolt-lit group relative block w-full overflow-hidden rounded-3xl text-start shadow-2xl shadow-black/40"
+          className="glass bolt-lit group relative block h-full w-full overflow-hidden rounded-3xl text-start shadow-2xl shadow-black/40"
         >
           {/* media */}
-          <div className={cn("relative w-full overflow-hidden", featured ? "aspect-[16/10]" : "aspect-[4/3]")}>
+          <div className="relative aspect-[4/3] w-full overflow-hidden">
             <img
               src={TEMPLATE_IMAGE_MAP[item.imageKey] ?? imgUrl(item)}
               alt={item.title[lang] || item.name.en}
@@ -149,7 +123,7 @@ function TemplateCard({ item, lang, featured, hidden, onOpen, layoutKey, index }
                 live ? "scale-105 opacity-0" : "opacity-100 group-hover:scale-[1.04]"
               )}
             />
-            {live && <LivePreview url={item.url} duration={featured ? 26 : 20} />}
+            {live && <LivePreview url={item.url} duration={20} />}
 
             {/* lightning reflection sweep */}
             <span
@@ -297,8 +271,8 @@ function PreviewModal({ item, lang, onClose }: { item: TemplateItem; lang: Lang;
         </div>
 
         {/* live site — auto-scrolling */}
-        <div className="relative aspect-[16/10] max-h-[68vh] w-full overflow-hidden bg-storm-950">
-          <LivePreview url={item.url} tall duration={30} />
+        <div className="relative aspect-[16/10] max-h-[68vh] w-full overflow-hidden bg-white">
+          <LivePreview url={item.url} duration={28} />
         </div>
 
         {/* CTA fades in */}
@@ -350,27 +324,16 @@ export default function TemplatesUniverse({ lang }: { lang: Lang }) {
           </Reveal>
         </div>
 
-        {/* curated masonry rhythm — every third template is featured */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:[grid-template-columns:repeat(6,minmax(0,1fr))] lg:auto-rows-fr lg:grid-flow-dense">
+        {/* clean gallery order — every card identical, evenly spaced */}
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {TEMPLATES.map((item, i) => (
-            <Reveal
-              key={item.id}
-              delay={(i % 3) * 90}
-              className={cn(
-                "h-full",
-                i % 3 === 0
-                  ? "sm:col-span-2 lg:col-span-4" // featured
-                  : "lg:col-span-2"
-              )}
-            >
+            <Reveal key={item.id} delay={(i % 3) * 90} className="h-full">
               <TemplateCard
                 item={item}
                 lang={lang}
-                featured={i % 3 === 0}
                 hidden={selected?.id === item.id}
                 onOpen={setSelected}
                 layoutKey={`tpl-${item.id}`}
-                index={i}
               />
             </Reveal>
           ))}
