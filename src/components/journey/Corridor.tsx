@@ -462,6 +462,8 @@ function makeCity(isMobile: boolean): Building[] {
         const h = 2 + rnd() * 7.5;
         const x = side * (5.4 + r * 4.5 + rnd() * 2.2);
         const tall = h > 6.5;
+        // window grid follows the building's real proportions — every
+        // window is the same physical size, nothing stretched
         list.push({
           x: x + (rnd() - 0.5) * 1.6,
           z: z + (rnd() - 0.5) * step * 0.7,
@@ -473,8 +475,8 @@ function makeCity(isMobile: boolean): Building[] {
           antenna: tall && rnd() < 0.75,
           tintR: 0.86 + rnd() * 0.14,
           tintG: 0.92 + rnd() * 0.08,
-          uRep: 1 + Math.floor(rnd() * 2),
-          vRep: 1 + Math.floor(rnd() * 3),
+          uRep: Math.max(1, Math.round(w / 1.5)),
+          vRep: Math.max(1, Math.round(h / 2.6)),
         });
       }
     }
@@ -496,7 +498,7 @@ function City() {
     []
   );
   const step = isMobile ? 7 : 5;
-  const litRange = step * 4; // the front 4 rows stay fully lit
+  const litRange = step * 2; // only the closest couple of rows stay lit
   const buildings = useMemo(() => makeCity(isMobile), [isMobile]);
   const windowTexs = useMemo(() => makeWindowTextures(), []);
   const dimTargets = useRef<DimTarget[]>([]);
@@ -614,8 +616,8 @@ function City() {
       let f: number;
       if (dist <= litRange) f = 1;
       else {
-        const k = Math.min(1, (dist - litRange) / 34);
-        f = 1 - k * 0.88; // fade down to 12%
+        const k = Math.min(1, (dist - litRange) / 16);
+        f = 1 - k; // fade to FULLY dark — the far city sleeps
       }
       t.mat.color.setRGB(f * t.tintR, f * t.tintG, f);
       if (t.tipMat) t.tipMat.color.setRGB(0.62 * f, 0.91 * f, f);
@@ -631,6 +633,74 @@ function City() {
       </mesh>
       <primitive object={cityGroup} />
     </>
+  );
+}
+
+/** Visible fog — soft mist drifting along the ground the whole walk. */
+function GroundFog() {
+  const FOG_COUNT = 10;
+  const tex = useMemo(() => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 256;
+    const ctx = c.getContext("2d")!;
+    const g = ctx.createRadialGradient(128, 128, 10, 128, 128, 128);
+    g.addColorStop(0, "rgba(150, 180, 225, 0.55)");
+    g.addColorStop(0.55, "rgba(120, 150, 200, 0.22)");
+    g.addColorStop(1, "rgba(90, 120, 170, 0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 256);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, []);
+
+  useEffect(() => () => tex.dispose(), [tex]);
+
+  const puffs = useMemo(
+    () =>
+      Array.from({ length: FOG_COUNT }, (_, i) => ({
+        x: (i % 2 === 0 ? -1 : 1) * (1.8 + Math.random() * 4.5),
+        y: -2.5 + Math.random() * 0.9,
+        z: 6 - (i / FOG_COUNT) * 80 - Math.random() * 5,
+        size: 7 + Math.random() * 9,
+        speed: 0.15 + Math.random() * 0.3,
+        phase: Math.random() * Math.PI * 2,
+      })),
+    []
+  );
+
+  const group = useRef<THREE.Group>(null);
+  useFrame(({ camera }, delta) => {
+    const dt = Math.min(delta, 0.05);
+    const t = performance.now() / 1000;
+    if (!group.current) return;
+    group.current.children.forEach((child, i) => {
+      const p = puffs[i];
+      if (!p) return;
+      // drift sideways + slight rise/fall; wrap around the camera
+      child.position.x = p.x + Math.sin(t * p.speed + p.phase) * 1.6;
+      child.position.y = p.y + Math.sin(t * p.speed * 0.6 + p.phase) * 0.35;
+      child.position.z += dt * 0.4;
+      if (child.position.z > camera.position.z + 10) {
+        child.position.z -= 80;
+      }
+    });
+  });
+
+  return (
+    <group ref={group}>
+      {puffs.map((p, i) => (
+        <sprite key={i} position={[p.x, p.y, p.z]} scale={[p.size, p.size * 0.5, 1]}>
+          <spriteMaterial
+            map={tex}
+            transparent
+            opacity={0.16}
+            depthWrite={false}
+            fog={false}
+          />
+        </sprite>
+      ))}
+    </group>
   );
 }
 
@@ -700,6 +770,7 @@ export function CorridorScene({
       <CameraRig progressRef={progressRef} />
       <CorridorRain />
       <City />
+      <GroundFog />
       <HeadlineLayer lang={lang as Lang} />
       {TEMPLATES.map((item, i) => (
         <Painting

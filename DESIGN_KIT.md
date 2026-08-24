@@ -116,3 +116,13 @@ React/Tailwind — 3D cards, buttons, text effects, registries.
 > ⚠️ This repo builds with `vite-plugin-singlefile` — all JS inlines into one HTML.
 > The full stack only adds ~70 kB, but if 3D grows, consider lazy `import()` of the
 > Canvas chunk (still inlined, but parsed on demand).
+
+---
+
+## Audio credits
+
+- `public/audio/rain-loop.ogg` — real rain recording from the CC0 sound
+  collection at github.com/lavenderdotpet/CC0-Public-Domain-Sounds
+  (pack: "30 CC0 SFX Loops"). License: **CC0 1.0 Universal** — no
+  attribution required, granted here anyway. All other audio (lofi
+  arrangement, thunder, UI blips) is synthesized live in the browser.

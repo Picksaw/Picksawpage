@@ -107,14 +107,12 @@ export class SoundscapeEngine {
   private lofiBus: GainNode | null = null;
   private sfxBus: GainNode | null = null;
 
-  // rain layers
-  private rainFar: { gain: GainNode; filter: BiquadFilterNode } | null = null;
-  private rainMid: { gain: GainNode; filter: BiquadFilterNode } | null = null;
-  private rainNear: { gain: GainNode; filter: BiquadFilterNode } | null = null;
-  private windLfoGain: GainNode | null = null;
+  // rain — a real CC0 recording (public/audio/rain-loop.ogg), looped
+  // through the WebAudio graph so fades + volume match the rest
+  private rainEl: HTMLAudioElement | null = null;
+  private rainGain: GainNode | null = null;
 
   private noiseBuffers: { white: AudioBuffer; brown: AudioBuffer } | null = null;
-  private sources: AudioBufferSourceNode[] = [];
 
   // lofi scheduler
   private schedulerId: number | null = null;
@@ -147,7 +145,14 @@ export class SoundscapeEngine {
     if (this.ctx) {
       const t = this.ctx.currentTime;
       this.stormBus!.gain.setTargetAtTime(
-        this.prefs.storm ? 0.85 * this.prefs.stormVol : 0,
+        this.prefs.storm ? 1 : 0,
+        t,
+        0.25
+      );
+      this.rainGain?.gain.setTargetAtTime(
+        this.prefs.storm
+          ? this.prefs.stormVol * (0.55 + this.stormLevel * 0.4)
+          : 0,
         t,
         0.25
       );
@@ -224,102 +229,43 @@ export class SoundscapeEngine {
         brown: makeNoiseBuffer(ctx, 5, "brown"),
       };
 
-      this.buildRain();
       return ctx;
     } catch {
       return null;
     }
   }
 
-  private loopNoise(buffer: AudioBuffer): AudioBufferSourceNode {
-    const ctx = this.ctx!;
-    const src = ctx.createBufferSource();
-    src.buffer = buffer;
-    src.loop = true;
-    src.start(ctx.currentTime + Math.random() * 0.1);
-    this.sources.push(src);
-    return src;
-  }
-
-  // ── rain / storm ambience ────────────────────────────────────────────────
-
-  private buildRain() {
-    const ctx = this.ctx!;
-    const { white } = this.noiseBuffers!;
-
-    const layer = (freq: number, q: number, type: BiquadFilterType) => {
-      const filter = ctx.createBiquadFilter();
-      filter.type = type;
-      filter.frequency.value = freq;
-      filter.Q.value = q;
-      const gain = ctx.createGain();
-      gain.gain.value = 0;
-      const src = this.loopNoise(white);
-      src.connect(filter).connect(gain).connect(this.stormBus!);
-      return { gain, filter };
-    };
-
-    // Layer 1 — DEEP distant bed: brown noise, very low cutoff. Reads as
-    // the rumble UNDER rain — kept quiet so it never reads as "wind".
-    const farSrc = this.loopNoise(this.noiseBuffers!.brown);
-    const farFilter = ctx.createBiquadFilter();
-    farFilter.type = "lowpass";
-    farFilter.frequency.value = 480;
-    farFilter.Q.value = 0.3;
-    const farGain = ctx.createGain();
-    farGain.gain.value = 0;
-    farSrc.connect(farFilter).connect(farGain).connect(this.stormBus!);
-    this.rainFar = { gain: farGain, filter: farFilter };
-    // Layer 2 — THE RAIN: bright enough to read as falling water
-    // (droplet texture lives in this band) but still soft.
-    this.rainMid = layer(1400, 0.3, "lowpass");
-    // Layer 3 — near drops: fatter tick, slightly brighter than before
-    this.rainNear = layer(520, 0.4, "lowpass");
-
-    // ── organic life: constant-level noise reads as "static", real rain
-    // swells and recedes. Slow LFOs at incommensurate rates on each layer.
-    const swell = (rate: number, depth: number, target: AudioParam) => {
-      const osc = ctx.createOscillator();
-      osc.frequency.value = rate;
+  /** Load + wire the real rain recording (once). */
+  private setupRain(ctx: AudioContext) {
+    if (this.rainEl) return;
+    try {
+      const el = new Audio(`${import.meta.env.BASE_URL}audio/rain-loop.ogg`);
+      el.loop = true;
+      el.preload = "auto";
+      const src = ctx.createMediaElementSource(el);
+      const hp = ctx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 70; // rumble control
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 9500; // natural, just taming the very top
       const g = ctx.createGain();
-      g.gain.value = depth;
-      osc.connect(g).connect(target);
-      osc.start();
-      this.sources.push(osc as unknown as AudioBufferSourceNode);
-    };
-    swell(0.11, 0.008, this.rainFar.gain.gain); // distant breathing
-    swell(0.073, 0.03, this.rainMid.gain.gain); // main rain swell
-    swell(0.053, 0.013, this.rainNear.gain.gain);
-    // droplet patter — the rain texture, on both body + near layers
-    swell(3.3, 0.014, this.rainNear.gain.gain);
-    swell(5.1, 0.009, this.rainNear.gain.gain);
-    swell(4.2, 0.01, this.rainMid.gain.gain);
-
-    // wind gusts — heavily reduced: a seasoning, not the main dish
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 0.06;
-    this.windLfoGain = ctx.createGain();
-    this.windLfoGain.gain.value = 0;
-    lfo.connect(this.windLfoGain).connect(this.rainMid.filter.frequency);
-    lfo.start();
-    this.sources.push(lfo as unknown as AudioBufferSourceNode);
+      g.gain.value = 0;
+      src.connect(hp).connect(lp).connect(g).connect(this.master!);
+      this.rainEl = el;
+      this.rainGain = g;
+    } catch {
+      /* recording unavailable — thunder still works */
+    }
   }
 
-  /** Called whenever the scroll-driven storm level changes. */
+  /** Scroll storm level — the real rain swells gently with it. */
   setStormLevel(level: number) {
     this.stormLevel = Math.max(0, Math.min(1, level));
-    if (!this.ctx || !this.prefs.storm) return;
+    if (!this.ctx || !this.prefs.storm || !this.rainGain) return;
     const t = this.ctx.currentTime;
-    const s = this.stormLevel;
-    // Rain-forward background mix: unmistakably rain, still low.
-    const ramp = (g: GainNode, v: number) =>
-      g.gain.setTargetAtTime(v, t, 0.9);
-    ramp(this.rainFar!.gain, 0.018 + s * 0.018);
-    ramp(this.rainMid!.gain, 0.095 + s * 0.095);
-    ramp(this.rainNear!.gain, 0.05 + s * 0.055);
-    this.rainMid!.filter.frequency.setTargetAtTime(1350 + s * 500, t, 1.0);
-    this.rainNear!.filter.frequency.setTargetAtTime(500 + s * 260, t, 1.0);
-    this.windLfoGain!.gain.setTargetAtTime(25 + s * 95, t, 1.0);
+    const v = this.prefs.stormVol * (0.55 + this.stormLevel * 0.4);
+    this.rainGain.gain.setTargetAtTime(v, t, 1.2);
   }
 
   /** Thunder burst synced to a lightning strike. intensity 0..1+ */
@@ -327,7 +273,7 @@ export class SoundscapeEngine {
     if (!this.ctx || !this.prefs.storm || !this.noiseBuffers) return;
     const ctx = this.ctx;
     const t0 = ctx.currentTime + 0.03 + Math.random() * 0.12; // sound lags flash slightly
-    const i = Math.max(0.3, Math.min(1.2, intensity));
+    const i = Math.max(0.3, Math.min(1.2, intensity)) * (0.35 + this.prefs.stormVol * 0.65);
     const out = this.stormBus!;
 
     // crack — sharp high transient for close strikes
@@ -702,19 +648,26 @@ export class SoundscapeEngine {
     if (!ctx) return;
     const t = ctx.currentTime;
 
-    // STORM
-    this.stormBus!.gain.setTargetAtTime(
-      this.prefs.storm ? 0.85 * this.prefs.stormVol : 0,
-      t,
-      0.5
-    );
+    // STORM — the real rain recording + synced synth thunder
     if (this.prefs.storm) {
-      this.setStormLevel(this.stormLevel);
-    } else {
-      for (const l of [this.rainFar, this.rainMid, this.rainNear]) {
-        l!.gain.gain.setTargetAtTime(0, t, 0.4);
+      this.setupRain(ctx);
+      if (this.rainEl && this.rainEl.paused) {
+        this.rainEl.play().catch(() => {
+          /* user gesture already happened via the toggle */
+        });
       }
-      this.windLfoGain!.gain.setTargetAtTime(0, t, 0.4);
+      const v = this.prefs.stormVol * (0.55 + this.stormLevel * 0.4);
+      this.rainGain?.gain.setTargetAtTime(v, t, 0.8);
+      this.stormBus!.gain.setTargetAtTime(1, t, 0.4);
+    } else {
+      this.rainGain?.gain.setTargetAtTime(0, t, 0.6);
+      this.stormBus!.gain.setTargetAtTime(0, t, 0.4);
+      const el = this.rainEl;
+      if (el && !el.paused) {
+        window.setTimeout(() => {
+          if (!this.prefs.storm) el.pause();
+        }, 1200);
+      }
     }
 
     // LOFI
