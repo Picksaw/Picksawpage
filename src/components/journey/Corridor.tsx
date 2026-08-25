@@ -486,6 +486,7 @@ function makeCity(isMobile: boolean): Building[] {
 
 interface DimTarget {
   mat: THREE.MeshBasicMaterial;
+  edgeMat: THREE.LineBasicMaterial; // per-building — outlines dim too
   tipMat?: THREE.MeshBasicMaterial;
   z: number;
   tintR: number;
@@ -498,24 +499,13 @@ function City() {
     []
   );
   const step = isMobile ? 7 : 5;
-  const litRange = step * 2; // only the closest couple of rows stay lit
+  // ONLY the nearest buildings glow — one full row plus a quick fade.
+  const litRange = step * 1.2;
+  const fadeSpan = 12;
   const buildings = useMemo(() => makeCity(isMobile), [isMobile]);
   const windowTexs = useMemo(() => makeWindowTextures(), []);
   const dimTargets = useRef<DimTarget[]>([]);
   const dimClock = useRef(0);
-
-  const edgeMat = useMemo(
-    () =>
-      new THREE.LineBasicMaterial({
-        color: "#2f7bff",
-        transparent: true,
-        opacity: 0.45,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        fog: false,
-      }),
-    []
-  );
 
   // build meshes imperatively — each building gets its OWN material so
   // windows can be dimmed by distance (front rows bright, far fade).
@@ -545,6 +535,14 @@ function City() {
       mesh.position.set(b.x, -2.9 + b.h / 2, b.z);
       g.add(mesh);
 
+      const edgeMat = new THREE.LineBasicMaterial({
+        color: "#2f7bff",
+        transparent: true,
+        opacity: 0.45,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        fog: false,
+      });
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
       edges.position.copy(mesh.position);
       g.add(edges);
@@ -582,11 +580,11 @@ function City() {
         g.add(tip);
       }
 
-      targets.push({ mat, tipMat, z: b.z, tintR: b.tintR, tintG: b.tintG });
+      targets.push({ mat, edgeMat, tipMat, z: b.z, tintR: b.tintR, tintG: b.tintG });
     }
     dimTargets.current = targets;
     return g;
-  }, [buildings, windowTexs, edgeMat]);
+  }, [buildings, windowTexs]);
 
   useEffect(
     () => () => {
@@ -595,13 +593,12 @@ function City() {
           o.geometry.dispose();
           const m = o.material;
           if (Array.isArray(m)) m.forEach((x) => x.dispose());
-          else if (m !== edgeMat) m.dispose();
+          else m.dispose();
         }
       });
-      edgeMat.dispose();
       windowTexs.forEach((t) => t.dispose());
     },
-    [cityGroup, edgeMat, windowTexs]
+    [cityGroup, windowTexs]
   );
 
   // ── depth lighting: the front rows glow fully; far buildings sink
@@ -616,10 +613,11 @@ function City() {
       let f: number;
       if (dist <= litRange) f = 1;
       else {
-        const k = Math.min(1, (dist - litRange) / 16);
+        const k = Math.min(1, (dist - litRange) / fadeSpan);
         f = 1 - k; // fade to FULLY dark — the far city sleeps
       }
       t.mat.color.setRGB(f * t.tintR, f * t.tintG, f);
+      t.edgeMat.opacity = 0.45 * f; // outlines vanish with the windows
       if (t.tipMat) t.tipMat.color.setRGB(0.62 * f, 0.91 * f, f);
     }
   });
@@ -636,16 +634,17 @@ function City() {
   );
 }
 
-/** Visible fog — soft mist drifting along the ground the whole walk. */
+/** Cinematic ground fog — dense mist banks that swallow the bases of
+ *  the buildings and roll slowly across the path. Near buildings rise
+ *  out of it; the dark far city disappears into it. */
 function GroundFog() {
-  const FOG_COUNT = 10;
   const tex = useMemo(() => {
     const c = document.createElement("canvas");
     c.width = c.height = 256;
     const ctx = c.getContext("2d")!;
     const g = ctx.createRadialGradient(128, 128, 10, 128, 128, 128);
-    g.addColorStop(0, "rgba(150, 180, 225, 0.55)");
-    g.addColorStop(0.55, "rgba(120, 150, 200, 0.22)");
+    g.addColorStop(0, "rgba(160, 188, 228, 0.6)");
+    g.addColorStop(0.5, "rgba(125, 155, 205, 0.3)");
     g.addColorStop(1, "rgba(90, 120, 170, 0)");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, 256, 256);
@@ -656,18 +655,54 @@ function GroundFog() {
 
   useEffect(() => () => tex.dispose(), [tex]);
 
-  const puffs = useMemo(
-    () =>
-      Array.from({ length: FOG_COUNT }, (_, i) => ({
-        x: (i % 2 === 0 ? -1 : 1) * (1.8 + Math.random() * 4.5),
-        y: -2.5 + Math.random() * 0.9,
-        z: 6 - (i / FOG_COUNT) * 80 - Math.random() * 5,
-        size: 7 + Math.random() * 9,
-        speed: 0.15 + Math.random() * 0.3,
-        phase: Math.random() * Math.PI * 2,
-      })),
-    []
-  );
+  // two families: BANKS hugging the building lines (tall, dense — they
+  // veil tower bases) and PATH mist (lower, thinner, adds depth)
+  const puffs = useMemo(() => {
+    const list: {
+      x: number;
+      y: number;
+      z: number;
+      w: number;
+      h: number;
+      op: number;
+      speed: number;
+      phase: number;
+    }[] = [];
+    let seed = 777;
+    const rnd = () => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    const span = 84;
+    // banks along both building lines
+    for (let i = 0; i < 12; i++) {
+      const side = i % 2 === 0 ? -1 : 1;
+      list.push({
+        x: side * (5.4 + rnd() * 4.6),
+        y: -2.75 + rnd() * 0.5,
+        z: 8 - (i / 12) * span - rnd() * 6,
+        w: 8 + rnd() * 7,
+        h: 3 + rnd() * 2.2,
+        op: 0.24 + rnd() * 0.1,
+        speed: 0.12 + rnd() * 0.22,
+        phase: rnd() * Math.PI * 2,
+      });
+    }
+    // thinner mist across the walking path
+    for (let i = 0; i < 8; i++) {
+      list.push({
+        x: (rnd() - 0.5) * 8,
+        y: -2.95 + rnd() * 0.4,
+        z: 8 - (i / 8) * span - rnd() * 8,
+        w: 6 + rnd() * 6,
+        h: 2 + rnd() * 1.4,
+        op: 0.1 + rnd() * 0.08,
+        speed: 0.1 + rnd() * 0.2,
+        phase: rnd() * Math.PI * 2,
+      });
+    }
+    return list;
+  }, []);
 
   const group = useRef<THREE.Group>(null);
   useFrame(({ camera }, delta) => {
@@ -677,12 +712,11 @@ function GroundFog() {
     group.current.children.forEach((child, i) => {
       const p = puffs[i];
       if (!p) return;
-      // drift sideways + slight rise/fall; wrap around the camera
-      child.position.x = p.x + Math.sin(t * p.speed + p.phase) * 1.6;
-      child.position.y = p.y + Math.sin(t * p.speed * 0.6 + p.phase) * 0.35;
-      child.position.z += dt * 0.4;
-      if (child.position.z > camera.position.z + 10) {
-        child.position.z -= 80;
+      child.position.x = p.x + Math.sin(t * p.speed + p.phase) * 1.8;
+      child.position.y = p.y + Math.sin(t * p.speed * 0.55 + p.phase) * 0.28;
+      child.position.z += dt * 0.5; // slow roll toward the walker
+      if (child.position.z > camera.position.z + 12) {
+        child.position.z -= 84;
       }
     });
   });
@@ -690,11 +724,11 @@ function GroundFog() {
   return (
     <group ref={group}>
       {puffs.map((p, i) => (
-        <sprite key={i} position={[p.x, p.y, p.z]} scale={[p.size, p.size * 0.5, 1]}>
+        <sprite key={i} position={[p.x, p.y, p.z]} scale={[p.w, p.h, 1]}>
           <spriteMaterial
             map={tex}
             transparent
-            opacity={0.16}
+            opacity={p.op}
             depthWrite={false}
             fog={false}
           />
