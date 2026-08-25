@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { TEMPLATES, type TemplateItem } from "../../config/templatesConfig";
 import { TEMPLATE_IMAGE_MAP } from "../../config/templateImages";
 import { SITE_TEXTS, type Lang } from "../../config/siteTexts";
+import GroundFog from "./GroundFog";
 
 /**
  * Corridor V2 — the neon city walk.
@@ -488,6 +489,7 @@ interface DimTarget {
   mat: THREE.MeshBasicMaterial;
   edgeMat: THREE.LineBasicMaterial; // per-building — outlines dim too
   tipMat?: THREE.MeshBasicMaterial;
+  objects: THREE.Object3D[]; // every mesh of this building — hard toggle
   z: number;
   tintR: number;
   tintG: number;
@@ -524,6 +526,7 @@ function City() {
     };
 
     for (const b of buildings) {
+      const parts: THREE.Object3D[] = [];
       // per-building material (cloned map ref, own color for dim/tint)
       const mat = new THREE.MeshBasicMaterial({
         map: windowTexs[b.tex],
@@ -535,6 +538,7 @@ function City() {
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(b.x, -2.9 + b.h / 2, b.z);
       g.add(mesh);
+      parts.push(mesh);
 
       const edgeMat = new THREE.LineBasicMaterial({
         color: "#2f7bff",
@@ -547,6 +551,7 @@ function City() {
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
       edges.position.copy(mesh.position);
       g.add(edges);
+      parts.push(edges);
 
       // crown tier — a second, smaller block on taller buildings
       if (b.tier) {
@@ -558,6 +563,7 @@ function City() {
         const tMesh = new THREE.Mesh(tGeo, mat); // shares material → dims together
         tMesh.position.set(b.x, -2.9 + b.h + th / 2, b.z);
         g.add(tMesh);
+        parts.push(tMesh);
       }
 
       // antenna mast + tip light
@@ -571,6 +577,7 @@ function City() {
         const topY = -2.9 + b.h + (b.tier ? b.h * 0.32 : 0);
         mast.position.set(b.x, topY + mastH / 2, b.z);
         g.add(mast);
+        parts.push(mast);
         tipMat = new THREE.MeshBasicMaterial({
           color: "#9fe8ff",
           fog: false,
@@ -579,9 +586,10 @@ function City() {
         const tip = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), tipMat);
         tip.position.set(b.x, topY + mastH + 0.05, b.z);
         g.add(tip);
+        parts.push(tip);
       }
 
-      targets.push({ mat, edgeMat, tipMat, z: b.z, tintR: b.tintR, tintG: b.tintG });
+      targets.push({ mat, edgeMat, tipMat, objects: parts, z: b.z, tintR: b.tintR, tintG: b.tintG });
     }
     dimTargets.current = targets;
     return g;
@@ -602,23 +610,28 @@ function City() {
     [cityGroup, windowTexs]
   );
 
-  // ── depth lighting: the front rows glow fully; far buildings sink
-  //    back into the night (the "old fade"). Throttled — cheap.
+  // ── lights wake as you ARRIVE ──────────────────────────────────
+  // Two guarantees layered on top of each other:
+  //   1. VISIBILITY — a building beyond the lit zone is not rendered
+  //      at all (object3D.visible = false). Cannot "still be lit".
+  //   2. DIMMING — inside the zone the windows fade in over a few
+  //      units so the wake-up feels physical, not binary.
   useFrame(({ camera }, delta) => {
     dimClock.current += delta;
-    if (dimClock.current < 0.07) return;
+    if (dimClock.current < 0.05) return;
     dimClock.current = 0;
     const camZ = camera.position.z;
     for (const t of dimTargets.current) {
       const dist = Math.abs(camZ - t.z);
+      const inZone = dist <= litRange + fadeSpan;
+      for (const o of t.objects) {
+        if (o.visible !== inZone) o.visible = inZone;
+      }
       let f: number;
       if (dist <= litRange) f = 1;
-      else {
-        const k = Math.min(1, (dist - litRange) / fadeSpan);
-        f = 1 - k; // fade to FULLY dark — the far city sleeps
-      }
+      else f = Math.max(0, 1 - (dist - litRange) / fadeSpan);
       t.mat.color.setRGB(f * t.tintR, f * t.tintG, f);
-      t.edgeMat.opacity = 0.45 * f; // outlines vanish with the windows
+      t.edgeMat.opacity = 0.45 * f;
       if (t.tipMat) t.tipMat.color.setRGB(0.62 * f, 0.91 * f, f);
     }
   });
@@ -633,150 +646,6 @@ function City() {
       <primitive object={cityGroup} />
     </>
   );
-}
-
-/** Volumetric ground fog — hundreds of soft GPU particles in a low
- *  band, each its own size/alpha/rotation, drifting and wrapping around
- *  the camera entirely in the vertex shader. Depth parallax between the
- *  layers makes it read as true 3D mist, not a plane. One draw call. */
-function GroundFog() {
-  const { size, camera } = useThree();
-  const pointsRef = useRef<THREE.Points>(null);
-
-  const puffTex = useMemo(() => {
-    const c = document.createElement("canvas");
-    c.width = c.height = 128;
-    const ctx = c.getContext("2d")!;
-    const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
-    g.addColorStop(0, "rgba(255,255,255,0.9)");
-    g.addColorStop(0.4, "rgba(255,255,255,0.42)");
-    g.addColorStop(0.75, "rgba(255,255,255,0.1)");
-    g.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 128, 128);
-    const t = new THREE.CanvasTexture(c);
-    return t;
-  }, []);
-
-  const isMobile = useMemo(
-    () => window.matchMedia("(pointer: coarse)").matches,
-    []
-  );
-
-  const { geo, material } = useMemo(() => {
-    const count = isMobile ? 220 : 360;
-    const pos = new Float32Array(count * 3);
-    const sizes = new Float32Array(count);
-    const alphas = new Float32Array(count);
-    const seeds = new Float32Array(count);
-    let seed = 4242;
-    const rnd = () => {
-      seed = (seed * 16807) % 2147483647;
-      return seed / 2147483647;
-    };
-    for (let i = 0; i < count; i++) {
-      // low band hugging the ground; denser toward the building lines
-      const side = Math.random() < 0.5 ? -1 : 1;
-      const nearBuildings = rnd() < 0.62;
-      const x = nearBuildings
-        ? side * (4.2 + rnd() * 7.5)
-        : (rnd() - 0.5) * 9;
-      pos[i * 3] = x;
-      pos[i * 3 + 1] = -3.1 + rnd() * 1.7;
-      pos[i * 3 + 2] = 8 - rnd() * 84;
-      sizes[i] = 2.2 + rnd() * 5.2; // world diameter
-      alphas[i] = 0.05 + rnd() * 0.1;
-      seeds[i] = rnd();
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    g.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
-    g.setAttribute("aAlpha", new THREE.BufferAttribute(alphas, 1));
-    g.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
-
-    const m = new THREE.ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      uniforms: {
-        uTime: { value: 0 },
-        uCamZ: { value: 0 },
-        uSpan: { value: 84 },
-        uScale: { value: 600 },
-        uMap: { value: puffTex },
-      },
-      vertexShader: /* glsl */ `
-        uniform float uTime;
-        uniform float uCamZ;
-        uniform float uSpan;
-        uniform float uScale;
-        attribute float aSize;
-        attribute float aAlpha;
-        attribute float aSeed;
-        varying float vAlpha;
-        varying float vRot;
-        void main() {
-          vec3 p = position;
-          // organic sideways + vertical drift, unique per particle
-          p.x += sin(uTime * (0.04 + aSeed * 0.1) + aSeed * 6.2831) * 1.5;
-          p.y += sin(uTime * 0.05 + aSeed * 4.1) * 0.35;
-          // wrap along the path around the camera, rolling slowly forward
-          float rel = mod(p.z - uCamZ + uTime * 0.45 + uSpan, uSpan);
-          p.z = uCamZ + rel - (uSpan - 14.0);
-
-          vec4 mv = modelViewMatrix * vec4(p, 1.0);
-          float dist = -mv.z;
-          gl_PointSize = min(aSize * uScale / max(dist, 0.6), 240.0);
-          // fade the puffs in your face and the ones far ahead
-          vAlpha =
-            aAlpha *
-            smoothstep(1.2, 3.2, dist) *
-            (1.0 - smoothstep(22.0, 38.0, dist));
-          vRot = aSeed * 6.2831 + uTime * 0.03;
-          gl_Position = projectionMatrix * mv;
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        uniform sampler2D uMap;
-        varying float vAlpha;
-        varying float vRot;
-        void main() {
-          // rotate each puff so they never read as the same flat image
-          vec2 uv = gl_PointCoord - 0.5;
-          float c = cos(vRot);
-          float s = sin(vRot);
-          uv = vec2(c * uv.x - s * uv.y, s * uv.x + c * uv.y) + 0.5;
-          vec4 tex = texture2D(uMap, clamp(uv, 0.0, 1.0));
-          float a = tex.a * vAlpha;
-          if (a < 0.004) discard;
-          gl_FragColor = vec4(vec3(0.6, 0.71, 0.9), a);
-        }
-      `,
-    });
-    return { geo: g, material: m };
-  }, [isMobile, puffTex]);
-
-  // perspective-correct sizing + live uniforms
-  useEffect(() => {
-    const cam = camera as THREE.PerspectiveCamera;
-    material.uniforms.uScale.value =
-      size.height / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)));
-  }, [size, camera, material]);
-
-  useFrame(({ camera }) => {
-    material.uniforms.uTime.value = performance.now() / 1000;
-    material.uniforms.uCamZ.value = camera.position.z;
-  });
-
-  useEffect(
-    () => () => {
-      geo.dispose();
-      material.dispose();
-      puffTex.dispose();
-    },
-    [geo, material, puffTex]
-  );
-
-  return <points ref={pointsRef} geometry={geo} material={material} frustumCulled={false} />;
 }
 
 /** Depth rain inside the corridor. */
