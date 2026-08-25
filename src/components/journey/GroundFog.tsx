@@ -83,17 +83,18 @@ const FOG_VERT = /* glsl */ `
     // organic drift, unique per particle (some rise slowly)
     p.x += sin(uTime * (0.04 + aSeed * 0.1) + aSeed * 6.2831) * 1.6;
     p.y += sin(uTime * (0.05 + aSeed * 0.04) + aSeed * 4.1) * 0.3 + aSeed * mod(uTime * 0.05, 2.0) * 0.4;
-    // wrap along the path around the camera, rolling slowly forward
-    float rel = mod(p.z - uCamZ + uTime * 0.4 + uSpan, uSpan);
-    p.z = uCamZ + rel - (uSpan - 14.0);
+    // wrap along the path: fog fills the street AHEAD of the walker,
+    // trailing a little behind, rolling slowly toward the camera
+    float rel = mod(p.z - uCamZ - uTime * 0.4 + uSpan, uSpan);
+    p.z = uCamZ + (uSpan - 16.0) - rel;
 
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     float dist = -mv.z;
-    gl_PointSize = min(aSize * uScale / max(dist, 0.6), 260.0);
+    gl_PointSize = min(aSize * uScale / max(dist, 0.6), 420.0);
     vAlpha =
       aAlpha *
-      smoothstep(1.1, 3.0, dist) *
-      (1.0 - smoothstep(20.0, 36.0, dist));
+      smoothstep(1.2, 3.2, dist) *
+      (1.0 - smoothstep(34.0, 62.0, dist));
     vRot = aSeed * 6.2831 + uTime * (aSeed > 0.5 ? 0.03 : -0.025);
     vTex = aTex;
     gl_Position = projectionMatrix * mv;
@@ -146,7 +147,7 @@ export default function GroundFog() {
   );
 
   const { geo, material } = useMemo(() => {
-    const count = isMobile ? 240 : 400;
+    const count = isMobile ? 300 : 520;
     const pos = new Float32Array(count * 3);
     const sizes = new Float32Array(count);
     const alphas = new Float32Array(count);
@@ -158,13 +159,18 @@ export default function GroundFog() {
       return seed / 2147483647;
     };
     for (let i = 0; i < count; i++) {
-      const side = rnd() < 0.5 ? -1 : 1;
-      const nearBuildings = rnd() < 0.6;
-      pos[i * 3] = nearBuildings ? side * (4.2 + rnd() * 7.5) : (rnd() - 0.5) * 9;
-      pos[i * 3 + 1] = -3.2 + rnd() * 2.1; // varied heights wrap building bases
-      pos[i * 3 + 2] = 8 - rnd() * 84;
-      sizes[i] = 1.6 + rnd() * 5.6; // strong size variety
-      alphas[i] = 0.05 + rnd() * 0.1;
+      // fill the ENTIRE city ground: path, both building lines, and
+      // out to the far walls — no gaps that reveal a "layer"
+      const r = rnd();
+      let x: number;
+      if (r < 0.42) x = (rnd() - 0.5) * 10; // across the walking path
+      else if (r < 0.78) x = (rnd() < 0.5 ? -1 : 1) * (5 + rnd() * 7); // building lines
+      else x = (rnd() < 0.5 ? -1 : 1) * (12 + rnd() * 5); // far edges
+      pos[i * 3] = x;
+      pos[i * 3 + 1] = -3.35 + rnd() * 2.4; // ground-hugging, varied
+      pos[i * 3 + 2] = 8 - rnd() * 88;
+      sizes[i] = 3.4 + rnd() * 7.8; // BIG puffs — no tiny dots
+      alphas[i] = 0.04 + rnd() * 0.062; // softer each, many overlap
       seeds[i] = rnd();
       texes[i] = Math.floor(rnd() * 3);
     }
@@ -183,7 +189,7 @@ export default function GroundFog() {
       uniforms: {
         uTime: { value: 0 },
         uCamZ: { value: 0 },
-        uSpan: { value: 84 },
+        uSpan: { value: 88 },
         uScale: { value: 600 },
         uMap: { value: atlas },
       },

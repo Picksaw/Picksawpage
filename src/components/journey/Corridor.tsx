@@ -485,37 +485,18 @@ function makeCity(isMobile: boolean): Building[] {
   return list;
 }
 
-interface DimTarget {
-  mat: THREE.MeshBasicMaterial;
-  edgeMat: THREE.LineBasicMaterial; // per-building — outlines dim too
-  tipMat?: THREE.MeshBasicMaterial;
-  objects: THREE.Object3D[]; // every mesh of this building — hard toggle
-  z: number;
-  tintR: number;
-  tintG: number;
-}
-
 function City() {
   const isMobile = useMemo(
     () => window.matchMedia("(pointer: coarse)").matches,
     []
   );
-  const step = isMobile ? 7 : 5;
-  // Lights wake as you ARRIVE: the row you're beside is fully lit and
-  // everything beyond a very short fade is completely dark.
-  const litRange = step * 0.8;
-  const fadeSpan = 5;
   const buildings = useMemo(() => makeCity(isMobile), [isMobile]);
   const windowTexs = useMemo(() => makeWindowTextures(), []);
-  const dimTargets = useRef<DimTarget[]>([]);
-  const dimClock = useRef(0);
 
   // build meshes imperatively — each building gets its OWN material so
   // windows can be dimmed by distance (front rows bright, far fade).
   const cityGroup = useMemo(() => {
     const g = new THREE.Group();
-    const targets: DimTarget[] = [];
-
     const scaleUV = (geo: THREE.BufferGeometry, u: number, v: number) => {
       const uv = geo.getAttribute("uv") as THREE.BufferAttribute | undefined;
       if (!uv) return;
@@ -526,19 +507,20 @@ function City() {
     };
 
     for (const b of buildings) {
-      const parts: THREE.Object3D[] = [];
       // per-building material (cloned map ref, own color for dim/tint)
+      // fog:true — the SCENE FOG decides which buildings show, exactly
+      // like the first version that worked: near rows visible, far
+      // towers swallowed by the mist. No runtime dimming needed.
       const mat = new THREE.MeshBasicMaterial({
         map: windowTexs[b.tex],
         color: "#ffffff",
-        fog: false,
+        fog: true,
       });
       const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
       scaleUV(geo, b.uRep, b.vRep); // varied window densities per facade
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(b.x, -2.9 + b.h / 2, b.z);
       g.add(mesh);
-      parts.push(mesh);
 
       const edgeMat = new THREE.LineBasicMaterial({
         color: "#2f7bff",
@@ -546,12 +528,11 @@ function City() {
         opacity: 0.45,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
-        fog: false,
+        fog: true,
       });
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
       edges.position.copy(mesh.position);
       g.add(edges);
-      parts.push(edges);
 
       // crown tier — a second, smaller block on taller buildings
       if (b.tier) {
@@ -563,7 +544,6 @@ function City() {
         const tMesh = new THREE.Mesh(tGeo, mat); // shares material → dims together
         tMesh.position.set(b.x, -2.9 + b.h + th / 2, b.z);
         g.add(tMesh);
-        parts.push(tMesh);
       }
 
       // antenna mast + tip light
@@ -572,26 +552,22 @@ function City() {
         const mastH = 0.9 + Math.random() * 0.8;
         const mast = new THREE.Mesh(
           new THREE.BoxGeometry(0.045, mastH, 0.045),
-          new THREE.MeshBasicMaterial({ color: "#16233c", fog: false })
+          new THREE.MeshBasicMaterial({ color: "#16233c", fog: true })
         );
         const topY = -2.9 + b.h + (b.tier ? b.h * 0.32 : 0);
         mast.position.set(b.x, topY + mastH / 2, b.z);
         g.add(mast);
-        parts.push(mast);
         tipMat = new THREE.MeshBasicMaterial({
           color: "#9fe8ff",
-          fog: false,
+          fog: true,
           toneMapped: false,
         });
         const tip = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), tipMat);
         tip.position.set(b.x, topY + mastH + 0.05, b.z);
         g.add(tip);
-        parts.push(tip);
       }
 
-      targets.push({ mat, edgeMat, tipMat, objects: parts, z: b.z, tintR: b.tintR, tintG: b.tintG });
     }
-    dimTargets.current = targets;
     return g;
   }, [buildings, windowTexs]);
 
@@ -609,32 +585,6 @@ function City() {
     },
     [cityGroup, windowTexs]
   );
-
-  // ── lights wake as you ARRIVE ──────────────────────────────────
-  // Two guarantees layered on top of each other:
-  //   1. VISIBILITY — a building beyond the lit zone is not rendered
-  //      at all (object3D.visible = false). Cannot "still be lit".
-  //   2. DIMMING — inside the zone the windows fade in over a few
-  //      units so the wake-up feels physical, not binary.
-  useFrame(({ camera }, delta) => {
-    dimClock.current += delta;
-    if (dimClock.current < 0.05) return;
-    dimClock.current = 0;
-    const camZ = camera.position.z;
-    for (const t of dimTargets.current) {
-      const dist = Math.abs(camZ - t.z);
-      const inZone = dist <= litRange + fadeSpan;
-      for (const o of t.objects) {
-        if (o.visible !== inZone) o.visible = inZone;
-      }
-      let f: number;
-      if (dist <= litRange) f = 1;
-      else f = Math.max(0, 1 - (dist - litRange) / fadeSpan);
-      t.mat.color.setRGB(f * t.tintR, f * t.tintG, f);
-      t.edgeMat.opacity = 0.45 * f;
-      if (t.tipMat) t.tipMat.color.setRGB(0.62 * f, 0.91 * f, f);
-    }
-  });
 
   return (
     <>
