@@ -78,11 +78,15 @@ const FOG_VERT = /* glsl */ `
   varying float vAlpha;
   varying float vRot;
   varying float vTex;
+  varying float vDist;
   void main() {
     vec3 p = position;
-    // organic drift, unique per particle (some rise slowly)
-    p.x += sin(uTime * (0.04 + aSeed * 0.1) + aSeed * 6.2831) * 1.6;
-    p.y += sin(uTime * (0.05 + aSeed * 0.04) + aSeed * 4.1) * 0.3 + aSeed * mod(uTime * 0.05, 2.0) * 0.4;
+    // organic drift — two incommensurate frequencies per axis, so no
+    // particle ever syncs with another (no visible "pattern")
+    p.x += sin(uTime * (0.04 + aSeed * 0.1) + aSeed * 6.2831) * 1.7
+         + sin(uTime * 0.013 + aSeed * 9.41) * 0.9;
+    p.y += sin(uTime * (0.05 + aSeed * 0.04) + aSeed * 4.1) * 0.32
+         + sin(uTime * 0.021 + aSeed * 7.7) * 0.18;
     // wrap along the path: fog fills the street AHEAD of the walker,
     // trailing a little behind, rolling slowly toward the camera
     float rel = mod(p.z - uCamZ - uTime * 0.4 + uSpan, uSpan);
@@ -91,10 +95,14 @@ const FOG_VERT = /* glsl */ `
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     float dist = -mv.z;
     gl_PointSize = min(aSize * uScale / max(dist, 0.6), 420.0);
+    // breathing — each puff swells and fades on its own slow rhythm
+    float breath = 0.78 + 0.22 * sin(uTime * (0.22 + aSeed * 0.35) + aSeed * 12.6);
     vAlpha =
       aAlpha *
+      breath *
       smoothstep(1.2, 3.2, dist) *
       (1.0 - smoothstep(34.0, 62.0, dist));
+    vDist = dist;
     vRot = aSeed * 6.2831 + uTime * (aSeed > 0.5 ? 0.03 : -0.025);
     vTex = aTex;
     gl_Position = projectionMatrix * mv;
@@ -106,6 +114,7 @@ const FOG_FRAG = /* glsl */ `
   varying float vAlpha;
   varying float vRot;
   varying float vTex;
+  varying float vDist;
 
   void main() {
     // rotate the sprite quad per particle
@@ -119,20 +128,27 @@ const FOG_FRAG = /* glsl */ `
     if (r2 > 1.0) discard;
     float z = sqrt(1.0 - r2);
     vec3 N = vec3(c.x * 2.0, c.y * 2.0, z);
-    vec3 L = normalize(vec3(-0.3, 0.55, 0.78));
-    float diff = 0.55 + 0.45 * max(dot(N, L), 0.0);
+    // key light — cold moonlight from above-left
+    vec3 L1 = normalize(vec3(-0.3, 0.55, 0.78));
+    float diff = 0.5 + 0.5 * max(dot(N, L1), 0.0);
+    // underglow — the lit windows BELOW shine cyan up into the mist
+    vec3 L2 = normalize(vec3(0.18, -0.72, 0.62));
+    float under = max(dot(N, L2), 0.0);
     float rim = pow(1.0 - z, 2.2); // soft silhouette falloff
 
     // sample this particle's shape tile
     vec2 uv = vec2((vTex + clamp(c.x + 0.5, 0.0, 1.0)) / 3.0, clamp(c.y + 0.5, 0.0, 1.0));
     float texA = texture2D(uMap, uv).a;
 
-    float a = texA * vAlpha * (0.25 + 0.75 * z) * diff;
+    float a = texA * vAlpha * (0.25 + 0.75 * z) * (0.55 + 0.45 * diff);
     a *= 1.0 - rim * 0.85;
     if (a < 0.004) discard;
 
-    // cool blue-grey mist, brighter where "lit"
-    vec3 col = vec3(0.58, 0.7, 0.92) * (0.72 + 0.28 * diff);
+    // cool blue-grey mist: moonlit from above, cyan city glow from below,
+    // sinking slightly darker + bluer with distance
+    vec3 col = vec3(0.56, 0.68, 0.9) * (0.55 + 0.45 * diff);
+    col += vec3(0.1, 0.32, 0.45) * under * under * 0.9; // electric underglow
+    col *= mix(vec3(1.0), vec3(0.78, 0.87, 1.08), smoothstep(5.0, 34.0, vDist));
     gl_FragColor = vec4(col, a);
   }
 `;
@@ -147,7 +163,7 @@ export default function GroundFog() {
   );
 
   const { geo, material } = useMemo(() => {
-    const count = isMobile ? 300 : 520;
+    const count = isMobile ? 340 : 680;
     const pos = new Float32Array(count * 3);
     const sizes = new Float32Array(count);
     const alphas = new Float32Array(count);
@@ -169,8 +185,8 @@ export default function GroundFog() {
       pos[i * 3] = x;
       pos[i * 3 + 1] = -3.35 + rnd() * 2.4; // ground-hugging, varied
       pos[i * 3 + 2] = 8 - rnd() * 88;
-      sizes[i] = 3.4 + rnd() * 7.8; // BIG puffs — no tiny dots
-      alphas[i] = 0.04 + rnd() * 0.062; // softer each, many overlap
+      sizes[i] = 3.2 + rnd() * 8.4; // BIG puffs — no tiny dots
+      alphas[i] = 0.032 + rnd() * 0.056; // softer each, many overlap
       seeds[i] = rnd();
       texes[i] = Math.floor(rnd() * 3);
     }

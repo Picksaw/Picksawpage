@@ -119,7 +119,7 @@ export default function Journey({ lang }: { lang: Lang }) {
             document.body.style.cursor = "";
           }}
         >
-          <fog attach="fog" args={["#06080f", 4.2, 8.8]} />
+          <fog attach="fog" args={["#06080f", 6, 22]} />
           <ambientLight intensity={0.5} />
           <directionalLight position={[-3, 5, 4]} intensity={1.4} color="#eaf6ff" />
           <pointLight position={[2.6, -0.6, 3.4]} intensity={22} color="#4fd8ff" />
