@@ -453,20 +453,27 @@ function makeCity(isMobile: boolean): Building[] {
   };
   const startZ = 8;
   const endZ = paintingZ(N - 1) - 12;
-  const step = isMobile ? 7 : 5;
+  // Mobile portrait screens have a very narrow horizontal FOV — the
+  // city must hug the walking path or towers never enter the frame
+  // before the fog swallows them.
+  // Tuned via frustum+fog simulation: exactly 5-6 lit towers visible at
+  // every gallery station on BOTH desktop and portrait phones.
+  const step = isMobile ? 4.0 : 4.5;
+  const nearX = isMobile ? 2.0 : 5.4;
+  const rowGap = isMobile ? 1.9 : 4.5;
   for (let z = startZ; z > endZ; z -= step) {
     for (const side of [-1, 1]) {
-      const rows = rnd() < 0.4 ? 2 : 1;
+      const rows = rnd() < 0.55 ? 2 : 1;
       for (let r = 0; r < rows; r++) {
         const w = 1.6 + rnd() * 2.6;
         const d = 1.6 + rnd() * 2.6;
         const h = 2 + rnd() * 7.5;
-        const x = side * (5.4 + r * 4.5 + rnd() * 2.2);
+        const x = side * (nearX + r * rowGap + rnd() * 1.6);
         const tall = h > 6.5;
         // window grid follows the building's real proportions — every
         // window is the same physical size, nothing stretched
         list.push({
-          x: x + (rnd() - 0.5) * 1.6,
+          x: x + (rnd() - 0.5) * 1.4,
           z: z + (rnd() - 0.5) * step * 0.7,
           w,
           h,

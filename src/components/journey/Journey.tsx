@@ -112,14 +112,21 @@ export default function Journey({ lang }: { lang: Lang }) {
         <Canvas
           dpr={[1, 1.75]}
           frameloop={faded ? "never" : "always"}
-          camera={{ position: [0, 0, stations[0]], fov: 42, near: 0.1, far: 90 }}
+          camera={{
+            position: [0, 0, stations[0]],
+            // portrait phones need a wider lens or the city never enters
+            // the narrow horizontal field of view
+            fov: window.innerWidth / window.innerHeight < 0.8 ? 58 : 42,
+            near: 0.1,
+            far: 90,
+          }}
           gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
           style={{ background: "transparent", touchAction: "pan-y" }}
           onPointerMissed={() => {
             document.body.style.cursor = "";
           }}
         >
-          <fog attach="fog" args={["#06080f", 6, 22]} />
+          <fog attach="fog" args={["#06080f", 6, 28]} />
           <ambientLight intensity={0.5} />
           <directionalLight position={[-3, 5, 4]} intensity={1.4} color="#eaf6ff" />
           <pointLight position={[2.6, -0.6, 3.4]} intensity={22} color="#4fd8ff" />

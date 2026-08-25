@@ -147,7 +147,7 @@ const FOG_FRAG = /* glsl */ `
     // cool blue-grey mist: moonlit from above, cyan city glow from below,
     // sinking slightly darker + bluer with distance
     vec3 col = vec3(0.56, 0.68, 0.9) * (0.55 + 0.45 * diff);
-    col += vec3(0.1, 0.32, 0.45) * under * under * 0.9; // electric underglow
+    col += vec3(0.11, 0.36, 0.5) * under * under * 1.1; // electric underglow
     col *= mix(vec3(1.0), vec3(0.78, 0.87, 1.08), smoothstep(5.0, 34.0, vDist));
     gl_FragColor = vec4(col, a);
   }
@@ -163,7 +163,7 @@ export default function GroundFog() {
   );
 
   const { geo, material } = useMemo(() => {
-    const count = isMobile ? 340 : 680;
+    const count = isMobile ? 380 : 760;
     const pos = new Float32Array(count * 3);
     const sizes = new Float32Array(count);
     const alphas = new Float32Array(count);
