@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { SITE_TEXTS, type Lang } from "../config/siteTexts";
 import { TEMPLATES } from "../config/templatesConfig";
 import Journey from "../components/journey/Journey";
+import ErrorBoundary from "../components/ErrorBoundary";
 import Logo3D from "../components/Logo3D";
 import MagneticButton from "../components/ui/MagneticButton";
 import TemplatesUniverse from "../components/TemplatesUniverse";
@@ -41,11 +42,21 @@ function KineticTitle({ text, delay = 0 }: { text: string; delay?: number }) {
 export default function HomePage({ lang }: HomePageProps) {
   const t = SITE_TEXTS[lang];
 
-  // The 3D journey needs WebGL + full motion; everyone else gets the
-  // guaranteed classic layout (identical content, same modal).
+  /**
+   * Who walks the city?
+   *
+   * WebGL is required. Reduced-motion users get the classic layout by
+   * default — that is the safe, accessible choice and it preserves the
+   * original behaviour — but the district itself also has a genuine
+   * calm mode (CALM_TUNING: no sway, no handheld noise, no lens
+   * changes, no lightning), so a visitor who explicitly asks for the
+   * walk still gets a stable frame rather than being refused.
+   */
+  const reduced = useMemo(() => prefersReducedMotion(), []);
+  const [optedIn, setOptedIn] = useState(false);
   const journey = useMemo(
-    () => hasWebGL() && !prefersReducedMotion(),
-    []
+    () => hasWebGL() && (!reduced || optedIn),
+    [reduced, optedIn]
   );
 
   const heroRef = useRef<HTMLElement>(null);
@@ -67,14 +78,25 @@ export default function HomePage({ lang }: HomePageProps) {
 
   return (
     <div className="relative">
+      {/* The skip-to-content target must exist in BOTH modes — in the
+          journey the hero is a 3D world with no DOM anchor of its own. */}
+      <span id="top" aria-hidden className="absolute left-0 top-0 h-px w-px" />
+
       {journey ? (
-        /* ═══ THE 3D JOURNEY — P → ring → dive → gallery walk ═══ */
-        <Journey lang={lang} />
+        /* ═══ THE CITY OF TEMPLATES ═══
+           Wrapped so a WebGL failure degrades to the classic gallery
+           instead of unmounting the page. Losing the walk is
+           acceptable; losing the site is not. */
+        <ErrorBoundary
+          name="Journey"
+          fallback={<TemplatesUniverse lang={lang} />}
+        >
+          <Journey lang={lang} />
+        </ErrorBoundary>
       ) : (
         /* ═══ CLASSIC HERO (fallback: no WebGL / reduced motion) ═══ */
         <section
           ref={heroRef}
-          id="top"
           className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden px-4 py-28 text-center sm:px-6"
         >
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -127,6 +149,21 @@ export default function HomePage({ lang }: HomePageProps) {
                   {t.exploreButton}
                 </MagneticButton>
               </motion.div>
+
+              {/* Reduced motion is respected by default. The walk is still
+                  offered, because its calm mode is genuinely still. */}
+              {reduced && hasWebGL() && (
+                <motion.button
+                  type="button"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 1, duration: 0.6 }}
+                  onClick={() => setOptedIn(true)}
+                  className="mt-6 text-xs font-medium tracking-wide text-slate-500 underline decoration-dotted underline-offset-4 transition-colors hover:text-electric focus-visible:text-electric"
+                >
+                  {t.enterCityCalm}
+                </motion.button>
+              )}
             </div>
 
             <motion.div

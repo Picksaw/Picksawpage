@@ -8,6 +8,7 @@ import {
   setBolt,
   stormIntensity,
 } from "../lib/stormStore";
+import { subscribeCityActive } from "../lib/cityActive";
 
 // ============================================================
 // StormBackground V2.1 — three-depth-layer cinematic storm
@@ -185,6 +186,8 @@ export default function StormBackground() {
     let boltCssDirty = false;
     let animId = 0;
     let running = true;
+    /** true while the 3D district's opaque canvas covers this one */
+    let cityOwnsFrame = false;
     let elapsed = 0;
     let lastT = performance.now();
 
@@ -582,7 +585,8 @@ export default function StormBackground() {
       if (document.hidden) {
         running = false;
         cancelAnimationFrame(animId);
-      } else if (!reducedMotion) {
+      } else if (!reducedMotion && !cityOwnsFrame) {
+        // never resume underneath the 3D district — it covers us entirely
         running = true;
         lastT = performance.now();
         animId = requestAnimationFrame(frame);
@@ -611,7 +615,34 @@ export default function StormBackground() {
     window.addEventListener("resize", resize);
     document.addEventListener("visibilitychange", onVisibility);
 
+    /**
+     * Park entirely while the 3D district owns the frame.
+     *
+     * The city's canvas is opaque and full-screen, so every pixel this
+     * canvas draws underneath it is thrown away. Stopping the loop
+     * removes a whole full-screen compositing layer and thousands of
+     * 2D path operations per frame.
+     */
+    const offCity = subscribeCityActive((cityActive) => {
+      cityOwnsFrame = cityActive;
+      if (cityActive) {
+        if (running) {
+          running = false;
+          cancelAnimationFrame(animId);
+        }
+        canvas.style.visibility = "hidden";
+      } else {
+        canvas.style.visibility = "";
+        if (!running && !reducedMotion && !document.hidden) {
+          running = true;
+          lastT = performance.now();
+          animId = requestAnimationFrame(frame);
+        }
+      }
+    });
+
     return () => {
+      offCity();
       running = false;
       cancelAnimationFrame(animId);
       window.removeEventListener("pointermove", onPointerMove);

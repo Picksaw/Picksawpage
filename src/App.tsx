@@ -11,6 +11,7 @@ import LoginModal from "./components/LoginModal";
 import FloatingDock from "./components/FloatingDock";
 import CursorFX from "./components/CursorFX";
 import Loader from "./components/Loader";
+import ErrorBoundary from "./components/ErrorBoundary";
 import DevPanel from "./components/DevPanel";
 import { SoundProvider } from "./audio/SoundProvider";
 import { setLenis } from "./lib/lenis";
@@ -177,21 +178,33 @@ export default function App() {
 
   const handleLogout = useCallback(() => logout(), [logout]);
 
+  /** Stable identity — a changing callback used to restart the intro. */
+  const handleIntroDone = useCallback(() => setIntroDone(true), []);
+
   const t = SITE_TEXTS[lang];
 
   return (
     <SoundProvider>
       <div className="relative min-h-screen overflow-x-hidden bg-storm-950 text-slate-100 antialiased">
         {/* the storm never stops */}
-        <StormBackground />
+        <ErrorBoundary name="StormBackground" fallback={null}>
+          <StormBackground />
+        </ErrorBoundary>
 
         {/* film grain */}
         <div aria-hidden className="grain pointer-events-none fixed inset-0 z-[80] opacity-[0.05]" />
-        <CursorFX />
+        <ErrorBoundary name="CursorFX" fallback={null}>
+          <CursorFX />
+        </ErrorBoundary>
 
         <div
           className="relative z-10"
           dir={lang === "fa" ? "rtl" : "ltr"}
+          /* The intro hides the page while it plays. Loader has a
+             failsafe that always opens this gate, but the gate itself
+             must also fail open: if Loader ever throws, its boundary
+             below marks the intro done rather than leaving the site
+             invisible. */
           style={{ visibility: introDone ? undefined : "hidden" }}
         >
           <a
@@ -211,6 +224,7 @@ export default function App() {
           />
 
           <main>
+            <ErrorBoundary name="Routes">
             <Routes>
               <Route path="/" element={<HomePage lang={lang} />} />
               <Route
@@ -228,6 +242,7 @@ export default function App() {
               />
               <Route path="*" element={<HomePage lang={ lang} />} />
             </Routes>
+            </ErrorBoundary>
           </main>
 
           {/* Footer */}
@@ -251,7 +266,9 @@ export default function App() {
         </div>
 
         {/* the signal hub — contact + sound */}
-        <FloatingDock lang={lang} />
+        <ErrorBoundary name="FloatingDock" fallback={null}>
+          <FloatingDock lang={lang} />
+        </ErrorBoundary>
 
         {/* hidden dev mode */}
         {devMode && <DevPanel />}
@@ -282,7 +299,15 @@ export default function App() {
         {selectedPost && <PostModal post={selectedPost} onClose={handleCloseModal} />}
 
         {/* premium intro — last so it sits above everything */}
-        {!introDone && <Loader onDone={() => setIntroDone(true)} />}
+        {!introDone && (
+          <ErrorBoundary
+            name="Loader"
+            fallback={null}
+            onError={() => setIntroDone(true)}
+          >
+            <Loader onDone={handleIntroDone} />
+          </ErrorBoundary>
+        )}
       </div>
     </SoundProvider>
   );

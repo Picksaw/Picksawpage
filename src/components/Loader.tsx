@@ -13,6 +13,26 @@ export default function Loader({ onDone }: { onDone: () => void }) {
   const [phase, setPhase] = useState<0 | 1 | 2 | 3>(0);
   const timersRef = useRef<number[]>([]);
 
+  /**
+   * Pin the callback.
+   *
+   * App passes `onDone={() => setIntroDone(true)}` — a new function
+   * identity on every render. With `onDone` in the effect's dependency
+   * array, every App re-render tore this effect down (clearing all
+   * timers) and started the countdown again from zero. Any re-render
+   * cadence faster than the 2350 ms intro meant the done-timer could
+   * NEVER fire, `introDone` stayed false, and the wrapper holding the
+   * entire site kept `visibility: hidden` forever — a black page with
+   * no text, no buttons and no visible city.
+   *
+   * The effect now runs exactly once and reads the latest callback
+   * through this ref.
+   */
+  const onDoneRef = useRef(onDone);
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
+
   const returning = useMemo(() => {
     try {
       return sessionStorage.getItem("picksaw:v2intro") === "1";
@@ -27,7 +47,10 @@ export default function Loader({ onDone }: { onDone: () => void }) {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const total = reduced ? 150 : returning ? 620 : 2350;
 
+    let finished = false;
     const done = () => {
+      if (finished) return;
+      finished = true;
       try {
         sessionStorage.setItem("picksaw:v2intro", "1");
       } catch {
@@ -35,7 +58,7 @@ export default function Loader({ onDone }: { onDone: () => void }) {
       }
       document.documentElement.style.overflow = "";
       setShow(false);
-      onDone();
+      onDoneRef.current();
     };
 
     if (!reduced && !returning) {
@@ -49,11 +72,27 @@ export default function Loader({ onDone }: { onDone: () => void }) {
     const doneTimer = window.setTimeout(done, total);
     timersRef.current.push(doneTimer);
 
+    /**
+     * Failsafe.
+     *
+     * The site must never be permanently invisible because of an
+     * animation. If the intro has not completed within twice its
+     * budget — a stalled tab, a throttled timer, anything — open the
+     * gate anyway.
+     */
+    const failsafe = window.setTimeout(() => {
+      if (!finished) done();
+    }, Math.max(total * 2, 4000));
+    timersRef.current.push(failsafe);
+
     return () => {
       timersRef.current.forEach(window.clearTimeout);
       document.documentElement.style.overflow = "";
     };
-  }, [onDone, returning]);
+    // Intentionally runs ONCE. `onDone` is read through a ref so a
+    // changing callback identity can never restart the intro.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const rainLines = useMemo(
     () =>

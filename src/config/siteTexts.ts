@@ -73,6 +73,12 @@ export const SITE_TEXTS: Record<Lang, Record<string, string>> = {
     formSubmit: "Send it",
     formSending: "Sending…",
     formSuccess: "Message received — we'll get back to you soon.",
+    // Observatory finale
+    observatoryLine: "Every building you walked through is a real template.",
+    observatoryCount: "{seen} of {total} buildings visited",
+    skipCinematic: "Skip the walk",
+    skipCinematicHint: "Jump to the templates list",
+    enterCityCalm: "Enter the city anyway (calm mode — no camera motion)",
   },
   fa: {
     siteName: "پیکساو",
@@ -138,5 +144,10 @@ export const SITE_TEXTS: Record<Lang, Record<string, string>> = {
     formSubmit: "ارسال",
     formSending: "در حال ارسال…",
     formSuccess: "پیام دریافت شد — به‌زودی پاسخ می‌دهیم.",
+    observatoryLine: "هر ساختمانی که از آن گذشتید، یک قالب واقعی است.",
+    observatoryCount: "{seen} از {total} ساختمان بازدید شد",
+    skipCinematic: "رد کردن سفر",
+    skipCinematicHint: "رفتن به فهرست قالب‌ها",
+    enterCityCalm: "ورود به شهر (حالت آرام — بدون حرکت دوربین)",
   },
 };

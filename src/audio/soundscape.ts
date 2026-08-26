@@ -133,6 +133,16 @@ export class SoundscapeEngine {
     return { storm: this.prefs.stormVol, lofi: this.prefs.lofiVol };
   }
 
+  /**
+   * The live graph, for the district's positional audio layer.
+   * Returns null until the user has enabled sound — callers must treat
+   * that as "not ready yet" and try again, never force a context.
+   */
+  get graph(): { ctx: AudioContext; stormBus: GainNode } | null {
+    if (!this.ctx || !this.stormBus) return null;
+    return { ctx: this.ctx, stormBus: this.stormBus };
+  }
+
   /** Live per-channel volume (0..1), persisted. */
   setVolume(channel: Channel, v: number) {
     const key = channel === "storm" ? "stormVol" : "lofiVol";
@@ -615,6 +625,51 @@ export class SoundscapeEngine {
     o.connect(g).connect(this.sfxBus!);
     o.start(t);
     o.stop(t + dur + 0.05);
+  }
+
+  /**
+   * portalTone — the soft sound a template entrance makes as you reach it.
+   *
+   * Not a UI blip: a slow, breathy swell built from two detuned sines a
+   * fifth apart through a lowpass that opens as it rises, so it reads as
+   * something in the world rather than a notification. `enter` false
+   * plays the same shape reversed and quieter, as you walk away.
+   */
+  portalTone(enter: boolean) {
+    if (!this.ctx || !this.sfxBus) return;
+    if (!this.prefs.storm && !this.prefs.lofi) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const dur = enter ? 1.7 : 1.1;
+    const root = enter ? 174.6 : 130.8; // F3 / C3
+
+    const bus = ctx.createGain();
+    bus.gain.setValueAtTime(0.0001, t);
+    bus.gain.exponentialRampToValueAtTime(enter ? 0.075 : 0.032, t + dur * 0.42);
+    bus.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.Q.value = 1.2;
+    filter.frequency.setValueAtTime(enter ? 320 : 900, t);
+    filter.frequency.exponentialRampToValueAtTime(enter ? 2400 : 260, t + dur * 0.7);
+
+    for (const [mult, detune] of [
+      [1, -4],
+      [1.5, 5],
+      [2, 0],
+    ] as const) {
+      const o = ctx.createOscillator();
+      o.type = "sine";
+      o.frequency.value = root * mult;
+      o.detune.value = detune;
+      const g = ctx.createGain();
+      g.gain.value = mult === 2 ? 0.25 : 0.5;
+      o.connect(g).connect(filter);
+      o.start(t);
+      o.stop(t + dur + 0.1);
+    }
+    filter.connect(bus).connect(this.sfxBus);
   }
 
   // ── channel toggles ──────────────────────────────────────────────────────
