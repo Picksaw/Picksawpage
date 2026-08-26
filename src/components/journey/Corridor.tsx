@@ -742,6 +742,9 @@ function City() {
         if (child.isMesh && child.material) {
           // Restore the building's original colors (no heavy darkening)
           // Just make sure it receives fog and is somewhat reflective
+          if (child.material.color) {
+            child.material.color.lerp(new THREE.Color("#05070a"), 0.5); // Darken by 50%
+          }
           child.material.fog = true;
           child.material.roughness = Math.min(child.material.roughness || 1.0, 0.6); 
           
@@ -768,6 +771,21 @@ function City() {
 
     return { concreteMat: cMat, prototypes: protos };
   }, [gltf01, gltf02, gltf03, gltf04, gltf05]);
+
+  const groupRef = useRef<THREE.Group>(null);
+  
+  useFrame(({ camera }) => {
+    if (groupRef.current) {
+      const camZ = camera.position.z;
+      // Aggressive Distance Culling for 60 FPS
+      // The fog completely hides everything past 45 units.
+      // We also hide anything more than 10 units behind the camera.
+      groupRef.current.children.forEach((child) => {
+        const dist = camZ - child.position.z;
+        child.visible = dist > -15 && dist < 48;
+      });
+    }
+  });
 
   const cityGroup = useMemo(() => {
     const g = new THREE.Group();
@@ -822,7 +840,7 @@ function City() {
       {/* 60 FPS Optimization: Use 4 moving lights instead of 25 static lights to prevent shader loop lag */}
       <MovingStreetLights />
 
-      <primitive object={cityGroup} />
+      <primitive object={cityGroup} ref={groupRef} />
     </>
   );
 }
