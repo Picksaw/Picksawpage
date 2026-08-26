@@ -935,10 +935,13 @@ export default function PEmblem() {
     );
     ghost.orb.scale.setScalar(1 + 0.18 * Math.sin(clock.current * 2.6));
 
-    const prevTarget = gl.getRenderTarget();
-    gl.setRenderTarget(ghost.rt);
-    gl.render(ghost.scene, ghost.cam);
-    gl.setRenderTarget(prevTarget);
+    // Only render the RTT if the card is visible (camZ > -2) to save massive GPU overhead
+    if (cam.position.z > -2.0) {
+      const prevTarget = gl.getRenderTarget();
+      gl.setRenderTarget(ghost.rt);
+      gl.render(ghost.scene, ghost.cam);
+      gl.setRenderTarget(prevTarget);
+    }
 
     // ── dive fades ──
     const camZ = cam.position.z;

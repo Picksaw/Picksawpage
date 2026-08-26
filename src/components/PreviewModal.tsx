@@ -54,7 +54,7 @@ export default function PreviewModal({
 
   return (
     <motion.div
-      className="fixed inset-0 z-[90] flex items-center justify-center p-4 sm:p-8"
+      className="fixed inset-0 z-[90] flex items-center justify-center sm:p-8"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -74,7 +74,7 @@ export default function PreviewModal({
       />
 
       <motion.div
-        className="glass-strong bolt-lit relative w-full max-w-6xl overflow-hidden rounded-3xl shadow-[0_40px_120px_-20px_rgba(0,0,0,0.9)]"
+        className="glass-strong bolt-lit relative w-full h-full sm:h-auto max-w-6xl flex flex-col overflow-hidden sm:rounded-3xl shadow-[0_40px_120px_-20px_rgba(0,0,0,0.9)]"
         initial={{ scale: 0.92, y: 40 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.94, y: 24, opacity: 0 }}
@@ -108,7 +108,7 @@ export default function PreviewModal({
         </div>
 
         {/* the live site — natural scrolling inside the template */}
-        <div className="relative h-[65vh] sm:h-auto sm:aspect-[16/10] sm:max-h-[68vh] w-full overflow-hidden bg-white">
+        <div className="relative flex-1 sm:flex-none sm:h-auto sm:aspect-[16/10] sm:max-h-[68vh] w-full overflow-hidden bg-white">
           {!loaded && <div className="skeleton absolute inset-0 z-10" />}
           <iframe
             src={item.url}

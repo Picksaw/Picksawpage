@@ -163,7 +163,7 @@ export default function GroundFog() {
   );
 
   const { geo, material } = useMemo(() => {
-    const count = isMobile ? 380 : 760;
+    const count = isMobile ? 120 : 250;
     const pos = new Float32Array(count * 3);
     const sizes = new Float32Array(count);
     const alphas = new Float32Array(count);
@@ -185,7 +185,7 @@ export default function GroundFog() {
       pos[i * 3] = x;
       pos[i * 3 + 1] = -2.6 + rnd() * 1.5; // ground-hugging, varied
       pos[i * 3 + 2] = 8 - rnd() * 88;
-      sizes[i] = 3.2 + rnd() * 8.4; // BIG puffs — no tiny dots
+      sizes[i] = 5.0 + rnd() * 12.0; // BIG puffs — no tiny dots
       alphas[i] = 0.032 + rnd() * 0.056; // softer each, many overlap
       seeds[i] = rnd();
       texes[i] = Math.floor(rnd() * 3);

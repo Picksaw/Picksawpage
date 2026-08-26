@@ -149,7 +149,14 @@ void main() {
         float normalProgress = smoothstep(0.75, 1.0, uRainFactor);
         normalProgress = clamp(normalProgress, 0.0, 1.0);
 
-				float puddleNoise = getPuddle(vUv * vec2(110.0, 150.0) * 1.5);
+				// FBM is also heavy. Fade it out at distance
+        float distToCamPuddle = length(vWorldPosition - cameraPosition);
+        float puddleNoise = 0.5; // Default safe value
+        if (distToCamPuddle < 60.0) {
+            puddleNoise = getPuddle(vUv * vec2(110.0, 150.0) * 1.5);
+            // Blend into a flat 0.5 noise at a distance
+            puddleNoise = mix(puddleNoise, 0.5, smoothstep(40.0, 60.0, distToCamPuddle));
+        }
 
 				// // Normals
 				csm_PuddleNormal = vNormal;
@@ -164,8 +171,16 @@ void main() {
         csm_Roughness = mix(prevRoughness, csm_Roughness, roughnessProgress);
 
 				// // Ripples
-				vec3 rippleNormals = getRipples(vUv * vec2(110.0, 150.0) * 5.0);
-				csm_PuddleNormal = perturbNormal(csm_PuddleNormal, rippleNormals, 0.25 * uRainFactor);
+        // High performance check: only compute expensive ripples if we are close to the camera!
+        float distToCam = length(vWorldPosition - cameraPosition);
+        vec3 rippleNormals = vec3(0.0);
+        
+        if (distToCam < 35.0) {
+            rippleNormals = getRipples(vUv * vec2(110.0, 150.0) * 5.0);
+            // fade out ripples over distance to avoid harsh cutoff
+            float rippleFade = smoothstep(35.0, 20.0, distToCam);
+            csm_PuddleNormal = perturbNormal(csm_PuddleNormal, rippleNormals, 0.25 * uRainFactor * rippleFade);
+        }
       
         
         
