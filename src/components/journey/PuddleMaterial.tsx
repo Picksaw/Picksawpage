@@ -47,7 +47,7 @@ void main() {
 			vec3 csm_PuddleNormal;
 			float csm_PuddleNormalMask;
 
-      #define MAX_RADIUS 1
+      // MAX_RADIUS removed (optimized out for 60fps)
       #define HASHSCALE1 .1031
       #define HASHSCALE3 vec3(.1031, .1030, .0973)
 
@@ -68,33 +68,25 @@ void main() {
       }
 
       vec3 getRipples(vec2 uv) {
+        // GPU Opt: Just a simple single-pass procedural ripple, no nested loops
+        float time = uTime * 2.0;
         vec2 p0 = floor(uv);
-
-        float time = uTime * 3.0;
-
-        vec2 circles = vec2(0.);
-        for (int j = -MAX_RADIUS; j <= MAX_RADIUS; ++j) {
-            for (int i = -MAX_RADIUS; i <= MAX_RADIUS; ++i) {
-              vec2 pi = p0 + vec2(i, j);
-              vec2 hsh = pi;
-              vec2 p = pi + hash22(hsh);
-
-              float t = fract(0.3*time + hash12(hsh));
-              vec2 v = p - uv;
-              float d = length(v) - (float(MAX_RADIUS) + 1.)*t;
-
-              float h = 1e-3;
-              float d1 = d - h;
-              float d2 = d + h;
-              float p1 = sin(31.*d1) * smoothstep(-0.6, -0.3, d1) * smoothstep(0., -0.3, d1);
-              float p2 = sin(31.*d2) * smoothstep(-0.6, -0.3, d2) * smoothstep(0., -0.3, d2);
-              circles += 0.5 * normalize(v) * ((p2 - p1) / (2. * h) * (1. - t) * (1. - t));
-            }
-        }
-        circles /= float((MAX_RADIUS*2+1)*(MAX_RADIUS*2+1));
-        float intensity = mix(0.01, 0.15, smoothstep(0.1, 0.6, abs(fract(0.05*time + 0.5)*2.-1.)));
-        vec3 n = vec3(circles, sqrt(1. - dot(circles, circles)));
-        return n;
+        vec2 circles = vec2(0.0);
+        
+        vec2 hsh = p0;
+        vec2 p = p0 + hash22(hsh);
+        float t = fract(0.3*time + hash12(hsh));
+        vec2 v = p - uv;
+        float d = length(v) - t;
+        float h = 1e-3;
+        float d1 = d - h;
+        float d2 = d + h;
+        float p1 = sin(31.*d1) * smoothstep(-0.6, -0.3, d1) * smoothstep(0., -0.3, d1);
+        float p2 = sin(31.*d2) * smoothstep(-0.6, -0.3, d2) * smoothstep(0., -0.3, d2);
+        
+        circles += normalize(v) * ((p2 - p1) / (2. * h) * (1. - t) * (1. - t));
+        vec3 n = vec3(circles * 0.15, 1.0);
+        return normalize(n);
       }
 
       
@@ -120,7 +112,7 @@ void main() {
           float a = 0.5;
           vec2 shift = vec2(100.0);
           mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.50));
-          for (int i = 0; i < 4; ++i) {
+          for (int i = 0; i < 2; ++i) { // 2 passes instead of 4 for massive performance gain
               v += a * noise(st);
               st = rot * st * 2.0 + shift;
               a *= 0.5;

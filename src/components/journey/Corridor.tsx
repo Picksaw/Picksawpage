@@ -379,60 +379,96 @@ function Painting({
 /** The "Website Templates" layer — big typographic plane in space. */
 function HeadlineLayer({ lang }: { lang: Lang }) {
   const t = SITE_TEXTS[lang];
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
   const group = useRef<THREE.Group>(null);
-  const divRef = useRef<HTMLDivElement>(null);
   const fit = useFitScale(5.6, 2.1, FOCUS_DIST, 0.9, 0.62);
-  const { size, camera } = useThree();
 
-  const isMobile = size.width < 768;
-  const cssW = isMobile ? Math.max(size.width * 0.9, 320) : Math.min(size.width * 0.8, 1000);
-  const cssH = cssW * (2.1 / 5.6); // keep aspect ratio
+  const texture = useMemo(() => {
+    const c = document.createElement("canvas");
+    c.width = 1680;
+    c.height = 630;
+    const ctx = c.getContext("2d")!;
+    ctx.clearRect(0, 0, c.width, c.height);
 
-  useFrame(({ camera }, delta) => {
-    const dt = Math.min(delta, 0.05);
-    const op = layerOpacity(camera.position.z, HEADLINE_Z);
+    // Glassmorphism panel background
+    const margin = 40;
+    const radius = 60;
+    ctx.fillStyle = "rgba(4, 7, 14, 0.45)"; // Deep glass
+    ctx.strokeStyle = "rgba(79, 216, 255, 0.25)"; // Electric border
+    ctx.lineWidth = 4;
     
-    if (group.current) {
-      group.current.scale.lerp(new THREE.Vector3(fit, fit, fit), Math.min(1, dt * 8));
-      // Same parallax lean as the paintings
-      group.current.position.x = (camera.position.x || 0) * 0.06;
-    }
+    // Draw rounded rect
+    ctx.beginPath();
+    ctx.roundRect(margin, margin, c.width - margin * 2, c.height - margin * 2, radius);
+    ctx.fill();
+    ctx.stroke();
+    
+    // Slight gradient glow inside the glass
+    const glow = ctx.createLinearGradient(0, 0, 0, c.height);
+    glow.addColorStop(0, "rgba(255, 255, 255, 0.08)");
+    glow.addColorStop(1, "rgba(0, 0, 0, 0.3)");
+    ctx.fillStyle = glow;
+    ctx.fill();
 
-    if (divRef.current) {
-      divRef.current.style.opacity = op.toString();
-      divRef.current.style.pointerEvents = op > 0.5 ? "auto" : "none";
+    const fa = lang === "fa";
+    ctx.direction = fa ? "rtl" : "ltr";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // main line — big, white, cyan glow
+    const title = t.heroTitle;
+    let size = 150;
+    ctx.font = `800 ${size}px '${fa ? "Vazirmatn Variable" : "Sora Variable"}', sans-serif`;
+    while (ctx.measureText(title).width > c.width - 140 && size > 60) {
+      size -= 6;
+      ctx.font = `800 ${size}px '${fa ? "Vazirmatn Variable" : "Sora Variable"}', sans-serif`;
     }
+    ctx.shadowColor = "rgba(79,216,255,0.85)";
+    ctx.shadowBlur = 44;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(title, c.width / 2, 250);
+
+    // subtitle — quiet gray
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "transparent";
+    const sub = t.heroSubtitle;
+    let ssize = 40;
+    ctx.font = `500 ${ssize}px '${fa ? "Vazirmatn Variable" : "Sora Variable"}', sans-serif`;
+    while (ctx.measureText(sub).width > c.width - 200 && ssize > 20) {
+      ssize -= 2;
+      ctx.font = `500 ${ssize}px '${fa ? "Vazirmatn Variable" : "Sora Variable"}', sans-serif`;
+    }
+    ctx.fillStyle = "rgba(160,185,210,0.95)";
+    ctx.fillText(sub, c.width / 2, 430);
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    return tex;
+  }, [lang, t.heroTitle, t.heroSubtitle]);
+
+  useEffect(() => () => texture.dispose(), [texture]);
+
+  useFrame(({ camera }) => {
+    const op = layerOpacity(camera.position.z, HEADLINE_Z);
+    if (mat.current) mat.current.opacity = op;
+    if (group.current) group.current.scale.setScalar(fit);
   });
 
   return (
     <group ref={group} position={[0, 0.1, HEADLINE_Z]}>
-      <Html 
-        transform 
-        position={[0, 0, 0]} 
-        scale={5.6 / cssW}
-        zIndexRange={[100, 0]} 
-        center
-      >
-        <div
-          ref={divRef}
-          className="flex flex-col items-center justify-center rounded-3xl border border-[#4fd8ff]/20 bg-[#04070e]/40 backdrop-blur-md shadow-[0_0_40px_rgba(79,216,255,0.1)] p-8 text-center"
-          style={{ width: cssW, height: cssH, opacity: 0 }}
-          dir={lang === "fa" ? "rtl" : "ltr"}
-        >
-          <h2 
-            className="bolt-text font-bold text-white tracking-tight"
-            style={{ fontSize: isMobile ? 'clamp(24px, 6vw, 42px)' : '52px', lineHeight: 1.1 }}
-          >
-            {t.heroTitle}
-          </h2>
-          <p 
-            className="mt-4 text-slate-300 font-medium max-w-2xl mx-auto"
-            style={{ fontSize: isMobile ? '14px' : '18px' }}
-          >
-            {t.heroSubtitle}
-          </p>
-        </div>
-      </Html>
+      <mesh>
+        <planeGeometry args={[5.6, 2.1]} />
+        <meshBasicMaterial
+          ref={mat}
+          map={texture}
+          transparent
+          opacity={0}
+          toneMapped={false}
+          depthWrite={false}
+          fog={false}
+        />
+      </mesh>
     </group>
   );
 }
