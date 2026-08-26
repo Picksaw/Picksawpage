@@ -609,6 +609,40 @@ function makeCity(): Building[] {
   return list;
 }
 
+function MovingStreetLights() {
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame(({ camera }) => {
+    if (groupRef.current) {
+      // The lights follow the camera's Z position exactly,
+      // meaning we only ever render 4 lights, but it looks like a continuous street!
+      groupRef.current.position.z = camera.position.z;
+    }
+  });
+
+  const colors = ["#4fd8ff", "#9fe8ff", "#2a6cff", "#ffffff"];
+
+  return (
+    <group ref={groupRef}>
+      {Array.from({ length: 4 }).map((_, i) => {
+        // Space them out relative to the camera
+        const zOffset = -i * 8;
+        const side = i % 2 === 0 ? 1 : -1;
+        const color = colors[i % colors.length];
+        return (
+          <pointLight
+            key={i}
+            position={[side * 4, -1.2, zOffset]}
+            intensity={15}
+            color={color}
+            distance={20}
+          />
+        );
+      })}
+    </group>
+  );
+}
+
 function City() {
   const buildings = useMemo(() => makeCity(), []);
 
@@ -677,12 +711,21 @@ function City() {
       // Make materials accept fog and boost emissive
       clonedCustom.traverse((child: any) => {
         if (child.isMesh && child.material) {
+          // Clone the material so we don't mutate a shared one incorrectly, though usually it's fine here
+          // We will darken the albedo to match the dark cyberpunk vibe
+          if (child.material.color) {
+            child.material.color.lerp(new THREE.Color("#05070a"), 0.85); // heavily darken
+          }
           child.material.fog = true;
+          // Add some environmental reflections
+          child.material.roughness = Math.min(child.material.roughness, 0.5);
+
           if (
             child.material.emissiveMap ||
             (child.material.emissive && child.material.emissive.getHex() > 0)
           ) {
-            child.material.emissiveIntensity = 2.5;
+            // Boost neon lights
+            child.material.emissiveIntensity = 3.5;
           }
         }
       });
@@ -751,22 +794,8 @@ function City() {
         </Suspense>
       </mesh>
 
-      {/* Street level ambient neon reflections */}
-      {Array.from({ length: 25 }).map((_, i) => {
-        const z = 8 - i * 6.5;
-        const side = i % 2 === 0 ? 1 : -1;
-        const colors = ["#4fd8ff", "#9fe8ff", "#2a6cff", "#ffffff"];
-        const color = colors[i % colors.length];
-        return (
-          <pointLight
-            key={i}
-            position={[side * 4, -1.2, z]}
-            intensity={12}
-            color={color}
-            distance={25}
-          />
-        );
-      })}
+      {/* 60 FPS Optimization: Use 4 moving lights instead of 25 static lights to prevent shader loop lag */}
+      <MovingStreetLights />
 
       <primitive object={cityGroup} />
     </>
