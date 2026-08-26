@@ -1081,7 +1081,7 @@ function makeCity(): Building[] {
         list.push({
           x: x + (rnd() - 0.5) * 1.0,
           z: z + (rnd() - 0.5) * step * 0.4,
-          typeIndex: Math.floor(rnd() * 6),
+          typeIndex: Math.floor(rnd() * 10),
           tex: Math.floor(rnd() * 3),
           rotation: Math.floor(rnd() * 4) * (Math.PI / 2),
         });
@@ -1096,8 +1096,12 @@ function City() {
 
   const windowTexs = useMemo(() => makeWindowTextures(), []);
   
-  // Load custom GLTF
-  const { scene: customBuildingScene } = useGLTF(import.meta.env.BASE_URL + "building_02.glb") as any;
+  // Load custom GLTFs
+  const gltf01 = useGLTF(import.meta.env.BASE_URL + "building_02.glb") as any;
+  const gltf02 = useGLTF(import.meta.env.BASE_URL + "apartmen_building.glb") as any;
+  const gltf03 = useGLTF(import.meta.env.BASE_URL + "game_ready_mid_poly_building.glb") as any;
+  const gltf04 = useGLTF(import.meta.env.BASE_URL + "sci-fi_building.glb") as any;
+  const gltf05 = useGLTF(import.meta.env.BASE_URL + "sci-fi_building_11.glb") as any;
 
   const { concreteMat, windowMats, prototypes } = useMemo(() => {
     const cMat = new THREE.MeshStandardMaterial({
@@ -1121,36 +1125,43 @@ function City() {
         }),
     );
     
-    // Prepare custom GLTF
-    const customGroup = new THREE.Group();
-    const clonedCustom = customBuildingScene.clone();
-    
-    // Apply fog and fix materials if needed
-    const box = new THREE.Box3().setFromObject(clonedCustom);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    const w = size.x || 3;
-    const h = size.y || 8;
-    const d = size.z || 3;
-    
-    // Center it maybe? Wait, assume its origin is at the bottom center.
-    clonedCustom.position.set(0, h/2, 0); // Our instances assume center Y is y=h/2 for procedural
-    // Actually our procedural buildings have different setups. 
-    // Wait, buildType1 has core positioned at h/2. The foundation assumes prototype has w and d.
-    // Let's just wrap it.
-    customGroup.add(clonedCustom);
+    // Prepare custom GLTFs
+    const createCustomPrototype = (scene: THREE.Group, scaleMult = 1.0) => {
+        const customGroup = new THREE.Group();
+        const clonedCustom = scene.clone();
+        
+        // Scale and measure
+        clonedCustom.scale.setScalar(scaleMult);
+        const box = new THREE.Box3().setFromObject(clonedCustom);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const w = size.x || 3;
+        const h = size.y || 8;
+        const d = size.z || 3;
+        
+        // Ensure the building sits flush with the group's bottom Y (which maps to ground level -2.9)
+        // Center horizontally
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        clonedCustom.position.x = -center.x;
+        clonedCustom.position.z = -center.z;
+        // Snap bottom to y=0 of the group (instead of centering Y or doing h/2)
+        clonedCustom.position.y = -box.min.y; 
+        
+        customGroup.add(clonedCustom);
 
-    // Make materials accept fog
-    clonedCustom.traverse((child: any) => {
-        if(child.isMesh && child.material) {
-            child.material.fog = true;
-            // Maybe make it look more cyberpunk?
-            // if it has an emissive map, let's boost it
-            if(child.material.emissiveMap) {
-                child.material.emissiveIntensity = 2.0;
+        // Make materials accept fog
+        clonedCustom.traverse((child: any) => {
+            if(child.isMesh && child.material) {
+                child.material.fog = true;
+                if(child.material.emissiveMap || (child.material.emissive && child.material.emissive.getHex() > 0)) {
+                    child.material.emissiveIntensity = 2.5;
+                }
             }
-        }
-    });
+        });
+        
+        return { group: customGroup, w, h, d };
+    };
 
     const protos = [
       buildType1(cMat, wMats[0]),
@@ -1158,11 +1169,15 @@ function City() {
       buildType3(cMat, wMats[0]),
       buildType4(cMat, wMats[0]),
       buildType5(cMat, wMats[0]),
-      { group: customGroup, w, h, d } // Custom building as type 6 (index 5)
+      createCustomPrototype(gltf01.scene, 1.0),
+      createCustomPrototype(gltf02.scene, 0.4),
+      createCustomPrototype(gltf03.scene, 0.1), // some kitbash are huge, tune as needed
+      createCustomPrototype(gltf04.scene, 1.0),
+      createCustomPrototype(gltf05.scene, 1.0)
     ];
 
     return { concreteMat: cMat, windowMats: wMats, prototypes: protos };
-  }, [windowTexs, customBuildingScene]);
+  }, [windowTexs, gltf01, gltf02, gltf03, gltf04, gltf05]);
 
   const cityGroup = useMemo(() => {
     const g = new THREE.Group();
@@ -1308,6 +1323,10 @@ function CorridorRain() {
 }
 
 useGLTF.preload(import.meta.env.BASE_URL + "building_02.glb");
+useGLTF.preload(import.meta.env.BASE_URL + "apartmen_building.glb");
+useGLTF.preload(import.meta.env.BASE_URL + "game_ready_mid_poly_building.glb");
+useGLTF.preload(import.meta.env.BASE_URL + "sci-fi_building.glb");
+useGLTF.preload(import.meta.env.BASE_URL + "sci-fi_building_11.glb");
 export function CorridorScene({
   progressRef,
   focusedIdx,
