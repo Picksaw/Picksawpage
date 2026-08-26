@@ -1126,20 +1126,36 @@ function City() {
     );
     
     // Prepare custom GLTFs
-    const createCustomPrototype = (scene: THREE.Group, scaleMult = 1.0) => {
+    const createCustomPrototype = (scene: THREE.Group) => {
         const customGroup = new THREE.Group();
         const clonedCustom = scene.clone();
         
-        // Scale and measure
-        clonedCustom.scale.setScalar(scaleMult);
+        // Auto-scale the building so its footprint fits in our city grid!
+        // We want the max width/depth to be exactly 3.2 units.
+        const tempBox = new THREE.Box3().setFromObject(clonedCustom);
+        const tempSize = new THREE.Vector3();
+        tempBox.getSize(tempSize);
+        
+        const maxFootprint = Math.max(tempSize.x, tempSize.z);
+        // If for some reason it's 0, default to 1.0, else scale it to fit 3.2 units wide.
+        let autoScale = maxFootprint > 0.001 ? 3.2 / maxFootprint : 1.0;
+        
+        // Clamp height so massive models don't completely block the camera perspective
+        // (Procedural buildings max out around 9.5. Let's cap customs at 14)
+        if (tempSize.y * autoScale > 14) {
+            autoScale = 14 / tempSize.y;
+        }
+        
+        clonedCustom.scale.setScalar(autoScale);
+        
+        // Re-measure after scaling
         const box = new THREE.Box3().setFromObject(clonedCustom);
         const size = new THREE.Vector3();
         box.getSize(size);
-        const w = size.x || 3;
+        const w = size.x || 3.2;
         const h = size.y || 8;
-        const d = size.z || 3;
+        const d = size.z || 3.2;
         
-        // Ensure the building sits flush with the group's bottom Y (which maps to ground level -2.9)
         // Center horizontally
         const center = new THREE.Vector3();
         box.getCenter(center);
@@ -1169,11 +1185,11 @@ function City() {
       buildType3(cMat, wMats[0]),
       buildType4(cMat, wMats[0]),
       buildType5(cMat, wMats[0]),
-      createCustomPrototype(gltf01.scene, 1.0),
-      createCustomPrototype(gltf02.scene, 0.4),
-      createCustomPrototype(gltf03.scene, 0.1), // some kitbash are huge, tune as needed
-      createCustomPrototype(gltf04.scene, 1.0),
-      createCustomPrototype(gltf05.scene, 1.0)
+      createCustomPrototype(gltf01.scene),
+      createCustomPrototype(gltf02.scene),
+      createCustomPrototype(gltf03.scene), // some kitbash are huge, tune as needed
+      createCustomPrototype(gltf04.scene),
+      createCustomPrototype(gltf05.scene)
     ];
 
     return { concreteMat: cMat, windowMats: wMats, prototypes: protos };
