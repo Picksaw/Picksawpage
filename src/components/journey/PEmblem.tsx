@@ -41,12 +41,13 @@ const WINDOW_UV = new THREE.Vector4(
   WINDOW.x0 / TPL_W,
   1 - WINDOW.y1 / TPL_H,
   (WINDOW.x1 - WINDOW.x0) / TPL_W,
-  (WINDOW.y1 - WINDOW.y0) / TPL_H
+  (WINDOW.y1 - WINDOW.y0) / TPL_H,
 );
 
 /** Responsive emblem scale — fits BOTH width and height on any screen. */
 function emblemFit(cam: THREE.PerspectiveCamera): number {
-  const visH = 2 * STATION_DIST * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+  const visH =
+    2 * STATION_DIST * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
   const visW = visH * cam.aspect;
   return Math.min(1, (visW * 0.85) / CARD_SPAN_W, (visH * 0.7) / CARD_SPAN_H);
 }
@@ -59,7 +60,7 @@ function roundedRect(
   y: number,
   w: number,
   h: number,
-  r: number
+  r: number,
 ) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -151,7 +152,14 @@ function drawCardFront(ctx: CanvasRenderingContext2D) {
 
   // green-screen window — the ghost composites exactly here
   ctx.fillStyle = "#00ff00";
-  roundedRect(ctx, WINDOW.x0, WINDOW.y0, WINDOW.x1 - WINDOW.x0, WINDOW.y1 - WINDOW.y0, 44);
+  roundedRect(
+    ctx,
+    WINDOW.x0,
+    WINDOW.y0,
+    WINDOW.x1 - WINDOW.x0,
+    WINDOW.y1 - WINDOW.y0,
+    44,
+  );
   ctx.fill();
 
   // spec block
@@ -209,7 +217,14 @@ function drawCardBack(ctx: CanvasRenderingContext2D) {
 
   // green-screen window (same rect — ghost shows on both faces)
   ctx.fillStyle = "#00ff00";
-  roundedRect(ctx, WINDOW.x0, WINDOW.y0, WINDOW.x1 - WINDOW.x0, WINDOW.y1 - WINDOW.y0, 44);
+  roundedRect(
+    ctx,
+    WINDOW.x0,
+    WINDOW.y0,
+    WINDOW.x1 - WINDOW.x0,
+    WINDOW.y1 - WINDOW.y0,
+    44,
+  );
   ctx.fill();
 
   // the P monogram
@@ -259,9 +274,13 @@ function makeHoloTexture(): THREE.Texture {
       const dy = (y - 128) / 128;
       const r = Math.sqrt(dx * dx + dy * dy);
       const a = Math.atan2(dy, dx);
-      const v = 0.5 + 0.5 * Math.sin(a * 6 + r * 11) * (0.55 + 0.45 * Math.sin(r * 14));
+      const v =
+        0.5 + 0.5 * Math.sin(a * 6 + r * 11) * (0.55 + 0.45 * Math.sin(r * 14));
       const i = (y * 256 + x) * 4;
-      img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.max(0, Math.min(255, v * 255));
+      img.data[i] =
+        img.data[i + 1] =
+        img.data[i + 2] =
+          Math.max(0, Math.min(255, v * 255));
       img.data[i + 3] = 255;
     }
   }
@@ -414,11 +433,14 @@ void main() {
     wuv.x >= 0.0 && wuv.x <= 1.0 && wuv.y >= 0.0 && wuv.y <= 1.0;
 
   if (inWin) {
-    float viewAngle = max(dot(vNormal, vEye), 0.0);
+    // In three.js double-sided materials, vNormal flips to face the camera.
+    // We want the dissolve to happen as the card turns away, so we use gl_FrontFacing.
+    float viewAngle = gl_FrontFacing ? max(dot(vNormal, vEye), 0.0) : 0.0;
+    
     float noiseVal = texture2D(uNoise, vUv * 6.0).r;
-    // As it turns away, threshold rises, dissolving the window into holographic foil
-    float threshold = smoothstep(0.85, 0.35, viewAngle); 
-    if (noiseVal < threshold) {
+    float threshold = smoothstep(0.85, 0.25, viewAngle); 
+    
+    if (!gl_FrontFacing || noiseVal < threshold) {
       inWin = false;
     }
   }
@@ -536,7 +558,7 @@ function updateRibbon(
   geo: THREE.BufferGeometry,
   pts: THREE.Vector3[],
   width: number,
-  camPos: THREE.Vector3
+  camPos: THREE.Vector3,
 ) {
   const pos = geo.getAttribute("position") as THREE.BufferAttribute;
   const uv = geo.getAttribute("uv") as THREE.BufferAttribute;
@@ -586,7 +608,6 @@ interface ArcSlot {
   life: number;
 }
 
-
 /* ── the emblem ───────────────────────────────────────────────────────── */
 
 export default function PEmblem() {
@@ -601,23 +622,23 @@ export default function PEmblem() {
 
   const arcs = useRef<ArcSlot[]>([]);
   const charge = useRef(0.25);
-  
+
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const cardRot = useRef({ x: 0, y: 0 }); // Current literal rotation of the card
-  
+
   const handlePointerOver = (e: any) => {
     e.stopPropagation();
-    document.body.style.cursor = 'grab';
+    document.body.style.cursor = "grab";
   };
-  
+
   const handlePointerOut = (e: any) => {
     e.stopPropagation();
-    document.body.style.cursor = '';
+    document.body.style.cursor = "";
   };
-  
+
   const handlePointerDown = (e: any) => {
-    document.body.style.cursor = 'grabbing';
+    document.body.style.cursor = "grabbing";
 
     e.stopPropagation();
     // Only capture on the card
@@ -629,19 +650,19 @@ export default function PEmblem() {
   const handlePointerMove = (e: any) => {
     if (!isDragging.current) return;
     e.stopPropagation();
-    
+
     const dx = e.clientX - dragStart.current.x;
     const dy = e.clientY - dragStart.current.y;
-    
+
     // Convert drag pixels to rotation radians (arbitrary sensitivity)
     cardRot.current.y += dx * 0.01;
     cardRot.current.x += dy * 0.01;
-    
+
     dragStart.current = { x: e.clientX, y: e.clientY };
   };
 
   const handlePointerUp = (e: any) => {
-    document.body.style.cursor = 'grab';
+    document.body.style.cursor = "grab";
     isDragging.current = false;
     (e.target as Element)?.releasePointerCapture?.(e.pointerId);
   };
@@ -675,7 +696,7 @@ export default function PEmblem() {
 
     const orb = new THREE.Mesh(
       new THREE.SphereGeometry(0.105, 16, 16),
-      new THREE.MeshBasicMaterial({ color: "#dff7ff", toneMapped: false })
+      new THREE.MeshBasicMaterial({ color: "#dff7ff", toneMapped: false }),
     );
     orb.position.set(-0.5, 0.62, 0.36);
 
@@ -719,7 +740,17 @@ export default function PEmblem() {
     const noiseTex = makeNoiseTexture();
     const sparkleTex = makeSparkleTexture();
 
-    return { draw, frontCanvas, backCanvas, frontTex, backTex, rampTex, holoTex, noiseTex, sparkleTex };
+    return {
+      draw,
+      frontCanvas,
+      backCanvas,
+      frontTex,
+      backTex,
+      rampTex,
+      holoTex,
+      noiseTex,
+      sparkleTex,
+    };
   }, []);
 
   const frontUniforms = useMemo(
@@ -734,7 +765,7 @@ export default function PEmblem() {
       uTime: { value: 0 },
       uFade: { value: 0 },
     }),
-    [assets, ghost]
+    [assets, ghost],
   );
   const backUniforms = useMemo(
     () => ({
@@ -748,7 +779,7 @@ export default function PEmblem() {
       uTime: { value: 0 },
       uFade: { value: 0 },
     }),
-    [assets, ghost]
+    [assets, ghost],
   );
 
   /* ── the lightning border — same painter as the DOM cards ── */
@@ -846,7 +877,7 @@ export default function PEmblem() {
     const start = new THREE.Vector3(
       hit.x * (1.15 + Math.random() * 0.5) + (Math.random() - 0.5) * 2.6,
       2.3 + Math.random() * 3.2,
-      -0.5 + Math.random() * 0.7
+      -0.5 + Math.random() * 0.7,
     );
 
     // main jagged bolt
@@ -892,18 +923,22 @@ export default function PEmblem() {
 
     // ── the ghost RTT renders first, before the main scene ──
     ghost.mat.uniforms.uTime.value = clock.current;
-    
+
     // Parallax depth: move the internal ghost camera oppositely to the card's rotation
-    const camRot = new THREE.Euler(-cardRot.current.x * 1.5, -cardRot.current.y * 1.5, 0, 'YXZ');
-    ghost.cam.position.set(0, 0, 3.8).applyEuler(camRot);
+    // Instead of orbiting the camera 360 degrees, just shift it slightly on X/Y for parallax depth
+    const px = Math.sin(cardRot.current.y) * 1.5;
+    const py = Math.sin(cardRot.current.x) * 1.5;
+    ghost.cam.position.set(px, py, 3.8);
     ghost.cam.lookAt(0, 0, 0);
-    ghost.pMesh.rotation.y = eased.current.x * 0.35 + Math.sin(clock.current * 0.35) * 0.5;
-    ghost.pMesh.rotation.x = -eased.current.y * 0.2 + Math.cos(clock.current * 0.28) * 0.1;
+    ghost.pMesh.rotation.y =
+      eased.current.x * 0.35 + Math.sin(clock.current * 0.35) * 0.5;
+    ghost.pMesh.rotation.x =
+      -eased.current.y * 0.2 + Math.cos(clock.current * 0.28) * 0.1;
     ghost.pMesh.position.y = Math.sin(clock.current * 0.7) * 0.06;
     ghost.orb.position.set(
       Math.cos(clock.current * 1.3) * 0.52 - 0.18,
       Math.sin(clock.current * 1.7) * 0.22 + 0.62,
-      0.34
+      0.34,
     );
     ghost.orb.scale.setScalar(1 + 0.18 * Math.sin(clock.current * 2.6));
 
@@ -932,25 +967,36 @@ export default function PEmblem() {
     const fEase = 1 - Math.pow(1 - f, 3);
 
     // ── float + cursor tilt ──
-    
+
     if (isDragging.current) {
       // Don't apply the global pointer easing if we're dragging the card
     } else {
-      eased.current.x += (pointer.current.x - eased.current.x) * Math.min(1, dt * 4);
-      eased.current.y += (pointer.current.y - eased.current.y) * Math.min(1, dt * 4);
+      eased.current.x +=
+        (pointer.current.x - eased.current.x) * Math.min(1, dt * 4);
+      eased.current.y +=
+        (pointer.current.y - eased.current.y) * Math.min(1, dt * 4);
     }
-  
+
     if (cardGroup.current) {
       // If not dragging, smoothly return to front face + float
       if (!isDragging.current) {
         // Find nearest full rotation (0, 2pi, 4pi...) to snap back to the front
-        const targetY = Math.round(cardRot.current.y / (Math.PI * 2)) * Math.PI * 2;
-        const targetX = Math.round(cardRot.current.x / (Math.PI * 2)) * Math.PI * 2;
-        
-        cardRot.current.y += (targetY + eased.current.x * 0.16 + (1 - fEase) * 0.55 - cardRot.current.y) * Math.min(1, dt * 5);
-        cardRot.current.x += (targetX - eased.current.y * 0.1 - cardRot.current.x) * Math.min(1, dt * 5);
+        const targetY =
+          Math.round(cardRot.current.y / (Math.PI * 2)) * Math.PI * 2;
+        const targetX =
+          Math.round(cardRot.current.x / (Math.PI * 2)) * Math.PI * 2;
+
+        cardRot.current.y +=
+          (targetY +
+            eased.current.x * 0.16 +
+            (1 - fEase) * 0.55 -
+            cardRot.current.y) *
+          Math.min(1, dt * 5);
+        cardRot.current.x +=
+          (targetX - eased.current.y * 0.1 - cardRot.current.x) *
+          Math.min(1, dt * 5);
       }
-      
+
       cardGroup.current.rotation.y = cardRot.current.y;
       cardGroup.current.rotation.x = cardRot.current.x;
       cardGroup.current.position.y = Math.sin(clock.current * 0.8) * 0.05;
@@ -976,7 +1022,8 @@ export default function PEmblem() {
 
     // ── aura behind the card ──
     if (auraMat.current) {
-      auraMat.current.opacity = (0.14 + c * 0.22 + flash * 0.4) * fEase * cardFade;
+      auraMat.current.opacity =
+        (0.14 + c * 0.22 + flash * 0.4) * fEase * cardFade;
     }
 
     // ── the lightning border — flares on strikes ──
@@ -1004,7 +1051,8 @@ export default function PEmblem() {
         a.impact.scale.setScalar(grown);
         a.impact2.scale.setScalar(grown * 0.7);
         (a.impact.material as THREE.SpriteMaterial).opacity = l * l * cardFade;
-        (a.impact2.material as THREE.SpriteMaterial).opacity = l * l * 0.8 * cardFade;
+        (a.impact2.material as THREE.SpriteMaterial).opacity =
+          l * l * 0.8 * cardFade;
       }
     }
 
@@ -1039,9 +1087,9 @@ export default function PEmblem() {
         </mesh>
 
         {/* card back — holographic foil + the ghost window */}
-        <mesh 
-          position={[0, 0, -0.02]} 
-          rotation={[0, Math.PI, 0]} 
+        <mesh
+          position={[0, 0, -0.02]}
+          rotation={[0, Math.PI, 0]}
           renderOrder={1}
           onPointerDown={handlePointerDown}
           onPointerOver={handlePointerOver}
@@ -1060,11 +1108,11 @@ export default function PEmblem() {
             depthWrite={false}
             side={THREE.DoubleSide}
           />
-        </mesh> 
+        </mesh>
 
         {/* card front */}
-        <mesh 
-          position={[0, 0, 0.03]} 
+        <mesh
+          position={[0, 0, 0.03]}
           renderOrder={2}
           onPointerDown={handlePointerDown}
           onPointerOver={handlePointerOver}
@@ -1085,21 +1133,23 @@ export default function PEmblem() {
           />
         </mesh>
 
-        {/* The lightning border was removed as per request */}{false &&
-        <mesh position={[0, 0, 0.05]} renderOrder={3}>
-          <planeGeometry args={[CARD_SPAN_W, CARD_SPAN_H]} />
-          <meshBasicMaterial
-            ref={borderMat}
-            map={border.texture}
-            transparent
-            opacity={0}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-            fog={false}
-            toneMapped={false}
-            side={THREE.DoubleSide}
-          />
-        </mesh>}
+        {/* The lightning border was removed as per request */}
+        {false && (
+          <mesh position={[0, 0, 0.05]} renderOrder={3}>
+            <planeGeometry args={[CARD_SPAN_W, CARD_SPAN_H]} />
+            <meshBasicMaterial
+              ref={borderMat}
+              map={border.texture}
+              transparent
+              opacity={0}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+              fog={false}
+              toneMapped={false}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        )}
       </group>
 
       {/* ribbon bolts — built once, driven imperatively */}
