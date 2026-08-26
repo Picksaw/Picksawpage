@@ -466,7 +466,7 @@ function HeadlineLayer({ lang }: { lang: Lang }) {
 function HtmlSection({
   index,
   focused,
-  children,
+  children
 }: {
   index: number;
   focused: boolean;
@@ -475,30 +475,65 @@ function HtmlSection({
   const z = paintingZ(index);
   const fit = useFitScale(PAINTING_W, PAINTING_H, FOCUS_DIST);
   const group = useRef<THREE.Group>(null);
-
+  
+  const outerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  
   const frameMat = useRef<THREE.MeshStandardMaterial>(null);
   const glowMat = useRef<THREE.MeshBasicMaterial>(null);
-  const divRef = useRef<HTMLDivElement>(null);
+  
+  const { size, camera } = useThree();
 
-  useFrame(({ camera }, delta) => {
+  // Pick a base resolution for the UI to render at before scaling.
+  const targetW = size.width < 768 ? 400 : 1024;
+  const targetH = targetW * (PAINTING_H / PAINTING_W);
+
+  useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
-    const op = layerOpacity(camera.position.z, z);
-
+    const cam = camera as THREE.PerspectiveCamera;
+    const op = layerOpacity(cam.position.z, z);
+    
     if (frameMat.current) frameMat.current.opacity = op;
     if (glowMat.current) glowMat.current.opacity = (focused ? 0.3 : 0.1) * op;
-
+    
     if (group.current) {
-      // Re-apply the EXACT same fit and parallax as the painting meshes!
-      group.current.scale.lerp(
-        new THREE.Vector3(fit, fit, fit),
-        Math.min(1, dt * 8),
-      );
-      group.current.position.x = (camera.position.x || 0) * 0.06;
+      group.current.scale.lerp(new THREE.Vector3(fit, fit, fit), Math.min(1, dt * 8));
+      group.current.position.x = (cam.position.x || 0) * 0.06;
     }
-
-    if (divRef.current) {
-      divRef.current.style.opacity = op.toString();
-      divRef.current.style.pointerEvents = focused ? "auto" : "none";
+    
+    if (outerRef.current && innerRef.current) {
+      if (op < 0.01) {
+        outerRef.current.style.opacity = '0';
+        outerRef.current.style.pointerEvents = 'none';
+        return;
+      }
+      
+      // Calculate exact pixel dimensions of the 3D frame on the 2D screen
+      const dist = Math.abs(cam.position.z - z);
+      const safeDist = Math.max(dist, 0.1);
+      
+      const fovRad = THREE.MathUtils.degToRad(cam.fov / 2);
+      const visible_height = 2 * safeDist * Math.tan(fovRad);
+      
+      // Need to use group.current.scale to match the lerped scale
+      const currentScale = group.current ? group.current.scale.x : fit;
+      
+      const pxH = (PAINTING_H / visible_height) * size.height * currentScale;
+      const pxW = (PAINTING_W / visible_height) * size.height * currentScale;
+      
+      // Also account for the parallax X shift on screen
+      // If group has position.x, we must shift the overlay
+      // 3D X -> screen X
+      const shiftX = group.current ? (group.current.position.x / (visible_height * (size.width/size.height))) * size.width : 0;
+      
+      outerRef.current.style.width = `${pxW}px`;
+      outerRef.current.style.height = `${pxH}px`;
+      outerRef.current.style.opacity = op.toString();
+      outerRef.current.style.pointerEvents = focused ? "auto" : "none";
+      outerRef.current.style.transform = `translateX(${shiftX}px)`;
+      
+      const scale = pxW / targetW;
+      innerRef.current.style.transform = `scale(${scale})`;
     }
   });
 
@@ -529,25 +564,19 @@ function HtmlSection({
           opacity={1}
         />
       </mesh>
-
-      {/* HTML Content */}
-      <Html
-        transform
-        position={[0, 0, 0.012]}
-        scale={PAINTING_W / 1200}
-        zIndexRange={[100, 0]}
-        center
-      >
-        <div
-          ref={divRef}
-          className="bg-[#04060d] text-white custom-scrollbar overflow-x-hidden overflow-y-auto"
-          style={{
-            width: 1200,
-            height: 1200 * (PAINTING_H / PAINTING_W),
-            opacity: 0,
-          }}
+      
+      {/* HTML Content — perfectly tracking 2D overlay avoiding all CSS3D browser bugs */}
+      <Html center zIndexRange={[100, 0]}>
+        <div 
+          ref={outerRef} 
+          className="relative overflow-hidden bg-[#04060d] text-white flex items-start justify-center rounded-sm"
+          style={{ opacity: 0 }}
         >
-          <div className="w-full min-h-full flex flex-col items-center justify-start p-4 md:p-8">
+          <div 
+            ref={innerRef}
+            className="absolute top-0 left-0 origin-top-left overflow-y-auto overflow-x-hidden custom-scrollbar"
+            style={{ width: targetW, height: targetH }}
+          >
             {children}
           </div>
         </div>
@@ -711,20 +740,16 @@ function City() {
       // Make materials accept fog and boost emissive
       clonedCustom.traverse((child: any) => {
         if (child.isMesh && child.material) {
-          // Clone the material so we don't mutate a shared one incorrectly, though usually it's fine here
-          // We will darken the albedo to match the dark cyberpunk vibe
-          if (child.material.color) {
-            child.material.color.lerp(new THREE.Color("#05070a"), 0.85); // heavily darken
-          }
+          // Restore the building's original colors (no heavy darkening)
+          // Just make sure it receives fog and is somewhat reflective
           child.material.fog = true;
-          // Add some environmental reflections
-          child.material.roughness = Math.min(child.material.roughness, 0.5);
-
+          child.material.roughness = Math.min(child.material.roughness || 1.0, 0.6); 
+          
           if (
             child.material.emissiveMap ||
             (child.material.emissive && child.material.emissive.getHex() > 0)
           ) {
-            // Boost neon lights
+            // Keep the neon lights bright so they pop
             child.material.emissiveIntensity = 3.5;
           }
         }
