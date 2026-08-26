@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { TEMPLATES, type TemplateItem } from "../../config/templatesConfig";
 import { TEMPLATE_IMAGE_MAP } from "../../config/templateImages";
 import { SITE_TEXTS, type Lang } from "../../config/siteTexts";
 import GroundFog from "./GroundFog";
+import { useJourneyElectricBorder, BORDER_OVERSCAN } from "./JourneyElectricBorder";
 
 /**
  * Corridor V2 — the neon city walk.
@@ -204,17 +205,22 @@ function Painting({
   lang,
   focused,
   onOpen,
+  borderTexture,
+  hoveredIdxRef,
 }: {
   item: TemplateItem;
   index: number;
   lang: string;
   focused: boolean;
   onOpen: (item: TemplateItem) => void;
+  borderTexture: THREE.Texture;
+  hoveredIdxRef: MutableRefObject<number>;
 }) {
   const group = useRef<THREE.Group>(null);
   const planeMat = useRef<THREE.MeshBasicMaterial>(null);
   const frameMat = useRef<THREE.MeshStandardMaterial>(null);
   const glowMat = useRef<THREE.MeshBasicMaterial>(null);
+  const borderMat = useRef<THREE.MeshBasicMaterial>(null);
   const hovered = useRef(false);
   const focusAmt = useRef(0);
   const map = usePaintingTexture(item, lang);
@@ -233,6 +239,7 @@ function Painting({
       glowMat.current.opacity = (0.1 + focusAmt.current * 0.38) * op;
     }
     if (frameMat.current) frameMat.current.opacity = op;
+    if (borderMat.current) borderMat.current.opacity = op;
 
     if (group.current) {
       const hoverS = hovered.current ? 1.03 : 1;
@@ -246,10 +253,12 @@ function Painting({
   const over = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     hovered.current = true;
+    hoveredIdxRef.current = index;
     document.body.style.cursor = "pointer";
   };
   const out = () => {
     hovered.current = false;
+    hoveredIdxRef.current = -1;
     document.body.style.cursor = "";
   };
 
@@ -287,6 +296,7 @@ function Painting({
       <mesh
         position={[0, 0, 0.012]}
         onPointerOver={focused ? over : undefined}
+        onPointerMove={focused ? over : undefined}
         onPointerOut={focused ? out : undefined}
         onClick={
           focused
@@ -299,6 +309,24 @@ function Painting({
       >
         <planeGeometry args={[PAINTING_W, PAINTING_H]} />
         <meshBasicMaterial map={map} toneMapped={false} transparent opacity={1} />
+      </mesh>
+      {/* electric lightning ring — the same painter that drives the DOM
+          cards, uploaded as a shared animated texture. Additive so the
+          bolt glows over the frame without a background. */}
+      <mesh position={[0, 0, 0.022]}>
+        <planeGeometry
+          args={[PAINTING_W * (1 + 2 * BORDER_OVERSCAN), PAINTING_H * (1 + 2 * BORDER_OVERSCAN)]}
+        />
+        <meshBasicMaterial
+          ref={borderMat}
+          map={borderTexture}
+          transparent
+          opacity={0}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          fog={false}
+          toneMapped={false}
+        />
       </mesh>
     </group>
   );
@@ -666,6 +694,8 @@ export function CorridorScene({
   lang: string;
   onOpen: (item: TemplateItem) => void;
 }) {
+  // one shared animated texture + hover tracker for every painting's ring
+  const border = useJourneyElectricBorder(PAINTING_W, PAINTING_H, focusedIdx);
   return (
     <>
       <CameraRig progressRef={progressRef} />
@@ -681,6 +711,8 @@ export function CorridorScene({
           lang={lang}
           focused={focusedIdx === i}
           onOpen={onOpen}
+          borderTexture={border.texture}
+          hoveredIdxRef={border.hoveredIdxRef}
         />
       ))}
     </>

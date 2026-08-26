@@ -6,19 +6,24 @@ import { cn } from "../../utils/cn";
  * an element, ported from the CodePen "Electric Border (iOS Safe)" by
  * BalintFerenczy: https://codepen.io/BalintFerenczy/pen/yyYErXa
  *
- * The original draws on a fixed-size canvas that overshoots the card so
- * the bolts can wander outside the edges. This port measures its host,
- * scales for devicePixelRatio, pauses when off-screen, respects
- * prefers-reduced-motion, and boosts intensity while `active` is set
- * (used for the card hover state). Themed to the site's electric cyan.
+ * The drawing core lives in `ElectricPainter` (no DOM dependencies) so
+ * the exact same bolt math drives BOTH the DOM template cards here and
+ * the WebGL corridor frames in the 3D Journey (see
+ * `journey/JourneyElectricBorder.tsx`).
  */
 
-interface ElectricBorderOptions {
+export interface ElectricPainterOptions {
+  /** logical card width in px */
+  width: number;
+  /** logical card height in px */
+  height: number;
   color: string;
   speed: number;
   lineWidth: number;
   radius: number;
+  /** canvas extension beyond each card edge, as a fraction (matches bolt wander) */
   overscan: number;
+  /** bolt wander, as a fraction of the card's min dimension */
   displacement: number;
   octaves: number;
   lacunarity: number;
@@ -26,49 +31,61 @@ interface ElectricBorderOptions {
   amplitude: number;
   frequency: number;
   baseFlatness: number;
-  getActive: () => boolean;
 }
 
-const DEFAULT_OPTIONS: Omit<ElectricBorderOptions, "getActive"> = {
-  color: "#4fd8ff",
-  speed: 1.15,
-  lineWidth: 1.4,
-  radius: 24,
-  overscan: 0.09, // canvas extends 9% beyond each side of the card (matches bolt wander)
-  displacement: 0.09, // bolt wander, as a fraction of the card's min dimension
-  octaves: 10,
-  lacunarity: 1.6,
-  gain: 0.7,
-  amplitude: 0.075,
-  frequency: 10,
-  baseFlatness: 0,
-};
-
-class ElectricBorderEngine {
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D | null;
-  private opts: ElectricBorderOptions;
-  private raf = 0;
-  private running = false;
-  private visible = true;
+/**
+ * Pure drawing core — holds the noise engine + rounded-rect perimeter
+ * math and renders frames into any 2D context. No DOM, no rAF: the
+ * DOM component and the WebGL journey both drive it.
+ */
+export class ElectricPainter {
   private time = 0;
-  private last = performance.now();
   private intensity = 0;
-  private cssW = 0;
-  private cssH = 0;
-  private dpr = 1;
-  private ro: ResizeObserver | null = null;
+  private active = false;
+  readonly canvasWidth: number;
+  readonly canvasHeight: number;
 
-  constructor(canvas: HTMLCanvasElement, opts: ElectricBorderOptions) {
-    this.canvas = canvas;
-    this.ctx = canvas.getContext("2d");
-    this.opts = opts;
+  constructor(private readonly opts: ElectricPainterOptions) {
+    this.canvasWidth = opts.width * (1 + 2 * opts.overscan);
+    this.canvasHeight = opts.height * (1 + 2 * opts.overscan);
+  }
 
-    if (typeof ResizeObserver !== "undefined") {
-      this.ro = new ResizeObserver(() => this.resize());
-      this.ro.observe(canvas);
-    }
-    this.resize();
+  /** Flare the bolt (hover/focus) — intensity eases toward it. */
+  setActive(active: boolean) {
+    this.active = active;
+  }
+
+  /** Jump the animation clock (used for the static reduced-motion frame). */
+  seek(time: number) {
+    this.time = time;
+  }
+
+  /** Advance the animation by dtMs (capped) and ease hover intensity. */
+  advance(dtMs: number) {
+    this.time += (Math.min(dtMs, 100) / 1000) * this.opts.speed;
+    this.intensity += ((this.active ? 1 : 0) - this.intensity) * 0.06;
+  }
+
+  /** Draw the current frame. ctx must be sized canvasWidth × canvasHeight
+   *  (in its own pixel space) with an identity transform. */
+  render(ctx: CanvasRenderingContext2D) {
+    const o = this.opts;
+    const left = o.width * o.overscan;
+    const top = o.height * o.overscan;
+    const radius = Math.min(o.radius, Math.min(o.width, o.height) / 2);
+    const disp = Math.min(o.width, o.height) * o.displacement;
+
+    ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+
+    const perimeter = 2 * (o.width + o.height) + 2 * Math.PI * radius;
+    const samples = Math.max(160, Math.floor(perimeter / 2));
+    const lw = o.lineWidth * (1 + this.intensity * 0.85);
+
+    // Soft additive bloom pass, then the crisp core stroke.
+    ctx.globalCompositeOperation = "lighter";
+    this.strokePath(ctx, samples, left, top, radius, disp, lw * 3, 0.08 + this.intensity * 0.1);
+    ctx.globalCompositeOperation = "source-over";
+    this.strokePath(ctx, samples, left, top, radius, disp, lw, 0.92);
   }
 
   /* ── noise primitives (identical to the original pen) ─────────── */
@@ -203,116 +220,22 @@ class ElectricBorderEngine {
     return this.getCornerPoint(left + radius, top + radius, radius, Math.PI, Math.PI / 2, progress);
   }
 
-  /* ── lifecycle ─────────────────────────────────────────────────── */
-
-  resize() {
-    const rect = this.canvas.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
-
-    this.cssW = rect.width;
-    this.cssH = rect.height;
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
-
-    const w = Math.round(rect.width * this.dpr);
-    const h = Math.round(rect.height * this.dpr);
-    if (this.canvas.width !== w || this.canvas.height !== h) {
-      this.canvas.width = w;
-      this.canvas.height = h;
-      if (!this.running) this.frame(performance.now());
-    }
-  }
-
-  start() {
-    this.running = true;
-    this.sync();
-  }
-
-  stop() {
-    this.running = false;
-    this.sync();
-  }
-
-  setVisible(visible: boolean) {
-    this.visible = visible;
-    this.sync();
-  }
-
-  private sync() {
-    if (this.raf) cancelAnimationFrame(this.raf);
-    this.raf = 0;
-    if (this.running && this.visible) {
-      this.last = performance.now();
-      this.raf = requestAnimationFrame(this.tick);
-    }
-  }
-
-  private tick = (now: number) => {
-    this.raf = requestAnimationFrame(this.tick);
-    this.frame(now);
-  };
-
-  renderStatic(time = 2.3) {
-    this.time = time;
-    this.frame(performance.now());
-  }
-
-  dispose() {
-    this.stop();
-    this.ro?.disconnect();
-  }
-
-  /* ── drawing ───────────────────────────────────────────────────── */
-
-  private frame(now: number) {
-    const ctx = this.ctx;
-    if (!ctx || this.cssW <= 0 || this.cssH <= 0) return;
-
-    const dt = Math.min((now - this.last) / 1000, 0.1);
-    this.last = now;
-    this.time += dt * this.opts.speed;
-    this.intensity += ((this.opts.getActive() ? 1 : 0) - this.intensity) * 0.06;
-
-    const o = this.opts.overscan;
-    const cardW = this.cssW / (1 + 2 * o);
-    const cardH = this.cssH / (1 + 2 * o);
-    const left = (this.cssW - cardW) / 2;
-    const top = (this.cssH - cardH) / 2;
-    const radius = Math.min(this.opts.radius, Math.min(cardW, cardH) / 2);
-    const disp = Math.min(cardW, cardH) * this.opts.displacement;
-
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.clearRect(0, 0, this.cssW, this.cssH);
-
-    const perimeter = 2 * (cardW + cardH) + 2 * Math.PI * radius;
-    const samples = Math.max(160, Math.floor(perimeter / 2));
-
-    const lw = this.opts.lineWidth * (1 + this.intensity * 0.85);
-
-    // Soft additive bloom pass, then the crisp core stroke.
-    ctx.globalCompositeOperation = "lighter";
-    this.strokePath(samples, left, top, cardW, cardH, radius, disp, lw * 3, 0.08 + this.intensity * 0.1);
-    ctx.globalCompositeOperation = "source-over";
-    this.strokePath(samples, left, top, cardW, cardH, radius, disp, lw, 0.92);
-  }
+  /* ── drawing passes ────────────────────────────────────────────── */
 
   private strokePath(
+    ctx: CanvasRenderingContext2D,
     samples: number,
     left: number,
     top: number,
-    width: number,
-    height: number,
     radius: number,
     scale: number,
     lineWidth: number,
     alpha: number
   ) {
-    const ctx = this.ctx;
-    if (!ctx) return;
-
     ctx.beginPath();
     for (let i = 0; i <= samples; i++) {
       const progress = i / samples;
-      const point = this.getRoundedRectPoint(progress, left, top, width, height, radius);
+      const point = this.getRoundedRectPoint(progress, left, top, this.opts.width, this.opts.height, radius);
       const xNoise = this.octavedNoise(
         progress * 8,
         this.opts.octaves,
@@ -350,6 +273,157 @@ class ElectricBorderEngine {
     ctx.lineJoin = "round";
     ctx.stroke();
     ctx.globalAlpha = 1;
+  }
+}
+
+interface ElectricBorderOptions {
+  color: string;
+  speed: number;
+  lineWidth: number;
+  radius: number;
+  overscan: number;
+  displacement: number;
+  octaves: number;
+  lacunarity: number;
+  gain: number;
+  amplitude: number;
+  frequency: number;
+  baseFlatness: number;
+  getActive: () => boolean;
+}
+
+const DEFAULT_OPTIONS: Omit<ElectricBorderOptions, "getActive"> = {
+  color: "#4fd8ff",
+  speed: 1.15,
+  lineWidth: 1.4,
+  radius: 24,
+  overscan: 0.09, // canvas extends 9% beyond each side of the card (matches bolt wander)
+  displacement: 0.09, // bolt wander, as a fraction of the card's min dimension
+  octaves: 10,
+  lacunarity: 1.6,
+  gain: 0.7,
+  amplitude: 0.075,
+  frequency: 10,
+  baseFlatness: 0,
+};
+
+/** DOM orchestrator: measures the host, scales for devicePixelRatio,
+ *  runs the rAF loop and pauses when off-screen. Drawing is delegated
+ *  to ElectricPainter. */
+class ElectricBorderEngine {
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D | null;
+  private opts: ElectricBorderOptions;
+  private painter: ElectricPainter | null = null;
+  private raf = 0;
+  private running = false;
+  private visible = true;
+  private last = performance.now();
+  private dpr = 1;
+  private ro: ResizeObserver | null = null;
+
+  constructor(canvas: HTMLCanvasElement, opts: ElectricBorderOptions) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.opts = opts;
+
+    if (typeof ResizeObserver !== "undefined") {
+      this.ro = new ResizeObserver(() => this.resize());
+      this.ro.observe(canvas);
+    }
+    this.resize();
+  }
+
+  /* ── lifecycle ─────────────────────────────────────────────────── */
+
+  resize() {
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    this.painter = new ElectricPainter({
+      width: rect.width / (1 + 2 * this.opts.overscan),
+      height: rect.height / (1 + 2 * this.opts.overscan),
+      color: this.opts.color,
+      speed: this.opts.speed,
+      lineWidth: this.opts.lineWidth,
+      radius: this.opts.radius,
+      overscan: this.opts.overscan,
+      displacement: this.opts.displacement,
+      octaves: this.opts.octaves,
+      lacunarity: this.opts.lacunarity,
+      gain: this.opts.gain,
+      amplitude: this.opts.amplitude,
+      frequency: this.opts.frequency,
+      baseFlatness: this.opts.baseFlatness,
+    });
+
+    const w = Math.round(this.painter.canvasWidth * this.dpr);
+    const h = Math.round(this.painter.canvasHeight * this.dpr);
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+      if (!this.running) this.renderStatic();
+    }
+  }
+
+  start() {
+    this.running = true;
+    this.sync();
+  }
+
+  stop() {
+    this.running = false;
+    this.sync();
+  }
+
+  setVisible(visible: boolean) {
+    this.visible = visible;
+    this.sync();
+  }
+
+  private sync() {
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    if (this.running && this.visible) {
+      this.last = performance.now();
+      this.raf = requestAnimationFrame(this.tick);
+    }
+  }
+
+  private tick = (now: number) => {
+    this.raf = requestAnimationFrame(this.tick);
+    this.frame(now);
+  };
+
+  renderStatic(time = 2.3) {
+    if (!this.painter) return;
+    this.painter.seek(time);
+    this.draw();
+  }
+
+  dispose() {
+    this.stop();
+    this.ro?.disconnect();
+  }
+
+  /* ── drawing ───────────────────────────────────────────────────── */
+
+  private draw() {
+    const ctx = this.ctx;
+    if (!ctx || !this.painter) return;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.painter.render(ctx);
+  }
+
+  private frame(now: number) {
+    if (!this.painter) return;
+    const dt = Math.min((now - this.last) / 1000, 0.1) * 1000;
+    this.last = now;
+    this.painter.setActive(this.opts.getActive());
+    this.painter.advance(dt);
+    this.draw();
   }
 }
 
