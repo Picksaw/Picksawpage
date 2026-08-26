@@ -52,14 +52,30 @@ export default function Lighting({ quality }: { quality: Quality }) {
   const lamps = useMemo(() => buildLampsSorted(), []);
   const poolSize = quality.lightPool;
 
-  // ── renderer setup: ACES + physical lights ──
+  /**
+   * Renderer setup — applied ONCE. These are global settings, not
+   * per-frame state; re-applying them is what made the type flip.
+   */
+  const configured = useRef(false);
   useEffect(() => {
+    if (configured.current) return;
+    configured.current = true;
     gl.toneMapping = THREE.ACESFilmicToneMapping;
     gl.toneMappingExposure = 1.05;
     gl.outputColorSpace = THREE.SRGBColorSpace;
     if (quality.shadows) {
       gl.shadowMap.enabled = true;
-      gl.shadowMap.type = THREE.PCFSoftShadowMap;
+      /**
+       * PCFShadowMap, NOT PCFSoftShadowMap.
+       *
+       * PCFSoftShadowMap is deprecated as of three r185. The renderer
+       * downgrades it on the first shadow pass, and that counts as a
+       * shadow-map TYPE CHANGE — on which three walks the whole scene
+       * graph setting needsUpdate on every material. Every one then
+       * recompiles, mid-frame. Re-applying the deprecated constant made
+       * it flip repeatedly: 84 warnings, and the black glitching.
+       */
+      gl.shadowMap.type = THREE.PCFShadowMap;
       gl.shadowMap.autoUpdate = true;
     }
   }, [gl, quality.shadows]);
