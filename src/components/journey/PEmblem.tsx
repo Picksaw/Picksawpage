@@ -215,17 +215,7 @@ function drawCardBack(ctx: CanvasRenderingContext2D) {
     ctx.stroke();
   }
 
-  // green-screen window (same rect — ghost shows on both faces)
-  ctx.fillStyle = "#00ff00";
-  roundedRect(
-    ctx,
-    WINDOW.x0,
-    WINDOW.y0,
-    WINDOW.x1 - WINDOW.x0,
-    WINDOW.y1 - WINDOW.y0,
-    44,
-  );
-  ctx.fill();
+  // No green window on the back!
 
   // the P monogram
   ctx.textAlign = "center";
@@ -233,7 +223,7 @@ function drawCardBack(ctx: CanvasRenderingContext2D) {
   ctx.shadowColor = "rgba(79,216,255,0.8)";
   ctx.shadowBlur = 46;
   ctx.font = "800 420px 'Sora Variable', sans-serif";
-  ctx.fillText("P", W / 2, 1296);
+  
   ctx.shadowBlur = 0;
 
   ctx.font = "600 26px 'Sora Variable', sans-serif";
@@ -429,8 +419,10 @@ void main() {
   vec4 base = texture2D(uTemplate, vUv);
   float f = fresnel(vNormal, vEye);
   vec2 wuv = (vUv - uWindow.xy) / uWindow.zw;
-  bool inWin = base.g >= 0.5 && base.r < 0.6 &&
+  bool inWinOrig = base.g >= 0.5 && base.r < 0.6 &&
     wuv.x >= 0.0 && wuv.x <= 1.0 && wuv.y >= 0.0 && wuv.y <= 1.0;
+  
+  bool inWin = inWinOrig;
 
   if (inWin) {
     // In three.js double-sided materials, vNormal flips to face the camera.
@@ -438,7 +430,7 @@ void main() {
     float viewAngle = gl_FrontFacing ? max(dot(vNormal, vEye), 0.0) : 0.0;
     
     float noiseVal = texture2D(uNoise, vUv * 6.0).r;
-    float threshold = smoothstep(0.85, 0.25, viewAngle); 
+    float threshold = smoothstep(0.85, 0.15, viewAngle); 
     
     if (!gl_FrontFacing || noiseVal < threshold) {
       inWin = false;
@@ -464,7 +456,8 @@ void main() {
     float star = texture2D(uSparkle, suv).r * texture2D(uSparkle, fract(suv * 0.6 + 0.37)).b;
     star = pow(star, 12.0) * 6.0;
 
-    vec3 col = base.rgb * foil * 1.6;
+    vec3 baseColor = inWinOrig ? vec3(0.04, 0.07, 0.12) : base.rgb;
+    vec3 col = baseColor * foil * 1.6;
     col += star * foil * 1.4;
     col += f * foil * 0.6;
     col += texture2D(uNoise, fract(vUv * 2.0)).r * 0.025;
