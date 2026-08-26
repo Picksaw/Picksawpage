@@ -414,6 +414,16 @@ void main() {
     wuv.x >= 0.0 && wuv.x <= 1.0 && wuv.y >= 0.0 && wuv.y <= 1.0;
 
   if (inWin) {
+    float viewAngle = max(dot(vNormal, vEye), 0.0);
+    float noiseVal = texture2D(uNoise, vUv * 6.0).r;
+    // As it turns away, threshold rises, dissolving the window into holographic foil
+    float threshold = smoothstep(0.85, 0.35, viewAngle); 
+    if (noiseVal < threshold) {
+      inWin = false;
+    }
+  }
+
+  if (inWin) {
     // the ghost hologram + fake bloom (two-radius blur of the RTT)
     vec3 g = sampleGhost(wuv);
     vec3 bloom = blurGhost(wuv, 1.8) + blurGhost(wuv, 5.0) * 0.6;
@@ -882,6 +892,11 @@ export default function PEmblem() {
 
     // ── the ghost RTT renders first, before the main scene ──
     ghost.mat.uniforms.uTime.value = clock.current;
+    
+    // Parallax depth: move the internal ghost camera oppositely to the card's rotation
+    const camRot = new THREE.Euler(-cardRot.current.x * 1.5, -cardRot.current.y * 1.5, 0, 'YXZ');
+    ghost.cam.position.set(0, 0, 3.8).applyEuler(camRot);
+    ghost.cam.lookAt(0, 0, 0);
     ghost.pMesh.rotation.y = eased.current.x * 0.35 + Math.sin(clock.current * 0.35) * 0.5;
     ghost.pMesh.rotation.x = -eased.current.y * 0.2 + Math.cos(clock.current * 0.28) * 0.1;
     ghost.pMesh.position.y = Math.sin(clock.current * 0.7) * 0.06;

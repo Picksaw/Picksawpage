@@ -748,12 +748,25 @@ function City() {
           child.material.fog = true;
           child.material.roughness = Math.min(child.material.roughness || 1.0, 0.6); 
           
+          const matName = (child.material.name || "").toLowerCase();
+          
           if (
             child.material.emissiveMap ||
             (child.material.emissive && child.material.emissive.getHex() > 0)
           ) {
-            // Keep the neon lights bright so they pop
+            // Boost existing neon lights
             child.material.emissiveIntensity = 3.5;
+          } else if (matName.includes('window') || matName.includes('glass') || matName.includes('light')) {
+            // Force emissive for materials specifically named window/glass/light
+            child.material.emissive = new THREE.Color("#4fd8ff");
+            child.material.emissiveIntensity = 2.0;
+          } else if (child.material.map) {
+            // For Atlas materials or generic walls with painted-on windows:
+            // Clone the diffuse map into the emissive slot and give it a cyan/blue tint!
+            // This forces the bright parts of the texture (windows) to glow like neon lights in the dark.
+            child.material.emissiveMap = child.material.map;
+            child.material.emissive = new THREE.Color("#1a4466"); // Soft cyberpunk ambient glow
+            child.material.emissiveIntensity = 3.0;
           }
         }
       });
