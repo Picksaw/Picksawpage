@@ -393,6 +393,7 @@ uniform sampler2D uHolo;
 uniform vec4 uWindow;
 uniform float uTime;
 uniform float uFade;
+uniform bool uIsBack;
 
 varying vec2 vUv;
 varying vec3 vNormal;
@@ -419,7 +420,7 @@ void main() {
   vec4 base = texture2D(uTemplate, vUv);
   float f = fresnel(vNormal, vEye);
   vec2 wuv = (vUv - uWindow.xy) / uWindow.zw;
-  bool inWinOrig = base.g >= 0.5 && base.r < 0.6 &&
+  bool inWinOrig = !uIsBack && base.g >= 0.5 && base.r < 0.6 &&
     wuv.x >= 0.0 && wuv.x <= 1.0 && wuv.y >= 0.0 && wuv.y <= 1.0;
   
   bool inWin = inWinOrig;
@@ -757,6 +758,7 @@ export default function PEmblem() {
       uWindow: { value: WINDOW_UV },
       uTime: { value: 0 },
       uFade: { value: 0 },
+      uIsBack: { value: false },
     }),
     [assets, ghost],
   );
@@ -771,6 +773,7 @@ export default function PEmblem() {
       uWindow: { value: WINDOW_UV },
       uTime: { value: 0 },
       uFade: { value: 0 },
+      uIsBack: { value: true },
     }),
     [assets, ghost],
   );

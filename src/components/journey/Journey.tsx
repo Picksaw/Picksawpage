@@ -109,7 +109,7 @@ export default function Journey({ lang }: { lang: Lang }) {
         aria-hidden={false}
       >
         <Canvas
-          dpr={[1, 1.75]}
+          dpr={[1, 1.25]} // Capped to 1.25 for massive performance gain on 4K monitors
           frameloop={false ? "never" : "always"}
           camera={{
             position: [0, 0, stations[0]],
