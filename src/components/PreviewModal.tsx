@@ -108,7 +108,7 @@ export default function PreviewModal({
         </div>
 
         {/* the live site — natural scrolling inside the template */}
-        <div className="relative aspect-[16/10] max-h-[68vh] w-full overflow-hidden bg-white">
+        <div className="relative h-[65vh] sm:h-auto sm:aspect-[16/10] sm:max-h-[68vh] w-full overflow-hidden bg-white">
           {!loaded && <div className="skeleton absolute inset-0 z-10" />}
           <iframe
             src={item.url}

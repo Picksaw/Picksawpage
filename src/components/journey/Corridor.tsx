@@ -391,6 +391,26 @@ function HeadlineLayer({ lang }: { lang: Lang }) {
     const ctx = c.getContext("2d")!;
     ctx.clearRect(0, 0, c.width, c.height);
 
+    // Glassmorphism panel background
+    const margin = 40;
+    const radius = 60;
+    ctx.fillStyle = "rgba(4, 7, 14, 0.45)"; // Deep glass
+    ctx.strokeStyle = "rgba(79, 216, 255, 0.15)"; // Electric border
+    ctx.lineWidth = 4;
+    
+    // Draw rounded rect
+    ctx.beginPath();
+    ctx.roundRect(margin, margin, c.width - margin * 2, c.height - margin * 2, radius);
+    ctx.fill();
+    ctx.stroke();
+    
+    // Slight gradient glow inside the glass
+    const glow = ctx.createLinearGradient(0, 0, 0, c.height);
+    glow.addColorStop(0, "rgba(255, 255, 255, 0.05)");
+    glow.addColorStop(1, "rgba(0, 0, 0, 0.2)");
+    ctx.fillStyle = glow;
+    ctx.fill();
+
     const fa = lang === "fa";
     ctx.direction = fa ? "rtl" : "ltr";
     ctx.textAlign = "center";
