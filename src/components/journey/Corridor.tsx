@@ -1141,27 +1141,34 @@ function City() {
 /** Depth rain inside the corridor. */
 function CorridorRain() {
   const ref = useRef<THREE.LineSegments>(null);
-  const count = 400;
+  
+  // A much larger array of rain drops to simulate a heavy storm
+  const count = 1200;
 
-  const { geo, velocities } = useMemo(() => {
+  const { geo, velocities, windOffsets } = useMemo(() => {
     const positions = new Float32Array(count * 6);
     const vels = new Float32Array(count);
+    const wOffsets = new Float32Array(count);
+    
     for (let i = 0; i < count; i++) {
-      const x = (Math.random() - 0.5) * 15;
-      const z = 6 - Math.random() * 78;
-      const y = (Math.random() - 0.5) * 12;
-      const len = 0.5 + Math.random() * 0.8;
+      // Spread the rain out heavily, especially pushing it deep into the scene Z 
+      // so it matches the 2D background storm parallax
+      const x = (Math.random() - 0.5) * 45;
+      const z = 6 - Math.random() * 85;
+      const y = -2 + Math.random() * 20; // Falling from above the buildings down to the road
+      const len = 0.6 + Math.random() * 1.5;
       positions[i * 6] = x;
       positions[i * 6 + 1] = y;
       positions[i * 6 + 2] = z;
       positions[i * 6 + 3] = x;
       positions[i * 6 + 4] = y + len;
       positions[i * 6 + 5] = z;
-      vels[i] = 4.0 + Math.random() * 3.0;
+      vels[i] = 10.0 + Math.random() * 8.0; // Much faster, matching the 2D storm background
+      wOffsets[i] = Math.random() * Math.PI * 2;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    return { geo: g, velocities: vels };
+    return { geo: g, velocities: vels, windOffsets: wOffsets };
   }, []);
 
   useEffect(() => () => geo.dispose(), [geo]);
@@ -1169,12 +1176,34 @@ function CorridorRain() {
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
     const arr = geo.getAttribute("position").array as Float32Array;
+    
+    // Wind factor to match StormBackground's math
+    const elapsed = performance.now() / 1000;
+    const windBase = Math.sin(elapsed * 0.108) * 3.5;
+    
     for (let i = 0; i < count; i++) {
+      // Y fall
       arr[i * 6 + 1] -= velocities[i] * dt;
       arr[i * 6 + 4] -= velocities[i] * dt;
-      if (arr[i * 6 + 4] < -6) {
-        arr[i * 6 + 1] += 12;
-        arr[i * 6 + 4] += 12;
+      
+      // X wind drift
+      const wind = windBase + Math.sin(elapsed * 0.31 + windOffsets[i]) * 0.5;
+      const drift = wind * (0.3 + velocities[i] * 0.045) * dt;
+      arr[i * 6] += drift;
+      arr[i * 6 + 3] += drift;
+      
+      // Slant the top vertex (index 3,4,5) slightly back to show wind angle 
+      arr[i * 6 + 3] = arr[i * 6] + (wind * 0.15); 
+      
+      if (arr[i * 6 + 4] < -3) {
+        // Reset to top
+        arr[i * 6 + 1] += 25;
+        arr[i * 6 + 4] += 25;
+        // Keep them constrained so they don't blow away entirely
+        if (arr[i * 6] > 25 || arr[i * 6] < -25) {
+            arr[i * 6] = (Math.random() - 0.5) * 45;
+            arr[i * 6 + 3] = arr[i * 6] + (wind * 0.15);
+        }
       }
     }
     geo.getAttribute("position").needsUpdate = true;
@@ -1183,9 +1212,9 @@ function CorridorRain() {
   return (
     <lineSegments ref={ref} geometry={geo} frustumCulled={false}>
       <lineBasicMaterial
-        color="#9fc6ff"
+        color="#96beeb" // Exact color from StormBackground.tsx
         transparent
-        opacity={0.35}
+        opacity={0.3} // Slightly transparent to blend into fog
         blending={THREE.AdditiveBlending}
         depthWrite={false}
       />
