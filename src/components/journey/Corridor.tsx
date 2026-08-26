@@ -476,54 +476,26 @@ function HtmlSection({
   const fit = useFitScale(PAINTING_W, PAINTING_H, FOCUS_DIST);
   const group = useRef<THREE.Group>(null);
   
-  const outerRef = useRef<HTMLDivElement>(null);
-  const innerRef = useRef<HTMLDivElement>(null);
-  
   const frameMat = useRef<THREE.MeshStandardMaterial>(null);
   const glowMat = useRef<THREE.MeshBasicMaterial>(null);
+  const divRef = useRef<HTMLDivElement>(null);
   
-  const { size, camera } = useThree();
-
-  // Pick a base resolution for the UI to render at before scaling.
-  const targetW = size.width < 768 ? 400 : 1024;
-  const targetH = targetW * (PAINTING_H / PAINTING_W);
-
-  useFrame(() => {
-    const cam = camera as THREE.PerspectiveCamera;
-    const op = layerOpacity(cam.position.z, z);
+  useFrame(({ camera }, delta) => {
+    const dt = Math.min(delta, 0.05);
+    const op = layerOpacity(camera.position.z, z);
     
     if (frameMat.current) frameMat.current.opacity = op;
     if (glowMat.current) glowMat.current.opacity = (focused ? 0.3 : 0.1) * op;
     
     if (group.current) {
-      group.current.scale.setScalar(fit);
-      group.current.position.x = (cam.position.x || 0) * 0.06;
+      // Re-apply the EXACT same fit and parallax as the painting meshes!
+      group.current.scale.lerp(new THREE.Vector3(fit, fit, fit), Math.min(1, dt * 8));
+      group.current.position.x = (camera.position.x || 0) * 0.06;
     }
-    
-    if (outerRef.current && innerRef.current) {
-      if (op < 0.01) {
-        outerRef.current.style.opacity = '0';
-        outerRef.current.style.pointerEvents = 'none';
-        return;
-      }
-      
-      // Calculate exact pixel dimensions of the 3D frame on the 2D screen
-      const dist = Math.abs(cam.position.z - z);
-      const safeDist = Math.max(dist, 0.1);
-      
-      const fovRad = THREE.MathUtils.degToRad(cam.fov / 2);
-      const visible_height = 2 * safeDist * Math.tan(fovRad);
-      
-      const pxH = (PAINTING_H / visible_height) * size.height * fit;
-      const pxW = (PAINTING_W / visible_height) * size.height * fit;
-      
-      outerRef.current.style.width = `${pxW}px`;
-      outerRef.current.style.height = `${pxH}px`;
-      outerRef.current.style.opacity = op.toString();
-      outerRef.current.style.pointerEvents = focused ? "auto" : "none";
-      
-      const scale = pxW / targetW;
-      innerRef.current.style.transform = `scale(${scale})`;
+
+    if (divRef.current) {
+        divRef.current.style.opacity = op.toString();
+        divRef.current.style.pointerEvents = focused ? "auto" : "none";
     }
   });
 
@@ -555,26 +527,27 @@ function HtmlSection({
         />
       </mesh>
       
-      {/* HTML Content — perfectly tracking 2D overlay avoiding all CSS3D browser bugs */}
-      <Html center zIndexRange={[100, 0]}>
+      {/* HTML Content */}
+      <Html 
+        transform 
+        position={[0, 0, 0.012]} 
+        scale={PAINTING_W / 1200}
+        zIndexRange={[100, 0]} 
+        center
+      >
         <div 
-          ref={outerRef} 
-          className="relative overflow-hidden bg-[#04060d] text-white flex items-start justify-center rounded-sm"
-          style={{ opacity: 0 }}
+          ref={divRef}
+          className="bg-[#04060d] text-white custom-scrollbar overflow-x-hidden overflow-y-auto"
+          style={{ width: 1200, height: 1200 * (PAINTING_H / PAINTING_W), opacity: 0 }}
         >
-          <div 
-            ref={innerRef}
-            className="absolute top-0 left-0 origin-top-left overflow-y-auto overflow-x-hidden custom-scrollbar"
-            style={{ width: targetW, height: targetH }}
-          >
-            {children}
+          <div className="w-full min-h-full flex flex-col items-center justify-start p-4 md:p-8">
+             {children}
           </div>
         </div>
       </Html>
     </group>
   );
 }
-
 
 // ── Custom GLTF Building Loader ─────────────────────────────────────────────
 // If you download a high quality building from Sketchfab or KitBash3D, 
