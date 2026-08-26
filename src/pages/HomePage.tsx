@@ -83,7 +83,7 @@ export default function HomePage({ lang }: HomePageProps) {
       <span id="top" aria-hidden className="absolute left-0 top-0 h-px w-px" />
 
       {journey ? (
-        /* ═══ THE CITY OF TEMPLATES ═══
+        /* ═══ THE 3D JOURNEY — P → ring → dive → gallery walk ═══
            Wrapped so a WebGL failure degrades to the classic gallery
            instead of unmounting the page. Losing the walk is
            acceptable; losing the site is not. */
@@ -196,7 +196,11 @@ export default function HomePage({ lang }: HomePageProps) {
         </section>
       )}
 
-      {/* ═══ gallery whisper — transitions the walk into the content ═══ */}
+      {/* ═══ gallery whisper ═══
+           Classic layout only. In the hallway the walk runs straight
+           through to the contact panel, so a marquee here would
+           interrupt it with a strip of ordinary page. */}
+      {!journey && (
       <div dir="ltr" className="relative overflow-hidden border-y border-white/5 py-4" aria-hidden>
         <div className="marquee flex w-max items-center gap-10 whitespace-nowrap">
           {[...TEMPLATES, ...TEMPLATES].map((tpl, i) => (
@@ -209,15 +213,16 @@ export default function HomePage({ lang }: HomePageProps) {
           ))}
         </div>
       </div>
+      )}
 
-      {/* ═══ sections ═══ */}
-      {journey ? (
-        <>
-          <TrustStats lang={lang} />
-          <ProcessTimeline lang={lang} />
-          <ContactSection lang={lang} />
-        </>
-      ) : (
+      {/* ═══ sections ═══
+           In the hallway, Trust / Process / Contact are three more
+           stations inside the corridor (SectionPanels.tsx), so the whole
+           site is one continuous walk. Rendering them here as well would
+           duplicate every one of them below the canvas.
+
+           The classic layout still gets them as ordinary sections. */}
+      {!journey && (
         <>
           <TemplatesUniverse lang={lang} />
           <TrustStats lang={lang} />

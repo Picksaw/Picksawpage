@@ -92,10 +92,23 @@ check("preview modal offers the direct link", /href=\{item\.url\}/.test(readFile
 say("\nRENDER MODES");
 check("journey mode mounts the city", /<Journey lang=\{lang\} \/>/.test(home));
 check("fallback mode keeps the classic grid", /<TemplatesUniverse lang=\{lang\} \/>/.test(home));
-for (const section of ["TrustStats", "ProcessTimeline", "ContactSection"]) {
+/**
+ * Trust / Process / Contact are corridor stations now, so the DOM
+ * copies exist only in the classic layout. Exactly one occurrence —
+ * two would mean the hallway renders them and the page renders them
+ * again underneath.
+ */
+const panels = readFileSync("src/components/journey/SectionPanels.tsx", "utf8");
+for (const [section, kind] of [
+  ["TrustStats", "trust"],
+  ["ProcessTimeline", "process"],
+  ["ContactSection", "contact"],
+]) {
   const count = [...home.matchAll(new RegExp(`<${section} lang=\\{lang\\} \\/>`, "g"))].length;
-  check(`${section} renders in both modes`, count >= 2, `${count} occurrences`);
+  check(`${section}: exactly one DOM copy (classic only)`, count === 1, `${count} occurrences`);
+  check(`${section}: has a hallway station`, new RegExp(`kind="${kind}"`).test(panels));
 }
+check("the DOM copies are behind the !journey gate", /\{!journey && \(/.test(home));
 check("fallback is used when WebGL is absent", /hasWebGL\(\)/.test(home));
 
 // ── external links ────────────────────────────────────────────────────────
@@ -123,8 +136,8 @@ const j = readFileSync("src/components/journey/Journey.tsx", "utf8");
 check("canvas is removed at the end of the walk", /visibility: faded \? "hidden" : "visible"/.test(j));
 check("canvas stops rendering when hidden", /frameloop=\{faded \? "never" : "always"\}/.test(j));
 check("pointer events released when faded", /pointerEvents: faded \? "none" : undefined/.test(j));
-check("skip control always available", /skipCinematic/.test(j));
-check("keyboard End jumps to the finale", /case "End"/.test(j));
+check("the walk hands the page back", /setFaded/.test(j));
+check("the fade releases the canvas", /faded \? "none" : undefined/.test(j));
 check("modal closes on Escape", /e\.key === "Escape"/.test(readFileSync("src/components/PreviewModal.tsx", "utf8")));
 check("modal restores scroll", /getLenis\(\)\?\.start\(\)/.test(readFileSync("src/components/PreviewModal.tsx", "utf8")));
 

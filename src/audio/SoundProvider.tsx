@@ -31,28 +31,13 @@ export function SoundProvider({ children }: { children: ReactNode }) {
 
   // Bridge global storm events into the audio engine.
   useEffect(() => {
-    const offBolt = onLightning(() => {
-      /* the city schedules its own thunder with a real acoustic delay */
-    });
+    // The 2D storm canvas fires this on every strike; it is the only
+    // thing scheduling thunder now that the city is gone.
+    const offBolt = onLightning((intensity) => soundscape.thunder(intensity));
     const offLevel = onStormLevel((level) => soundscape.setStormLevel(level));
-    // template portals announce themselves as you reach them
-    const onPortal = (e: Event) => {
-      const detail = (e as CustomEvent<{ enter?: boolean }>).detail;
-      soundscape.portalTone(detail?.enter !== false);
-    };
-    window.addEventListener("picksaw:portal", onPortal);
-    // Lightning dispatches its thunder separately, delayed by the real
-    // travel time of sound — so the crack arrives after the flash.
-    const onThunder = (e: Event) => {
-      const d = (e as CustomEvent<{ power?: number }>).detail;
-      soundscape.thunder(d?.power ?? 0.6);
-    };
-    window.addEventListener("picksaw:thunder", onThunder);
     return () => {
       offBolt();
       offLevel();
-      window.removeEventListener("picksaw:portal", onPortal);
-      window.removeEventListener("picksaw:thunder", onThunder);
     };
   }, []);
 
