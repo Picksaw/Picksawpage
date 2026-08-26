@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { SITE_TEXTS, type Lang } from "../config/siteTexts";
-import { TEMPLATES } from "../config/templatesConfig";
 import Journey from "../components/journey/Journey";
 import Logo3D from "../components/Logo3D";
 import MagneticButton from "../components/ui/MagneticButton";
@@ -22,12 +21,19 @@ function KineticTitle({ text, delay = 0 }: { text: string; delay?: number }) {
   return (
     <span className="inline-block">
       {words.map((w, i) => (
-        <span key={`${w}-${i}`} className="inline-block overflow-hidden pb-1 align-bottom">
+        <span
+          key={`${w}-${i}`}
+          className="inline-block overflow-hidden pb-1 align-bottom"
+        >
           <motion.span
             className="inline-block"
             initial={{ y: "110%", opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: delay + i * 0.09, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            transition={{
+              delay: delay + i * 0.09,
+              duration: 0.7,
+              ease: [0.22, 1, 0.36, 1],
+            }}
           >
             {w}
             {i < words.length - 1 ? "\u00A0" : ""}
@@ -43,10 +49,7 @@ export default function HomePage({ lang }: HomePageProps) {
 
   // The 3D journey needs WebGL + full motion; everyone else gets the
   // guaranteed classic layout (identical content, same modal).
-  const journey = useMemo(
-    () => hasWebGL() && !prefersReducedMotion(),
-    []
-  );
+  const journey = useMemo(() => hasWebGL() && !prefersReducedMotion(), []);
 
   const heroRef = useRef<HTMLElement>(null);
   const [gyro, setGyro] = useState({ x: 0, y: 0 });
@@ -119,8 +122,18 @@ export default function HomePage({ lang }: HomePageProps) {
               >
                 <MagneticButton onClick={() => scrollToTarget("#templates")}>
                   {t.heroCta}
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" />
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path
+                      d="M19 9l-7 7-7-7"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                 </MagneticButton>
                 <MagneticButton variant="ghost" href="#/feed">
@@ -159,28 +172,8 @@ export default function HomePage({ lang }: HomePageProps) {
         </section>
       )}
 
-      {/* ═══ gallery whisper — transitions the walk into the content ═══ */}
-      <div dir="ltr" className="relative overflow-hidden border-y border-white/5 py-4" aria-hidden>
-        <div className="marquee flex w-max items-center gap-10 whitespace-nowrap">
-          {[...TEMPLATES, ...TEMPLATES].map((tpl, i) => (
-            <span key={`${tpl.id}-${i}`} className="flex items-center gap-10">
-              <span className="text-sm font-black uppercase tracking-[0.3em] text-white/10">
-                {tpl.name.en}
-              </span>
-              <span className="h-1 w-1 rounded-full bg-electric/40" />
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* ═══ sections ═══ */}
-      {journey ? (
-        <>
-          <TrustStats lang={lang} />
-          <ProcessTimeline lang={lang} />
-          <ContactSection lang={lang} />
-        </>
-      ) : (
+      {/* Journey is now the entire website */}
+      {!journey && (
         <>
           <TemplatesUniverse lang={lang} />
           <TrustStats lang={lang} />

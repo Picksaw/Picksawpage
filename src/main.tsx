@@ -1,4 +1,12 @@
-import { StrictMode } from "react";
+
+  const originalError = console.error;
+  console.error = function(...args) {
+      if (args[0] && typeof args[0] === 'string' && args[0].includes('THREE.WebGLProgram')) {
+          fetch('/log', { method: 'POST', body: args[0] }).catch(()=>{});
+      }
+      originalError.apply(console, args);
+  };
+  import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 import "@fontsource-variable/sora";

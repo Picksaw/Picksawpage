@@ -5,6 +5,7 @@ import { TEMPLATES, type TemplateItem } from "../config/templatesConfig";
 import { TEMPLATE_IMAGE_MAP } from "../config/templateImages";
 import Reveal from "./Reveal";
 import TiltCard from "./ui/TiltCard";
+import ElectricBorder from "./ui/ElectricBorder";
 import PreviewModal from "./PreviewModal";
 import { useSound } from "../audio/SoundProvider";
 import { cn } from "../utils/cn";
@@ -58,6 +59,7 @@ function TemplateCard({
   const { blip } = useSound();
   const [hoverTimer, setHoverTimer] = useState<number | null>(null);
   const [live, setLive] = useState(false);
+  const [hot, setHot] = useState(false);
 
   const startLive = () => {
     if (hoverTimer !== null) return;
@@ -75,6 +77,7 @@ function TemplateCard({
 
   return (
     <TiltCard as="article" maxTilt={8} className="h-full rounded-3xl">
+      <ElectricBorder active={hot} />
       <button
         type="button"
         onClick={() => {
@@ -82,12 +85,22 @@ function TemplateCard({
           onOpen(item);
         }}
         onMouseEnter={() => {
+          setHot(true);
           startLive();
           blip("hover");
         }}
-        onMouseLeave={stopLive}
-        onFocus={startLive}
-        onBlur={stopLive}
+        onMouseLeave={() => {
+          setHot(false);
+          stopLive();
+        }}
+        onFocus={() => {
+          setHot(true);
+          startLive();
+        }}
+        onBlur={() => {
+          setHot(false);
+          stopLive();
+        }}
         aria-label={`${item.name[lang] ?? item.name.en} — ${t.openLiveLabel}`}
         className="glass bolt-lit group relative block h-full w-full overflow-hidden rounded-3xl text-start shadow-2xl shadow-black/40"
       >
