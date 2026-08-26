@@ -40,7 +40,7 @@ export default function Journey({ lang }: { lang: Lang }) {
   const progressRef = useRef(0);
 
   const [focusedIdx, setFocusedIdx] = useState(-1);
-  const [faded, setFaded] = useState(false);
+  
   const [selected, setSelected] = useState<TemplateItem | null>(null);
   /** 'p' while framing the P, 'headline' on the text layer, then 'gallery'.
    *  State-driven (not transform-driven) so station UI can never linger. */
@@ -57,8 +57,7 @@ export default function Journey({ lang }: { lang: Lang }) {
     setFocusedIdx((prev) => (prev === idx ? prev : idx));
     // the walk ends → hand the page back to normal sections
     // (early enough that no painting can catch clicks near the end)
-    const endFaded = v > 0.93;
-    setFaded((prev) => (prev === endFaded ? prev : endFaded));
+    // Journey never fades out now because it is the entire website
     // station UI phases: u<0.6 → P, then headline, then gallery (solo)
     const u = v * (stations.length - 1);
     const ph = u < 0.6 ? "p" : u < 1.45 ? "headline" : "gallery";
@@ -101,17 +100,17 @@ export default function Journey({ lang }: { lang: Lang }) {
       {/* the 3D world */}
       <div
         className={`fixed inset-0 z-[2] transition-opacity duration-700 ${
-          faded ? "pointer-events-none opacity-0" : "opacity-100"
+          false ? "pointer-events-none opacity-0" : "opacity-100"
         }`}
         style={{
-          pointerEvents: faded ? "none" : undefined,
-          visibility: faded ? "hidden" : "visible", // triple lock — can never catch a click
+          pointerEvents: false ? "none" : undefined,
+          visibility: false ? "hidden" : "visible", // triple lock — can never catch a click
         }}
-        aria-hidden={faded}
+        aria-hidden={false}
       >
         <Canvas
           dpr={[1, 1.75]}
-          frameloop={faded ? "never" : "always"}
+          frameloop={false ? "never" : "always"}
           camera={{
             position: [0, 0, stations[0]],
             // portrait phones need a wider lens or the city never enters
@@ -126,7 +125,7 @@ export default function Journey({ lang }: { lang: Lang }) {
             document.body.style.cursor = "";
           }}
         >
-          <fog attach="fog" args={["#06080f", 6, 28]} />
+          <fog attach="fog" args={["#06080f", 12, 45]} />
           <ambientLight intensity={0.5} />
           <directionalLight position={[-3, 5, 4]} intensity={1.4} color="#eaf6ff" />
           <pointLight position={[2.6, -0.6, 3.4]} intensity={22} color="#4fd8ff" />
@@ -144,7 +143,7 @@ export default function Journey({ lang }: { lang: Lang }) {
 
       {/* ── P layer UI — just the scroll invitation ── */}
       <AnimatePresence>
-        {phase === "p" && !faded && (
+        {phase === "p" &&  (
           <motion.div
             key="p-hint"
             initial={{ opacity: 0 }}
@@ -165,7 +164,7 @@ export default function Journey({ lang }: { lang: Lang }) {
       {/* ── headline layer UI — badge + CTAs live HERE (the layer after
              the P) and only here; the gallery never shows them ── */}
       <AnimatePresence>
-        {phase === "headline" && !faded && (
+        {phase === "headline" &&  (
           <motion.div
             key="headline-ui"
             initial={{ opacity: 0, y: 46 }}
@@ -204,7 +203,7 @@ export default function Journey({ lang }: { lang: Lang }) {
 
       {/* ── Layer: focus bar — the solo painting's action ── */}
       <AnimatePresence>
-        {focusedItem && !faded && !selected && (
+        {focusedItem &&  !selected && (
           <motion.div
             key="focus-bar"
             initial={{ opacity: 0, y: 30 }}

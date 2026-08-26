@@ -1,11 +1,26 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import {
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { TEMPLATES, type TemplateItem } from "../../config/templatesConfig";
 import { TEMPLATE_IMAGE_MAP } from "../../config/templateImages";
 import { SITE_TEXTS, type Lang } from "../../config/siteTexts";
+import { Html, useGLTF } from "@react-three/drei";
 import GroundFog from "./GroundFog";
-import { useJourneyElectricBorder, BORDER_OVERSCAN } from "./JourneyElectricBorder";
+import TrustStats from "../TrustStats";
+import ProcessTimeline from "../ProcessTimeline";
+import ContactSection from "../ContactSection";
+import { PuddleMaterial } from "./PuddleMaterial";
+import {
+  useJourneyElectricBorder,
+  BORDER_OVERSCAN,
+} from "./JourneyElectricBorder";
 
 /**
  * Corridor V2 — the neon city walk.
@@ -31,19 +46,24 @@ const FOCUS_DIST = 4.2;
 export const HEADLINE_Z = -13;
 export const paintingZ = (i: number) => -24 - i * 8;
 
+export const EXTRA_SECTIONS = 3;
+export const TOTAL_STATIONS = N + EXTRA_SECTIONS;
+
 export const stations: number[] = [
   4.6, // the P + ring
   HEADLINE_Z + FOCUS_DIST, // the headline layer
-  ...Array.from({ length: N }, (_, i) => paintingZ(i) + FOCUS_DIST),
-  paintingZ(N - 1) + 1.2, // exit — dissolves into the page (never clips through)
+  ...Array.from(
+    { length: TOTAL_STATIONS },
+    (_, i) => paintingZ(i) + FOCUS_DIST,
+  ),
 ];
 
 /** Painting index for the focus bar: -1 outside the gallery zone. */
 export function focusedIndex(progress: number): number {
   const u = progress * (stations.length - 1);
   const idx = Math.round(u) - 2;
-  if (u < 1.55 || u > stations.length - 1.4) return -1;
-  return Math.max(0, Math.min(N - 1, idx));
+  if (u < 1.55) return -1; // Never lose focus at the end of the corridor now
+  return Math.max(0, Math.min(TOTAL_STATIONS - 1, idx));
 }
 
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
@@ -103,13 +123,14 @@ function useFitScale(
   baseH: number,
   focusDist: number,
   maxWFrac = 0.94,
-  maxHFrac = 0.8
+  maxHFrac = 0.8,
 ): number {
   const { size, camera } = useThree();
   const [s, setS] = useState(1);
   useEffect(() => {
     const cam = camera as THREE.PerspectiveCamera;
-    const visH = 2 * focusDist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    const visH =
+      2 * focusDist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
     const visW = visH * (size.width / size.height);
     setS(Math.min((maxWFrac * visW) / baseW, (maxHFrac * visH) / baseH, 1.06));
   }, [size, camera, baseW, baseH, focusDist, maxWFrac, maxHFrac]);
@@ -117,7 +138,10 @@ function useFitScale(
 }
 
 /** Bake a painting texture: screenshot + caption strip, branded fallback. */
-function usePaintingTexture(item: TemplateItem, lang: string): THREE.CanvasTexture {
+function usePaintingTexture(
+  item: TemplateItem,
+  lang: string,
+): THREE.CanvasTexture {
   const [tex] = useState(() => {
     const c = document.createElement("canvas");
     c.width = 960;
@@ -137,7 +161,13 @@ function usePaintingTexture(item: TemplateItem, lang: string): THREE.CanvasTextu
         const iw = img.naturalWidth || 4;
         const ih = img.naturalHeight || 3;
         const scale = Math.max(W / iw, (H - CAP) / ih);
-        ctx.drawImage(img, (W - iw * scale) / 2, (H - CAP - ih * scale) / 2, iw * scale, ih * scale);
+        ctx.drawImage(
+          img,
+          (W - iw * scale) / 2,
+          (H - CAP - ih * scale) / 2,
+          iw * scale,
+          ih * scale,
+        );
       } else {
         const g = ctx.createLinearGradient(0, 0, W, H - CAP);
         g.addColorStop(0, "#0b1322");
@@ -173,7 +203,11 @@ function usePaintingTexture(item: TemplateItem, lang: string): THREE.CanvasTextu
       ctx.fillStyle = "#4fd8ff";
       ctx.font = "600 22px 'Sora Variable', sans-serif";
       ctx.textAlign = "right";
-      ctx.fillText(lang === "fa" ? "باز کردن ↗" : "OPEN ↗", W - 36, H - CAP / 2);
+      ctx.fillText(
+        lang === "fa" ? "باز کردن ↗" : "OPEN ↗",
+        W - 36,
+        H - CAP / 2,
+      );
 
       tex.tex.needsUpdate = true;
     };
@@ -183,7 +217,9 @@ function usePaintingTexture(item: TemplateItem, lang: string): THREE.CanvasTextu
     img.crossOrigin = "anonymous";
     img.onload = () => alive && draw(img);
     img.onerror = () => alive && draw(null);
-    img.src = TEMPLATE_IMAGE_MAP[item.imageKey] ?? `${import.meta.env.BASE_URL}images/${item.imageKey}.webp`;
+    img.src =
+      TEMPLATE_IMAGE_MAP[item.imageKey] ??
+      `${import.meta.env.BASE_URL}images/${item.imageKey}.webp`;
 
     return () => {
       alive = false;
@@ -308,14 +344,22 @@ function Painting({
         }
       >
         <planeGeometry args={[PAINTING_W, PAINTING_H]} />
-        <meshBasicMaterial map={map} toneMapped={false} transparent opacity={1} />
+        <meshBasicMaterial
+          map={map}
+          toneMapped={false}
+          transparent
+          opacity={1}
+        />
       </mesh>
       {/* electric lightning ring — the same painter that drives the DOM
           cards, uploaded as a shared animated texture. Additive so the
           bolt glows over the frame without a background. */}
       <mesh position={[0, 0, 0.022]}>
         <planeGeometry
-          args={[PAINTING_W * (1 + 2 * BORDER_OVERSCAN), PAINTING_H * (1 + 2 * BORDER_OVERSCAN)]}
+          args={[
+            PAINTING_W * (1 + 2 * BORDER_OVERSCAN),
+            PAINTING_H * (1 + 2 * BORDER_OVERSCAN),
+          ]}
         />
         <meshBasicMaterial
           ref={borderMat}
@@ -419,39 +463,591 @@ function HeadlineLayer({ lang }: { lang: Lang }) {
   );
 }
 
+function HtmlSection({
+  index,
+  focused,
+  children
+}: {
+  index: number;
+  focused: boolean;
+  children: React.ReactNode;
+}) {
+  const z = paintingZ(index);
+  const fit = useFitScale(PAINTING_W, PAINTING_H, FOCUS_DIST);
+  const group = useRef<THREE.Group>(null);
+  
+  const outerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  
+  const frameMat = useRef<THREE.MeshStandardMaterial>(null);
+  const glowMat = useRef<THREE.MeshBasicMaterial>(null);
+  
+  const { size, camera } = useThree();
+
+  // Pick a base resolution for the UI to render at before scaling.
+  const targetW = size.width < 768 ? 400 : 1024;
+  const targetH = targetW * (PAINTING_H / PAINTING_W);
+
+  useFrame(() => {
+    const cam = camera as THREE.PerspectiveCamera;
+    const op = layerOpacity(cam.position.z, z);
+    
+    if (frameMat.current) frameMat.current.opacity = op;
+    if (glowMat.current) glowMat.current.opacity = (focused ? 0.3 : 0.1) * op;
+    
+    if (group.current) {
+      group.current.scale.setScalar(fit);
+      group.current.position.x = (cam.position.x || 0) * 0.06;
+    }
+    
+    if (outerRef.current && innerRef.current) {
+      if (op < 0.01) {
+        outerRef.current.style.opacity = '0';
+        outerRef.current.style.pointerEvents = 'none';
+        return;
+      }
+      
+      // Calculate exact pixel dimensions of the 3D frame on the 2D screen
+      const dist = Math.abs(cam.position.z - z);
+      const safeDist = Math.max(dist, 0.1);
+      
+      const fovRad = THREE.MathUtils.degToRad(cam.fov / 2);
+      const visible_height = 2 * safeDist * Math.tan(fovRad);
+      
+      const pxH = (PAINTING_H / visible_height) * size.height * fit;
+      const pxW = (PAINTING_W / visible_height) * size.height * fit;
+      
+      outerRef.current.style.width = `${pxW}px`;
+      outerRef.current.style.height = `${pxH}px`;
+      outerRef.current.style.opacity = op.toString();
+      outerRef.current.style.pointerEvents = focused ? "auto" : "none";
+      
+      const scale = pxW / targetW;
+      innerRef.current.style.transform = `scale(${scale})`;
+    }
+  });
+
+  return (
+    <group ref={group} position={[0, 0, z]}>
+      {/* glow halo behind the frame */}
+      <mesh position={[0, 0, -0.09]}>
+        <planeGeometry args={[PAINTING_W + 0.55, PAINTING_H + 0.55]} />
+        <meshBasicMaterial
+          ref={glowMat}
+          color="#4fd8ff"
+          transparent
+          opacity={0.1}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          fog={false}
+        />
+      </mesh>
+      {/* dark frame */}
+      <mesh position={[0, 0, -0.05]}>
+        <boxGeometry args={[PAINTING_W + 0.16, PAINTING_H + 0.16, 0.09]} />
+        <meshStandardMaterial
+          ref={frameMat}
+          color="#11182a"
+          metalness={0.6}
+          roughness={0.5}
+          transparent
+          opacity={1}
+        />
+      </mesh>
+      
+      {/* HTML Content — perfectly tracking 2D overlay avoiding all CSS3D browser bugs */}
+      <Html center zIndexRange={[100, 0]}>
+        <div 
+          ref={outerRef} 
+          className="relative overflow-hidden bg-[#04060d] text-white flex items-start justify-center rounded-sm"
+          style={{ opacity: 0 }}
+        >
+          <div 
+            ref={innerRef}
+            className="absolute top-0 left-0 origin-top-left overflow-y-auto overflow-x-hidden custom-scrollbar"
+            style={{ width: targetW, height: targetH }}
+          >
+            {children}
+          </div>
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+
+// ── Custom GLTF Building Loader ─────────────────────────────────────────────
+// If you download a high quality building from Sketchfab or KitBash3D, 
+// place the .glb file in public/models/ and uncomment this component to use it.
+/*
+export function CustomBuilding({ url, position, rotation }: any) {
+  const { scene } = useGLTF(url);
+  // Clone it so you can use the same building multiple times
+  const clone = useMemo(() => scene.clone(), [scene]);
+  return <primitive object={clone} position={position} rotation={rotation} />;
+}
+*/
+
 // ── the city ───────────────────────────────────────────────────────────────
 
-/** Window textures — every single window lit, brightness varies. */
-function makeWindowTextures(): THREE.Texture[] {
-  const out: THREE.Texture[] = [];
-  for (let v = 0; v < 3; v++) {
-    const c = document.createElement("canvas");
-    c.width = 128;
-    c.height = 256;
-    const ctx = c.getContext("2d")!;
-    ctx.fillStyle = "#04060c";
-    ctx.fillRect(0, 0, 128, 256);
-    const cols = 5;
-    const rows = 12;
-    const cw = 128 / cols;
-    const ch = 256 / rows;
-    for (let x = 0; x < cols; x++) {
-      for (let y = 0; y < rows; y++) {
-        // 100% lit — brightness varies so the facade stays organic
-        const bright = 0.3 + Math.random() * 0.7;
-        const whiteBlue = Math.random() < 0.24;
-        ctx.fillStyle = whiteBlue
-          ? `rgba(${210 + bright * 45}, ${238 + bright * 17}, 255, ${0.65 + bright * 0.35})`
-          : `rgba(${90 + bright * 80}, ${195 + bright * 50}, 255, ${0.5 + bright * 0.5})`;
-        ctx.fillRect(x * cw + cw * 0.16, y * ch + ch * 0.22, cw * 0.62, ch * 0.45);
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+
+const scaleUV = (geo: THREE.BufferGeometry, u: number, v: number) => {
+  const uv = geo.getAttribute("uv") as THREE.BufferAttribute | undefined;
+  if (!uv) return;
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(i, uv.getX(i) * u, uv.getY(i) * v);
+  }
+  uv.needsUpdate = true;
+};
+
+function addRooftopProps(
+  group: THREE.Group,
+  w: number,
+  h: number,
+  d: number,
+  concreteMat: THREE.Material,
+  hasAntenna: boolean,
+) {
+  // wet concrete roof base
+  const roofGeo = new THREE.BoxGeometry(w - 0.05, 0.1, d - 0.05);
+  const roof = new THREE.Mesh(roofGeo, concreteMat);
+  roof.position.y = h + 0.05;
+  group.add(roof);
+
+  // AC Units
+  const acCount = Math.floor(Math.random() * 3) + 1;
+  const acGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+  const acMat = new THREE.MeshStandardMaterial({
+    color: "#222630",
+    roughness: 0.8,
+    metalness: 0.2,
+    fog: true,
+  });
+
+  for (let i = 0; i < acCount; i++) {
+    const ac = new THREE.Mesh(acGeo, acMat);
+    ac.position.set(
+      (Math.random() - 0.5) * (w - 0.8),
+      h + 0.1 + 0.15,
+      (Math.random() - 0.5) * (d - 0.8),
+    );
+    group.add(ac);
+  }
+
+  // Antenna
+  if (hasAntenna) {
+    const mastH = 1.0 + Math.random() * 1.5;
+    const mastGeo = new THREE.CylinderGeometry(0.015, 0.03, mastH, 8);
+    const mastMat = new THREE.MeshStandardMaterial({
+      color: "#111",
+      roughness: 0.5,
+      metalness: 0.8,
+      fog: true,
+    });
+    const mast = new THREE.Mesh(mastGeo, mastMat);
+    mast.position.set(
+      (Math.random() - 0.5) * (w - 0.8),
+      h + 0.1 + mastH / 2,
+      (Math.random() - 0.5) * (d - 0.8),
+    );
+    group.add(mast);
+
+    const tipGeo = new THREE.SphereGeometry(0.04, 8, 8);
+    const tipMat = new THREE.MeshBasicMaterial({
+      color: "#ff2a2a",
+      toneMapped: false,
+      fog: true,
+    });
+    const tip = new THREE.Mesh(tipGeo, tipMat);
+    tip.position.y = mastH / 2;
+    mast.add(tip);
+  }
+}
+
+function buildType1(
+  concreteMat: THREE.Material,
+  defaultGlassMat: THREE.Material,
+) {
+  const w = 2.4,
+    h = 8.0,
+    d = 2.4;
+  const group = new THREE.Group();
+
+  const coreGeo = new THREE.BoxGeometry(w - 0.2, h, d - 0.2);
+  scaleUV(coreGeo, 3, 10);
+  const core = new THREE.Mesh(coreGeo, defaultGlassMat);
+  core.userData.isGlass = true;
+  core.position.y = h / 2;
+  group.add(core);
+
+  const colGeo = new RoundedBoxGeometry(0.3, h, 0.3, 2, 0.05);
+  const positions = [
+    [-w / 2, -d / 2],
+    [w / 2, -d / 2],
+    [-w / 2, d / 2],
+    [w / 2, d / 2],
+    [0, -d / 2],
+    [0, d / 2],
+    [-w / 2, 0],
+    [w / 2, 0],
+  ];
+  for (const [px, pz] of positions) {
+    const col = new THREE.Mesh(colGeo, concreteMat);
+    col.position.set(px, h / 2, pz);
+    group.add(col);
+  }
+
+  const rimGeo = new RoundedBoxGeometry(w + 0.1, 0.4, d + 0.1, 2, 0.05);
+  const base = new THREE.Mesh(rimGeo, concreteMat);
+  base.position.y = 0.2;
+  group.add(base);
+
+  const crown = new THREE.Mesh(rimGeo, concreteMat);
+  crown.position.y = h;
+  group.add(crown);
+
+  addRooftopProps(group, w, h, d, concreteMat, true);
+  return { group, w, h, d };
+}
+
+function buildType2(
+  concreteMat: THREE.Material,
+  defaultGlassMat: THREE.Material,
+) {
+  const w = 3.2,
+    h = 5.5,
+    d = 3.2;
+  const group = new THREE.Group();
+
+  const addTier = (tw: number, th: number, td: number, yOffset: number) => {
+    const coreGeo = new THREE.BoxGeometry(tw - 0.2, th, td - 0.2);
+    scaleUV(coreGeo, 4, Math.floor(th));
+    const core = new THREE.Mesh(coreGeo, defaultGlassMat);
+    core.userData.isGlass = true;
+    core.position.y = yOffset + th / 2;
+    group.add(core);
+
+    const slabGeo = new RoundedBoxGeometry(tw + 0.1, 0.2, td + 0.1, 2, 0.04);
+    for (let sy = 0; sy <= th + 0.01; sy += 1.5) {
+      const slab = new THREE.Mesh(slabGeo, concreteMat);
+      slab.position.y = yOffset + sy;
+      group.add(slab);
+    }
+    const colGeo = new RoundedBoxGeometry(0.4, th, 0.4, 2, 0.05);
+    const corners = [
+      [-tw / 2, -td / 2],
+      [tw / 2, -td / 2],
+      [-tw / 2, td / 2],
+      [tw / 2, td / 2],
+    ];
+    for (const [px, pz] of corners) {
+      const col = new THREE.Mesh(colGeo, concreteMat);
+      col.position.set(px, yOffset + th / 2, pz);
+      group.add(col);
+    }
+  };
+
+  addTier(w, 3.0, d, 0);
+  addTier(w - 0.8, 2.5, d - 0.8, 3.0);
+
+  addRooftopProps(group, w - 0.8, h, d - 0.8, concreteMat, false);
+  return { group, w, h, d };
+}
+
+function buildType3(
+  concreteMat: THREE.Material,
+  defaultGlassMat: THREE.Material,
+) {
+  const w = 3.5,
+    h = 6.5,
+    d = 1.8;
+  const group = new THREE.Group();
+
+  const coreGeo = new THREE.BoxGeometry(w, h, d - 0.1);
+  scaleUV(coreGeo, 5, 8);
+  const core = new THREE.Mesh(coreGeo, defaultGlassMat);
+  core.userData.isGlass = true;
+  core.position.y = h / 2;
+  group.add(core);
+
+  const wallGeo = new RoundedBoxGeometry(0.4, h + 0.4, d + 0.2, 2, 0.05);
+  const wallL = new THREE.Mesh(wallGeo, concreteMat);
+  wallL.position.set(-w / 2, h / 2 + 0.2, 0);
+  group.add(wallL);
+
+  const wallR = new THREE.Mesh(wallGeo, concreteMat);
+  wallR.position.set(w / 2, h / 2 + 0.2, 0);
+  group.add(wallR);
+
+  const louverGeo = new THREE.BoxGeometry(w, 0.1, d + 0.05);
+  for (let sy = 1; sy < h; sy += 1.0) {
+    const louver = new THREE.Mesh(louverGeo, concreteMat);
+    louver.position.y = sy;
+    group.add(louver);
+  }
+
+  const roofGeo = new THREE.CylinderGeometry(
+    d / 2 + 0.1,
+    d / 2 + 0.1,
+    w + 0.2,
+    3,
+  );
+  const roof = new THREE.Mesh(roofGeo, concreteMat);
+  roof.rotation.z = Math.PI / 2;
+  roof.rotation.x = Math.PI / 2;
+  roof.position.y = h + 0.4;
+  group.add(roof);
+
+  addRooftopProps(group, w, h + 0.5, d, concreteMat, true);
+  return { group, w, h, d };
+}
+
+function buildType4(
+  concreteMat: THREE.Material,
+  defaultGlassMat: THREE.Material,
+) {
+  const w = 2.8,
+    h = 4.5,
+    d = 2.8;
+  const group = new THREE.Group();
+
+  const coreGeo = new THREE.BoxGeometry(w - 0.3, h, d - 0.3);
+  scaleUV(coreGeo, 3, 5);
+  const core = new THREE.Mesh(coreGeo, defaultGlassMat);
+  core.userData.isGlass = true;
+  core.position.y = h / 2;
+  group.add(core);
+
+  const hSlab = new RoundedBoxGeometry(w + 0.1, 0.2, d + 0.1, 2, 0.04);
+  for (let sy = 0; sy <= h; sy += 1.5) {
+    const slab = new THREE.Mesh(hSlab, concreteMat);
+    slab.position.y = sy;
+    group.add(slab);
+  }
+
+  const vColGeo = new RoundedBoxGeometry(0.2, h, 0.2, 2, 0.03);
+  for (let x = -w / 2; x <= w / 2 + 0.01; x += w / 3) {
+    for (const z of [-d / 2, d / 2]) {
+      const col = new THREE.Mesh(vColGeo, concreteMat);
+      col.position.set(x, h / 2, z);
+      group.add(col);
+    }
+  }
+  for (let z = -d / 2; z <= d / 2 + 0.01; z += d / 3) {
+    for (const x of [-w / 2, w / 2]) {
+      const col = new THREE.Mesh(vColGeo, concreteMat);
+      col.position.set(x, h / 2, z);
+      group.add(col);
+    }
+  }
+
+  addRooftopProps(group, w, h, d, concreteMat, false);
+  return { group, w, h, d };
+}
+
+function buildType5(
+  concreteMat: THREE.Material,
+  defaultGlassMat: THREE.Material,
+) {
+  const w = 2.4,
+    h = 7.0,
+    d = 1.4;
+  const group = new THREE.Group();
+
+  const buildTower = (tx: number) => {
+    const tw = 1.0;
+    const coreGeo = new THREE.BoxGeometry(tw - 0.1, h, d - 0.1);
+    scaleUV(coreGeo, 2, 8);
+    const core = new THREE.Mesh(coreGeo, defaultGlassMat);
+    core.userData.isGlass = true;
+    core.position.set(tx, h / 2, 0);
+    group.add(core);
+
+    const colGeo = new RoundedBoxGeometry(0.2, h + 0.2, 0.2, 2, 0.03);
+    for (const cx of [tx - tw / 2, tx + tw / 2]) {
+      for (const cz of [-d / 2, d / 2]) {
+        const col = new THREE.Mesh(colGeo, concreteMat);
+        col.position.set(cx, h / 2 + 0.1, cz);
+        group.add(col);
       }
     }
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.magFilter = THREE.NearestFilter;
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    out.push(tex);
+    const capGeo = new RoundedBoxGeometry(tw + 0.1, 0.2, d + 0.1, 2, 0.03);
+    const cap = new THREE.Mesh(capGeo, concreteMat);
+    cap.position.set(tx, h + 0.2, 0);
+    group.add(cap);
+    const base = new THREE.Mesh(capGeo, concreteMat);
+    base.position.set(tx, 0.1, 0);
+    group.add(base);
+
+    const mastH = 2.0;
+    const mast = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.015, 0.03, mastH, 8),
+      new THREE.MeshStandardMaterial({
+        color: "#111",
+        roughness: 0.5,
+        fog: true,
+      }),
+    );
+    mast.position.set(tx, h + 0.3 + mastH / 2, 0);
+    group.add(mast);
+
+    const tip = new THREE.Mesh(
+      new THREE.SphereGeometry(0.04, 8, 8),
+      new THREE.MeshBasicMaterial({
+        color: "#ff2a2a",
+        toneMapped: false,
+        fog: true,
+      }),
+    );
+    tip.position.y = mastH / 2;
+    mast.add(tip);
+  };
+
+  buildTower(-0.7);
+  buildTower(0.7);
+
+  const bridgeGeo = new RoundedBoxGeometry(0.6, 0.4, 0.6, 2, 0.04);
+  for (const by of [h * 0.4, h * 0.7]) {
+    const bridge = new THREE.Mesh(bridgeGeo, concreteMat);
+    bridge.position.set(0, by, 0);
+    group.add(bridge);
+  }
+
+  return { group, w, h, d };
+}
+
+/** Window textures — every single window lit, brightness varies. */
+
+interface WindowMaps {
+  map: THREE.Texture;
+  emissiveMap: THREE.Texture;
+  roughnessMap: THREE.Texture;
+  metalnessMap: THREE.Texture;
+}
+
+function makeWindowTextures(): WindowMaps[] {
+  const out: WindowMaps[] = [];
+  for (let v = 0; v < 3; v++) {
+    // Diffuse / Emissive Canvas
+    const c = document.createElement("canvas");
+    c.width = 512;
+    c.height = 1024;
+    const ctx = c.getContext("2d")!;
+    
+    // Roughness Canvas
+    const cRough = document.createElement("canvas");
+    cRough.width = 512;
+    cRough.height = 1024;
+    const ctxRough = cRough.getContext("2d")!;
+    
+    // Metalness Canvas
+    const cMetal = document.createElement("canvas");
+    cMetal.width = 512;
+    cMetal.height = 1024;
+    const ctxMetal = cMetal.getContext("2d")!;
+
+    // Base background (Building Frame / Wall)
+    ctx.fillStyle = "#0a0b10"; 
+    ctx.fillRect(0, 0, 512, 1024);
+    
+    // Frames are rough and non-metallic
+    ctxRough.fillStyle = "#e0e0e0"; // High roughness
+    ctxRough.fillRect(0, 0, 512, 1024);
+    
+    ctxMetal.fillStyle = "#333333"; // Low metalness
+    ctxMetal.fillRect(0, 0, 512, 1024);
+    
+    const cols = 8;
+    const rows = 16;
+    const cw = 512 / cols;
+    const ch = 1024 / rows;
+    
+    for (let x = 0; x < cols; x++) {
+      for (let y = 0; y < rows; y++) {
+        
+        const winX = x * cw + cw * 0.15;
+        const winY = y * ch + ch * 0.15;
+        const winW = cw * 0.7;
+        const winH = ch * 0.7;
+
+        // Glass is very smooth and highly metallic (like a mirror)
+        ctxRough.fillStyle = "#111111"; // Low roughness (shiny)
+        ctxRough.fillRect(winX, winY, winW, winH);
+        
+        ctxMetal.fillStyle = "#ffffff"; // High metalness (reflective)
+        ctxMetal.fillRect(winX, winY, winW, winH);
+
+        const rowProb = (y % 4 === 0) ? 0.7 : 0.25;
+        const isOn = Math.random() < rowProb;
+        
+        if (isOn) {
+          const bright = 0.4 + Math.random() * 0.6;
+          let r, g, b;
+          const type = Math.random();
+          if (type < 0.08) {
+            r = 255; g = 170 + bright * 50; b = 100;
+          } else if (type < 0.3) {
+            r = 220 + bright * 35; g = 240 + bright * 15; b = 255;
+          } else {
+            r = 80 + bright * 90; g = 190 + bright * 60; b = 255;
+          }
+
+          const grad = ctx.createLinearGradient(winX, winY, winX, winY + winH);
+          grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${0.9 + bright * 0.1})`);
+          grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, ${0.1 + bright * 0.2})`);
+
+          ctx.fillStyle = grad;
+          ctx.fillRect(winX, winY, winW, winH);
+          
+          ctx.fillStyle = "#010102";
+          const detail = Math.random();
+          if (detail < 0.3) {
+            const splitW = winW * 0.5;
+            ctx.fillRect(winX + splitW - 1.5, winY, 3, winH);
+            // frame details should be rough
+            ctxRough.fillStyle = "#e0e0e0";
+            ctxRough.fillRect(winX + splitW - 1.5, winY, 3, winH);
+            ctxMetal.fillStyle = "#333333";
+            ctxMetal.fillRect(winX + splitW - 1.5, winY, 3, winH);
+          } else if (detail < 0.6) {
+            const blindH = winH * (0.2 + Math.random() * 0.6);
+            ctx.fillRect(winX, winY, winW, blindH);
+            ctxRough.fillStyle = "#dddddd";
+            ctxRough.fillRect(winX, winY, winW, blindH);
+            ctxMetal.fillStyle = "#111111";
+            ctxMetal.fillRect(winX, winY, winW, blindH);
+          } else if (detail < 0.8) {
+            const deskH = winH * (0.2 + Math.random() * 0.3);
+            ctx.fillRect(winX, winY + winH - deskH, winW, deskH);
+            ctxRough.fillStyle = "#aaaaaa";
+            ctxRough.fillRect(winX, winY + winH - deskH, winW, deskH);
+            ctxMetal.fillStyle = "#222222";
+            ctxMetal.fillRect(winX, winY + winH - deskH, winW, deskH);
+          }
+        } else {
+          ctx.fillStyle = "#030408";
+          ctx.fillRect(winX, winY, winW, winH);
+        }
+      }
+    }
+
+    const createTex = (canvas: HTMLCanvasElement) => {
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.magFilter = THREE.LinearFilter;
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = 4;
+      return tex;
+    };
+
+    out.push({
+      map: createTex(c),
+      emissiveMap: createTex(c),
+      roughnessMap: createTex(cRough),
+      metalnessMap: createTex(cMetal),
+    });
   }
   return out;
 }
@@ -459,20 +1055,12 @@ function makeWindowTextures(): THREE.Texture[] {
 interface Building {
   x: number;
   z: number;
-  w: number;
-  h: number;
-  d: number;
+  typeIndex: number;
   tex: number;
-  tier: boolean; // smaller crown block on top
-  antenna: boolean; // mast + tip light
-  tintR: number; // slight facade tint variance
-  tintG: number;
-  uRep: number; // window grid density variation
-  vRep: number;
+  rotation: number;
 }
 
-/** Deterministic per-session city layout: blocks flanking the path. */
-function makeCity(isMobile: boolean): Building[] {
+function makeCity(): Building[] {
   const list: Building[] = [];
   let seed = 20260824;
   const rnd = () => {
@@ -480,39 +1068,22 @@ function makeCity(isMobile: boolean): Building[] {
     return seed / 2147483647;
   };
   const startZ = 8;
-  const endZ = paintingZ(N - 1) - 12;
-  // Mobile portrait screens have a very narrow horizontal FOV — the
-  // city must hug the walking path or towers never enter the frame
-  // before the fog swallows them.
-  // Tuned via frustum+fog simulation: exactly 5-6 lit towers visible at
-  // every gallery station on BOTH desktop and portrait phones.
-  const step = isMobile ? 4.0 : 4.5;
-  const nearX = isMobile ? 2.0 : 5.4;
-  const rowGap = isMobile ? 1.9 : 4.5;
+  const endZ = paintingZ(TOTAL_STATIONS - 1) - 12;
+  const step = 6.0;
+  const nearX = 4.0;
+  const rowGap = 4.5;
+
   for (let z = startZ; z > endZ; z -= step) {
     for (const side of [-1, 1]) {
       const rows = rnd() < 0.55 ? 2 : 1;
       for (let r = 0; r < rows; r++) {
-        const w = 1.6 + rnd() * 2.6;
-        const d = 1.6 + rnd() * 2.6;
-        const h = 2 + rnd() * 7.5;
-        const x = side * (nearX + r * rowGap + rnd() * 1.6);
-        const tall = h > 6.5;
-        // window grid follows the building's real proportions — every
-        // window is the same physical size, nothing stretched
+        const x = side * (nearX + r * rowGap + rnd() * 1.5);
         list.push({
-          x: x + (rnd() - 0.5) * 1.4,
-          z: z + (rnd() - 0.5) * step * 0.7,
-          w,
-          h,
-          d,
+          x: x + (rnd() - 0.5) * 1.0,
+          z: z + (rnd() - 0.5) * step * 0.4,
+          typeIndex: Math.floor(rnd() * 5),
           tex: Math.floor(rnd() * 3),
-          tier: tall || rnd() < 0.3,
-          antenna: tall && rnd() < 0.75,
-          tintR: 0.86 + rnd() * 0.14,
-          tintG: 0.92 + rnd() * 0.08,
-          uRep: Math.max(1, Math.round(w / 1.5)),
-          vRep: Math.max(1, Math.round(h / 2.6)),
+          rotation: Math.floor(rnd() * 4) * (Math.PI / 2),
         });
       }
     }
@@ -521,113 +1092,126 @@ function makeCity(isMobile: boolean): Building[] {
 }
 
 function City() {
-  const isMobile = useMemo(
-    () => window.matchMedia("(pointer: coarse)").matches,
-    []
-  );
-  const buildings = useMemo(() => makeCity(isMobile), [isMobile]);
+  const buildings = useMemo(() => makeCity(), []);
+
   const windowTexs = useMemo(() => makeWindowTextures(), []);
 
-  // build meshes imperatively — each building gets its OWN material so
-  // windows can be dimmed by distance (front rows bright, far fade).
+  const { concreteMat, windowMats, prototypes } = useMemo(() => {
+    const cMat = new THREE.MeshStandardMaterial({
+      color: "#0c0e12",
+      roughness: 0.12,
+      metalness: 0.4,
+      fog: true,
+    });
+
+    const wMats = windowTexs.map(
+      (tex) =>
+        new THREE.MeshStandardMaterial({
+          map: tex.map,
+          emissiveMap: tex.emissiveMap,
+          roughnessMap: tex.roughnessMap,
+          metalnessMap: tex.metalnessMap,
+          emissive: new THREE.Color(1.5, 1.5, 1.5),
+          emissiveIntensity: 1.4,
+          color: "#ffffff",
+          fog: true,
+        }),
+    );
+
+    const protos = [
+      buildType1(cMat, wMats[0]),
+      buildType2(cMat, wMats[0]),
+      buildType3(cMat, wMats[0]),
+      buildType4(cMat, wMats[0]),
+      buildType5(cMat, wMats[0]),
+    ];
+
+    return { concreteMat: cMat, windowMats: wMats, prototypes: protos };
+  }, [windowTexs]);
+
   const cityGroup = useMemo(() => {
     const g = new THREE.Group();
-    const scaleUV = (geo: THREE.BufferGeometry, u: number, v: number) => {
-      const uv = geo.getAttribute("uv") as THREE.BufferAttribute | undefined;
-      if (!uv) return;
-      for (let i = 0; i < uv.count; i++) {
-        uv.setXY(i, uv.getX(i) * u, uv.getY(i) * v);
-      }
-      uv.needsUpdate = true;
-    };
 
     for (const b of buildings) {
-      // per-building material (cloned map ref, own color for dim/tint)
-      // fog:true — the SCENE FOG decides which buildings show, exactly
-      // like the first version that worked: near rows visible, far
-      // towers swallowed by the mist. No runtime dimming needed.
-      const mat = new THREE.MeshBasicMaterial({
-        map: windowTexs[b.tex],
-        color: "#ffffff",
-        fog: true,
-      });
-      const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
-      scaleUV(geo, b.uRep, b.vRep); // varied window densities per facade
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(b.x, -2.9 + b.h / 2, b.z);
-      g.add(mesh);
+      const proto = prototypes[b.typeIndex];
+      const instance = proto.group.clone();
+      instance.position.set(b.x, -1.98, b.z);
+      instance.rotation.y = b.rotation;
 
-      const edgeMat = new THREE.LineBasicMaterial({
-        color: "#2f7bff",
-        transparent: true,
-        opacity: 0.45,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        fog: true,
-      });
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
-      edges.position.copy(mesh.position);
-      g.add(edges);
+      const chosenGlassMat = windowMats[b.tex];
+      const foundationGeo = new THREE.BoxGeometry(
+        proto.w - 0.2,
+        20,
+        proto.d - 0.2,
+      );
+      const foundation = new THREE.Mesh(foundationGeo, concreteMat);
+      foundation.position.set(0, -10, 0);
+      instance.add(foundation);
 
-      // crown tier — a second, smaller block on taller buildings
-      if (b.tier) {
-        const tw = b.w * 0.68;
-        const td = b.d * 0.68;
-        const th = b.h * 0.32;
-        const tGeo = new THREE.BoxGeometry(tw, th, td);
-        scaleUV(tGeo, Math.max(1, b.uRep - 1), 1);
-        const tMesh = new THREE.Mesh(tGeo, mat); // shares material → dims together
-        tMesh.position.set(b.x, -2.9 + b.h + th / 2, b.z);
-        g.add(tMesh);
-      }
-
-      // antenna mast + tip light
-      let tipMat: THREE.MeshBasicMaterial | undefined;
-      if (b.antenna) {
-        const mastH = 0.9 + Math.random() * 0.8;
-        const mast = new THREE.Mesh(
-          new THREE.BoxGeometry(0.045, mastH, 0.045),
-          new THREE.MeshBasicMaterial({ color: "#16233c", fog: true })
-        );
-        const topY = -2.9 + b.h + (b.tier ? b.h * 0.32 : 0);
-        mast.position.set(b.x, topY + mastH / 2, b.z);
-        g.add(mast);
-        tipMat = new THREE.MeshBasicMaterial({
-          color: "#9fe8ff",
-          fog: true,
-          toneMapped: false,
-        });
-        const tip = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), tipMat);
-        tip.position.set(b.x, topY + mastH + 0.05, b.z);
-        g.add(tip);
-      }
-
-    }
-    return g;
-  }, [buildings, windowTexs]);
-
-  useEffect(
-    () => () => {
-      cityGroup.traverse((o) => {
-        if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
-          o.geometry.dispose();
-          const m = o.material;
-          if (Array.isArray(m)) m.forEach((x) => x.dispose());
-          else m.dispose();
+      instance.traverse((obj) => {
+        if (obj instanceof THREE.Mesh && obj.userData.isGlass) {
+          obj.material = chosenGlassMat;
         }
       });
-      windowTexs.forEach((t) => t.dispose());
-    },
-    [cityGroup, windowTexs]
-  );
+      g.add(instance);
+    }
+    return g;
+  }, [buildings, prototypes, windowMats]);
+
+  useEffect(() => {
+    return () => {
+      // We only dispose materials and geometries created in useMemo
+      concreteMat.dispose();
+      windowMats.forEach((m) => m.dispose());
+      windowTexs.forEach((t) => { t.map.dispose(); t.emissiveMap.dispose(); t.roughnessMap.dispose(); t.metalnessMap.dispose(); });
+      prototypes.forEach((p) =>
+        p.group.traverse((o) => {
+          if (o instanceof THREE.Mesh) {
+            if (o.geometry) o.geometry.dispose();
+            if (
+              o.material &&
+              !windowMats.includes(o.material as any) &&
+              o.material !== concreteMat
+            ) {
+              // Dispose unique materials like AC or Antenna materials created inside buildType
+              (o.material as THREE.Material).dispose();
+            }
+          }
+        }),
+      );
+    };
+  }, [concreteMat, windowMats, windowTexs, prototypes]);
 
   return (
     <>
-      {/* ground */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2.92, -26]}>
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, -2.0, -26]}
+        scale={[1, 1, 1]}
+      >
         <planeGeometry args={[110, 150]} />
-        <meshBasicMaterial color="#04060d" />
+        <Suspense fallback={<meshBasicMaterial color="#04060d" />}>
+          <PuddleMaterial />
+        </Suspense>
       </mesh>
+
+      {/* Street level ambient neon reflections */}
+      {Array.from({ length: 25 }).map((_, i) => {
+        const z = 8 - i * 6.5;
+        const side = i % 2 === 0 ? 1 : -1;
+        const colors = ["#4fd8ff", "#9fe8ff", "#2a6cff", "#ffffff"];
+        const color = colors[i % colors.length];
+        return (
+          <pointLight
+            key={i}
+            position={[side * 4, -1.2, z]}
+            intensity={12}
+            color={color}
+            distance={25}
+          />
+        );
+      })}
+
       <primitive object={cityGroup} />
     </>
   );
@@ -635,51 +1219,56 @@ function City() {
 
 /** Depth rain inside the corridor. */
 function CorridorRain() {
-  const ref = useRef<THREE.Points>(null);
-  const count = 380;
+  const ref = useRef<THREE.LineSegments>(null);
+  const count = 400;
 
   const { geo, velocities } = useMemo(() => {
-    const positions = new Float32Array(count * 3);
+    const positions = new Float32Array(count * 6);
     const vels = new Float32Array(count);
     for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 15;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 12;
-      positions[i * 3 + 2] = 6 - Math.random() * 78;
-      vels[i] = 2.2 + Math.random() * 2.6;
+      const x = (Math.random() - 0.5) * 15;
+      const z = 6 - Math.random() * 78;
+      const y = (Math.random() - 0.5) * 12;
+      const len = 0.5 + Math.random() * 0.8;
+      positions[i * 6] = x;
+      positions[i * 6 + 1] = y;
+      positions[i * 6 + 2] = z;
+      positions[i * 6 + 3] = x;
+      positions[i * 6 + 4] = y + len;
+      positions[i * 6 + 5] = z;
+      vels[i] = 4.0 + Math.random() * 3.0;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     return { geo: g, velocities: vels };
-  }, [count]);
+  }, []);
 
   useEffect(() => () => geo.dispose(), [geo]);
 
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
-    const attr = ref.current?.geometry.getAttribute("position") as
-      | THREE.BufferAttribute
-      | undefined;
-    if (!attr) return;
-    const arr = attr.array as Float32Array;
+    const arr = geo.getAttribute("position").array as Float32Array;
     for (let i = 0; i < count; i++) {
-      arr[i * 3 + 1] -= velocities[i] * dt;
-      if (arr[i * 3 + 1] < -6) arr[i * 3 + 1] = 6;
+      arr[i * 6 + 1] -= velocities[i] * dt;
+      arr[i * 6 + 4] -= velocities[i] * dt;
+      if (arr[i * 6 + 4] < -6) {
+        arr[i * 6 + 1] += 12;
+        arr[i * 6 + 4] += 12;
+      }
     }
-    attr.needsUpdate = true;
+    geo.getAttribute("position").needsUpdate = true;
   });
 
   return (
-    <points ref={ref} geometry={geo} frustumCulled={false}>
-      <pointsMaterial
+    <lineSegments ref={ref} geometry={geo} frustumCulled={false}>
+      <lineBasicMaterial
         color="#9fc6ff"
-        size={0.045}
         transparent
-        opacity={0.38}
+        opacity={0.35}
         blending={THREE.AdditiveBlending}
         depthWrite={false}
-        sizeAttenuation
       />
-    </points>
+    </lineSegments>
   );
 }
 
@@ -715,6 +1304,15 @@ export function CorridorScene({
           hoveredIdxRef={border.hoveredIdxRef}
         />
       ))}
+      <HtmlSection index={N} focused={focusedIdx === N}>
+        <TrustStats lang={lang as Lang} />
+      </HtmlSection>
+      <HtmlSection index={N + 1} focused={focusedIdx === N + 1}>
+        <ProcessTimeline lang={lang as Lang} />
+      </HtmlSection>
+      <HtmlSection index={N + 2} focused={focusedIdx === N + 2}>
+        <ContactSection lang={lang as Lang} />
+      </HtmlSection>
     </>
   );
 }

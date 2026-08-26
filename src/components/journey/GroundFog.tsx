@@ -179,11 +179,11 @@ export default function GroundFog() {
       // out to the far walls — no gaps that reveal a "layer"
       const r = rnd();
       let x: number;
-      if (r < 0.42) x = (rnd() - 0.5) * 10; // across the walking path
-      else if (r < 0.78) x = (rnd() < 0.5 ? -1 : 1) * (5 + rnd() * 7); // building lines
-      else x = (rnd() < 0.5 ? -1 : 1) * (12 + rnd() * 5); // far edges
+      if (r < 0.08) x = (rnd() - 0.5) * 4; // very sparse on the path
+      else if (r < 0.78) x = (rnd() < 0.5 ? -1 : 1) * (4.5 + rnd() * 8.5); // building lines
+      else x = (rnd() < 0.5 ? -1 : 1) * (14 + rnd() * 5); // far edges
       pos[i * 3] = x;
-      pos[i * 3 + 1] = -3.35 + rnd() * 2.4; // ground-hugging, varied
+      pos[i * 3 + 1] = -2.6 + rnd() * 1.5; // ground-hugging, varied
       pos[i * 3 + 2] = 8 - rnd() * 88;
       sizes[i] = 3.2 + rnd() * 8.4; // BIG puffs — no tiny dots
       alphas[i] = 0.032 + rnd() * 0.056; // softer each, many overlap
