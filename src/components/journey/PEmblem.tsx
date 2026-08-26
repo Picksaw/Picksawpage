@@ -24,7 +24,6 @@ const STATION_DIST = 4.6;
 const RTT_SIZE = 512;
 const ARC_POINTS = 18;
 const BRANCH_POINTS = 8;
-const ARC_COUNT = 5;
 
 // ── card dimensions (world units) ──────────────────────────────────────
 const CARD_W = 2.4;
@@ -126,7 +125,7 @@ function drawCardFront(ctx: CanvasRenderingContext2D) {
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = "#eaffff";
   ctx.font = "800 84px 'Sora Variable', sans-serif";
-  ctx.fillText("PICKSAW", 72, 148);
+  ctx.fillText("AmirEhsan", 72, 148);
   ctx.fillStyle = "rgba(79,216,255,0.8)";
   ctx.font = "600 30px 'Sora Variable', sans-serif";
   ctx.fillText("W E B   T E M P L A T E   E N G I N E", 74, 196);
@@ -188,7 +187,7 @@ function drawCardFront(ctx: CanvasRenderingContext2D) {
     bx += barW + 4 + Math.random() * 10;
   }
   ctx.font = "600 24px 'Sora Variable', sans-serif";
-  ctx.fillText("PICKSAW.SITE — CARD Nº 001", 72, 1336);
+  ctx.fillText("AMIREHSAN — CARD Nº 001", 72, 1336);
   ctx.textAlign = "right";
   ctx.fillText("THE P", W - 72, 1336);
 }
@@ -224,7 +223,7 @@ function drawCardBack(ctx: CanvasRenderingContext2D) {
 
   ctx.font = "600 26px 'Sora Variable', sans-serif";
   ctx.fillStyle = "rgba(148,180,210,0.8)";
-  ctx.fillText("PICKSAW — GHOST CARD", W / 2, 1388);
+  ctx.fillText("AMIREHSAN — GHOST CARD", W / 2, 1388);
 }
 
 function makeRampTexture(): THREE.Texture {
@@ -521,18 +520,6 @@ void main() {
 /* ── strike ribbons (unchanged machinery, retargeted to the card) ────── */
 
 /** Pre-allocated camera-facing ribbon strip (n points → 2n vertices). */
-function makeRibbonGeo(n: number): THREE.BufferGeometry {
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 2 * 3), 3));
-  geo.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(n * 2 * 2), 2));
-  const idx: number[] = [];
-  for (let i = 0; i < n - 1; i++) {
-    const a = i * 2;
-    idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
-  }
-  geo.setIndex(idx);
-  return geo;
-}
 
 /** Write a jagged polyline into a ribbon geometry, facing the camera. */
 function updateRibbon(
@@ -589,24 +576,6 @@ interface ArcSlot {
   life: number;
 }
 
-function mkRibbon(tex: THREE.Texture, n: number, color: string, opacity: number): Ribbon {
-  const geo = makeRibbonGeo(n);
-  const mat = new THREE.MeshBasicMaterial({
-    map: tex,
-    color,
-    transparent: true,
-    opacity,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    toneMapped: false,
-    fog: false,
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.frustumCulled = false;
-  mesh.renderOrder = 6;
-  return { mesh, geo, mat };
-}
 
 /* ── the emblem ───────────────────────────────────────────────────────── */
 
@@ -622,6 +591,51 @@ export default function PEmblem() {
 
   const arcs = useRef<ArcSlot[]>([]);
   const charge = useRef(0.25);
+  
+  const isDragging = useRef(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+  const cardRot = useRef({ x: 0, y: 0 }); // Current literal rotation of the card
+  
+  const handlePointerOver = (e: any) => {
+    e.stopPropagation();
+    document.body.style.cursor = 'grab';
+  };
+  
+  const handlePointerOut = (e: any) => {
+    e.stopPropagation();
+    document.body.style.cursor = '';
+  };
+  
+  const handlePointerDown = (e: any) => {
+    document.body.style.cursor = 'grabbing';
+
+    e.stopPropagation();
+    // Only capture on the card
+    (e.target as Element)?.setPointerCapture?.(e.pointerId);
+    isDragging.current = true;
+    dragStart.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handlePointerMove = (e: any) => {
+    if (!isDragging.current) return;
+    e.stopPropagation();
+    
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    
+    // Convert drag pixels to rotation radians (arbitrary sensitivity)
+    cardRot.current.y += dx * 0.01;
+    cardRot.current.x += dy * 0.01;
+    
+    dragStart.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handlePointerUp = (e: any) => {
+    document.body.style.cursor = 'grab';
+    isDragging.current = false;
+    (e.target as Element)?.releasePointerCapture?.(e.pointerId);
+  };
+
   const ringFlash = useRef(0);
   const nextStrike = useRef(1.4);
   const clock = useRef(0);
@@ -903,11 +917,27 @@ export default function PEmblem() {
     const fEase = 1 - Math.pow(1 - f, 3);
 
     // ── float + cursor tilt ──
-    eased.current.x += (pointer.current.x - eased.current.x) * Math.min(1, dt * 4);
-    eased.current.y += (pointer.current.y - eased.current.y) * Math.min(1, dt * 4);
+    
+    if (isDragging.current) {
+      // Don't apply the global pointer easing if we're dragging the card
+    } else {
+      eased.current.x += (pointer.current.x - eased.current.x) * Math.min(1, dt * 4);
+      eased.current.y += (pointer.current.y - eased.current.y) * Math.min(1, dt * 4);
+    }
+  
     if (cardGroup.current) {
-      cardGroup.current.rotation.y = eased.current.x * 0.16 + (1 - fEase) * 0.55;
-      cardGroup.current.rotation.x = -eased.current.y * 0.1;
+      // If not dragging, smoothly return to front face + float
+      if (!isDragging.current) {
+        // Find nearest full rotation (0, 2pi, 4pi...) to snap back to the front
+        const targetY = Math.round(cardRot.current.y / (Math.PI * 2)) * Math.PI * 2;
+        const targetX = Math.round(cardRot.current.x / (Math.PI * 2)) * Math.PI * 2;
+        
+        cardRot.current.y += (targetY + eased.current.x * 0.16 + (1 - fEase) * 0.55 - cardRot.current.y) * Math.min(1, dt * 5);
+        cardRot.current.x += (targetX - eased.current.y * 0.1 - cardRot.current.x) * Math.min(1, dt * 5);
+      }
+      
+      cardGroup.current.rotation.y = cardRot.current.y;
+      cardGroup.current.rotation.x = cardRot.current.x;
       cardGroup.current.position.y = Math.sin(clock.current * 0.8) * 0.05;
       cardGroup.current.scale.setScalar(0.72 + 0.28 * fEase);
     }
@@ -994,7 +1024,17 @@ export default function PEmblem() {
         </mesh>
 
         {/* card back — holographic foil + the ghost window */}
-        <mesh position={[0, 0, -0.02]} rotation={[0, Math.PI, 0]} renderOrder={1}>
+        <mesh 
+          position={[0, 0, -0.02]} 
+          rotation={[0, Math.PI, 0]} 
+          renderOrder={1}
+          onPointerDown={handlePointerDown}
+          onPointerOver={handlePointerOver}
+          onPointerOut={handlePointerOut}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+        >
           <planeGeometry args={[CARD_W, CARD_H]} />
           <shaderMaterial
             ref={backMat}
@@ -1005,10 +1045,19 @@ export default function PEmblem() {
             depthWrite={false}
             side={THREE.DoubleSide}
           />
-        </mesh>
+        </mesh> 
 
         {/* card front */}
-        <mesh position={[0, 0, 0.03]} renderOrder={2}>
+        <mesh 
+          position={[0, 0, 0.03]} 
+          renderOrder={2}
+          onPointerDown={handlePointerDown}
+          onPointerOver={handlePointerOver}
+          onPointerOut={handlePointerOut}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+        >
           <planeGeometry args={[CARD_W, CARD_H]} />
           <shaderMaterial
             ref={frontMat}
@@ -1021,7 +1070,7 @@ export default function PEmblem() {
           />
         </mesh>
 
-        {/* the electric lightning border — crackles around the card */}
+        {/* The lightning border was removed as per request */}{false &&
         <mesh position={[0, 0, 0.05]} renderOrder={3}>
           <planeGeometry args={[CARD_SPAN_W, CARD_SPAN_H]} />
           <meshBasicMaterial
@@ -1035,71 +1084,14 @@ export default function PEmblem() {
             toneMapped={false}
             side={THREE.DoubleSide}
           />
-        </mesh>
+        </mesh>}
       </group>
 
       {/* ribbon bolts — built once, driven imperatively */}
-      <Arcs arcsRef={arcs} boltTex={boltTex} spriteTex={spriteTex} />
+      {/* Arcs removed */}
     </group>
   );
 }
 
 /** Arc pool: 5 slots — each a main bolt + branch (core+glow ribbons)
  *  with dual impact flashes. */
-function Arcs({
-  arcsRef,
-  boltTex,
-  spriteTex,
-}: {
-  arcsRef: React.RefObject<ArcSlot[]>;
-  boltTex: THREE.Texture;
-  spriteTex: THREE.Texture;
-}) {
-  const made = useRef(false);
-  const host = useRef<THREE.Group>(null);
-
-  useEffect(() => {
-    if (made.current || !host.current) return;
-    made.current = true;
-    const pool: ArcSlot[] = [];
-
-    const mkImpact = () => {
-      const m = new THREE.SpriteMaterial({
-        map: spriteTex,
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      const s = new THREE.Sprite(m);
-      s.scale.setScalar(0.4);
-      return s;
-    };
-
-    for (let i = 0; i < ARC_COUNT; i++) {
-      const core = mkRibbon(boltTex, ARC_POINTS, "#ffffff", 0);
-      const glow = mkRibbon(boltTex, ARC_POINTS, "#7fd8ff", 0);
-      const branch = mkRibbon(boltTex, BRANCH_POINTS, "#eaf8ff", 0);
-      const branchGlow = mkRibbon(boltTex, BRANCH_POINTS, "#7fd8ff", 0);
-      const impact = mkImpact();
-      const impact2 = mkImpact();
-      host.current.add(core.mesh, glow.mesh, branch.mesh, branchGlow.mesh, impact, impact2);
-      pool.push({ core, glow, branch, branchGlow, impact, impact2, life: 0 });
-    }
-    arcsRef.current = pool;
-
-    return () => {
-      for (const a of pool) {
-        for (const r of [a.core, a.glow, a.branch, a.branchGlow]) {
-          r.geo.dispose();
-          r.mat.dispose();
-        }
-        a.impact.material.dispose();
-        a.impact2.material.dispose();
-      }
-      arcsRef.current = [];
-    };
-  }, [arcsRef, boltTex, spriteTex]);
-
-  return <group ref={host} />;
-}
