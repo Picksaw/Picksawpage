@@ -466,7 +466,7 @@ function HeadlineLayer({ lang }: { lang: Lang }) {
 function HtmlSection({
   index,
   focused,
-  children
+  children,
 }: {
   index: number;
   focused: boolean;
@@ -475,27 +475,30 @@ function HtmlSection({
   const z = paintingZ(index);
   const fit = useFitScale(PAINTING_W, PAINTING_H, FOCUS_DIST);
   const group = useRef<THREE.Group>(null);
-  
+
   const frameMat = useRef<THREE.MeshStandardMaterial>(null);
   const glowMat = useRef<THREE.MeshBasicMaterial>(null);
   const divRef = useRef<HTMLDivElement>(null);
-  
+
   useFrame(({ camera }, delta) => {
     const dt = Math.min(delta, 0.05);
     const op = layerOpacity(camera.position.z, z);
-    
+
     if (frameMat.current) frameMat.current.opacity = op;
     if (glowMat.current) glowMat.current.opacity = (focused ? 0.3 : 0.1) * op;
-    
+
     if (group.current) {
       // Re-apply the EXACT same fit and parallax as the painting meshes!
-      group.current.scale.lerp(new THREE.Vector3(fit, fit, fit), Math.min(1, dt * 8));
+      group.current.scale.lerp(
+        new THREE.Vector3(fit, fit, fit),
+        Math.min(1, dt * 8),
+      );
       group.current.position.x = (camera.position.x || 0) * 0.06;
     }
 
     if (divRef.current) {
-        divRef.current.style.opacity = op.toString();
-        divRef.current.style.pointerEvents = focused ? "auto" : "none";
+      divRef.current.style.opacity = op.toString();
+      divRef.current.style.pointerEvents = focused ? "auto" : "none";
     }
   });
 
@@ -526,22 +529,26 @@ function HtmlSection({
           opacity={1}
         />
       </mesh>
-      
+
       {/* HTML Content */}
-      <Html 
-        transform 
-        position={[0, 0, 0.012]} 
+      <Html
+        transform
+        position={[0, 0, 0.012]}
         scale={PAINTING_W / 1200}
-        zIndexRange={[100, 0]} 
+        zIndexRange={[100, 0]}
         center
       >
-        <div 
+        <div
           ref={divRef}
           className="bg-[#04060d] text-white custom-scrollbar overflow-x-hidden overflow-y-auto"
-          style={{ width: 1200, height: 1200 * (PAINTING_H / PAINTING_W), opacity: 0 }}
+          style={{
+            width: 1200,
+            height: 1200 * (PAINTING_H / PAINTING_W),
+            opacity: 0,
+          }}
         >
           <div className="w-full min-h-full flex flex-col items-center justify-start p-4 md:p-8">
-             {children}
+            {children}
           </div>
         </div>
       </Html>
@@ -550,7 +557,7 @@ function HtmlSection({
 }
 
 // ── Custom GLTF Building Loader ─────────────────────────────────────────────
-// If you download a high quality building from Sketchfab or KitBash3D, 
+// If you download a high quality building from Sketchfab or KitBash3D,
 // place the .glb file in public/models/ and uncomment this component to use it.
 /*
 export function CustomBuilding({ url, position, rotation }: any) {
@@ -562,468 +569,6 @@ export function CustomBuilding({ url, position, rotation }: any) {
 */
 
 // ── the city ───────────────────────────────────────────────────────────────
-
-import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-
-const scaleUV = (geo: THREE.BufferGeometry, u: number, v: number) => {
-  const uv = geo.getAttribute("uv") as THREE.BufferAttribute | undefined;
-  if (!uv) return;
-  for (let i = 0; i < uv.count; i++) {
-    uv.setXY(i, uv.getX(i) * u, uv.getY(i) * v);
-  }
-  uv.needsUpdate = true;
-};
-
-function addRooftopProps(
-  group: THREE.Group,
-  w: number,
-  h: number,
-  d: number,
-  concreteMat: THREE.Material,
-  hasAntenna: boolean,
-) {
-  // wet concrete roof base
-  const roofGeo = new THREE.BoxGeometry(w - 0.05, 0.1, d - 0.05);
-  const roof = new THREE.Mesh(roofGeo, concreteMat);
-  roof.position.y = h + 0.05;
-  group.add(roof);
-
-  // AC Units
-  const acCount = Math.floor(Math.random() * 3) + 1;
-  const acGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-  const acMat = new THREE.MeshStandardMaterial({
-    color: "#222630",
-    roughness: 0.8,
-    metalness: 0.2,
-    fog: true,
-  });
-
-  for (let i = 0; i < acCount; i++) {
-    const ac = new THREE.Mesh(acGeo, acMat);
-    ac.position.set(
-      (Math.random() - 0.5) * (w - 0.8),
-      h + 0.1 + 0.15,
-      (Math.random() - 0.5) * (d - 0.8),
-    );
-    group.add(ac);
-  }
-
-  // Antenna
-  if (hasAntenna) {
-    const mastH = 1.0 + Math.random() * 1.5;
-    const mastGeo = new THREE.CylinderGeometry(0.015, 0.03, mastH, 8);
-    const mastMat = new THREE.MeshStandardMaterial({
-      color: "#111",
-      roughness: 0.5,
-      metalness: 0.8,
-      fog: true,
-    });
-    const mast = new THREE.Mesh(mastGeo, mastMat);
-    mast.position.set(
-      (Math.random() - 0.5) * (w - 0.8),
-      h + 0.1 + mastH / 2,
-      (Math.random() - 0.5) * (d - 0.8),
-    );
-    group.add(mast);
-
-    const tipGeo = new THREE.SphereGeometry(0.04, 8, 8);
-    const tipMat = new THREE.MeshBasicMaterial({
-      color: "#ff2a2a",
-      toneMapped: false,
-      fog: true,
-    });
-    const tip = new THREE.Mesh(tipGeo, tipMat);
-    tip.position.y = mastH / 2;
-    mast.add(tip);
-  }
-}
-
-function buildType1(
-  concreteMat: THREE.Material,
-  defaultGlassMat: THREE.Material,
-) {
-  const w = 2.4,
-    h = 8.0,
-    d = 2.4;
-  const group = new THREE.Group();
-
-  const coreGeo = new THREE.BoxGeometry(w - 0.2, h, d - 0.2);
-  scaleUV(coreGeo, 3, 10);
-  const core = new THREE.Mesh(coreGeo, defaultGlassMat);
-  core.userData.isGlass = true;
-  core.position.y = h / 2;
-  group.add(core);
-
-  const colGeo = new RoundedBoxGeometry(0.3, h, 0.3, 2, 0.05);
-  const positions = [
-    [-w / 2, -d / 2],
-    [w / 2, -d / 2],
-    [-w / 2, d / 2],
-    [w / 2, d / 2],
-    [0, -d / 2],
-    [0, d / 2],
-    [-w / 2, 0],
-    [w / 2, 0],
-  ];
-  for (const [px, pz] of positions) {
-    const col = new THREE.Mesh(colGeo, concreteMat);
-    col.position.set(px, h / 2, pz);
-    group.add(col);
-  }
-
-  const rimGeo = new RoundedBoxGeometry(w + 0.1, 0.4, d + 0.1, 2, 0.05);
-  const base = new THREE.Mesh(rimGeo, concreteMat);
-  base.position.y = 0.2;
-  group.add(base);
-
-  const crown = new THREE.Mesh(rimGeo, concreteMat);
-  crown.position.y = h;
-  group.add(crown);
-
-  addRooftopProps(group, w, h, d, concreteMat, true);
-  return { group, w, h, d };
-}
-
-function buildType2(
-  concreteMat: THREE.Material,
-  defaultGlassMat: THREE.Material,
-) {
-  const w = 3.2,
-    h = 5.5,
-    d = 3.2;
-  const group = new THREE.Group();
-
-  const addTier = (tw: number, th: number, td: number, yOffset: number) => {
-    const coreGeo = new THREE.BoxGeometry(tw - 0.2, th, td - 0.2);
-    scaleUV(coreGeo, 4, Math.floor(th));
-    const core = new THREE.Mesh(coreGeo, defaultGlassMat);
-    core.userData.isGlass = true;
-    core.position.y = yOffset + th / 2;
-    group.add(core);
-
-    const slabGeo = new RoundedBoxGeometry(tw + 0.1, 0.2, td + 0.1, 2, 0.04);
-    for (let sy = 0; sy <= th + 0.01; sy += 1.5) {
-      const slab = new THREE.Mesh(slabGeo, concreteMat);
-      slab.position.y = yOffset + sy;
-      group.add(slab);
-    }
-    const colGeo = new RoundedBoxGeometry(0.4, th, 0.4, 2, 0.05);
-    const corners = [
-      [-tw / 2, -td / 2],
-      [tw / 2, -td / 2],
-      [-tw / 2, td / 2],
-      [tw / 2, td / 2],
-    ];
-    for (const [px, pz] of corners) {
-      const col = new THREE.Mesh(colGeo, concreteMat);
-      col.position.set(px, yOffset + th / 2, pz);
-      group.add(col);
-    }
-  };
-
-  addTier(w, 3.0, d, 0);
-  addTier(w - 0.8, 2.5, d - 0.8, 3.0);
-
-  addRooftopProps(group, w - 0.8, h, d - 0.8, concreteMat, false);
-  return { group, w, h, d };
-}
-
-function buildType3(
-  concreteMat: THREE.Material,
-  defaultGlassMat: THREE.Material,
-) {
-  const w = 3.5,
-    h = 6.5,
-    d = 1.8;
-  const group = new THREE.Group();
-
-  const coreGeo = new THREE.BoxGeometry(w, h, d - 0.1);
-  scaleUV(coreGeo, 5, 8);
-  const core = new THREE.Mesh(coreGeo, defaultGlassMat);
-  core.userData.isGlass = true;
-  core.position.y = h / 2;
-  group.add(core);
-
-  const wallGeo = new RoundedBoxGeometry(0.4, h + 0.4, d + 0.2, 2, 0.05);
-  const wallL = new THREE.Mesh(wallGeo, concreteMat);
-  wallL.position.set(-w / 2, h / 2 + 0.2, 0);
-  group.add(wallL);
-
-  const wallR = new THREE.Mesh(wallGeo, concreteMat);
-  wallR.position.set(w / 2, h / 2 + 0.2, 0);
-  group.add(wallR);
-
-  const louverGeo = new THREE.BoxGeometry(w, 0.1, d + 0.05);
-  for (let sy = 1; sy < h; sy += 1.0) {
-    const louver = new THREE.Mesh(louverGeo, concreteMat);
-    louver.position.y = sy;
-    group.add(louver);
-  }
-
-  const roofGeo = new THREE.CylinderGeometry(
-    d / 2 + 0.1,
-    d / 2 + 0.1,
-    w + 0.2,
-    3,
-  );
-  const roof = new THREE.Mesh(roofGeo, concreteMat);
-  roof.rotation.z = Math.PI / 2;
-  roof.rotation.x = Math.PI / 2;
-  roof.position.y = h + 0.4;
-  group.add(roof);
-
-  addRooftopProps(group, w, h + 0.5, d, concreteMat, true);
-  return { group, w, h, d };
-}
-
-function buildType4(
-  concreteMat: THREE.Material,
-  defaultGlassMat: THREE.Material,
-) {
-  const w = 2.8,
-    h = 4.5,
-    d = 2.8;
-  const group = new THREE.Group();
-
-  const coreGeo = new THREE.BoxGeometry(w - 0.3, h, d - 0.3);
-  scaleUV(coreGeo, 3, 5);
-  const core = new THREE.Mesh(coreGeo, defaultGlassMat);
-  core.userData.isGlass = true;
-  core.position.y = h / 2;
-  group.add(core);
-
-  const hSlab = new RoundedBoxGeometry(w + 0.1, 0.2, d + 0.1, 2, 0.04);
-  for (let sy = 0; sy <= h; sy += 1.5) {
-    const slab = new THREE.Mesh(hSlab, concreteMat);
-    slab.position.y = sy;
-    group.add(slab);
-  }
-
-  const vColGeo = new RoundedBoxGeometry(0.2, h, 0.2, 2, 0.03);
-  for (let x = -w / 2; x <= w / 2 + 0.01; x += w / 3) {
-    for (const z of [-d / 2, d / 2]) {
-      const col = new THREE.Mesh(vColGeo, concreteMat);
-      col.position.set(x, h / 2, z);
-      group.add(col);
-    }
-  }
-  for (let z = -d / 2; z <= d / 2 + 0.01; z += d / 3) {
-    for (const x of [-w / 2, w / 2]) {
-      const col = new THREE.Mesh(vColGeo, concreteMat);
-      col.position.set(x, h / 2, z);
-      group.add(col);
-    }
-  }
-
-  addRooftopProps(group, w, h, d, concreteMat, false);
-  return { group, w, h, d };
-}
-
-function buildType5(
-  concreteMat: THREE.Material,
-  defaultGlassMat: THREE.Material,
-) {
-  const w = 2.4,
-    h = 7.0,
-    d = 1.4;
-  const group = new THREE.Group();
-
-  const buildTower = (tx: number) => {
-    const tw = 1.0;
-    const coreGeo = new THREE.BoxGeometry(tw - 0.1, h, d - 0.1);
-    scaleUV(coreGeo, 2, 8);
-    const core = new THREE.Mesh(coreGeo, defaultGlassMat);
-    core.userData.isGlass = true;
-    core.position.set(tx, h / 2, 0);
-    group.add(core);
-
-    const colGeo = new RoundedBoxGeometry(0.2, h + 0.2, 0.2, 2, 0.03);
-    for (const cx of [tx - tw / 2, tx + tw / 2]) {
-      for (const cz of [-d / 2, d / 2]) {
-        const col = new THREE.Mesh(colGeo, concreteMat);
-        col.position.set(cx, h / 2 + 0.1, cz);
-        group.add(col);
-      }
-    }
-    const capGeo = new RoundedBoxGeometry(tw + 0.1, 0.2, d + 0.1, 2, 0.03);
-    const cap = new THREE.Mesh(capGeo, concreteMat);
-    cap.position.set(tx, h + 0.2, 0);
-    group.add(cap);
-    const base = new THREE.Mesh(capGeo, concreteMat);
-    base.position.set(tx, 0.1, 0);
-    group.add(base);
-
-    const mastH = 2.0;
-    const mast = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.015, 0.03, mastH, 8),
-      new THREE.MeshStandardMaterial({
-        color: "#111",
-        roughness: 0.5,
-        fog: true,
-      }),
-    );
-    mast.position.set(tx, h + 0.3 + mastH / 2, 0);
-    group.add(mast);
-
-    const tip = new THREE.Mesh(
-      new THREE.SphereGeometry(0.04, 8, 8),
-      new THREE.MeshBasicMaterial({
-        color: "#ff2a2a",
-        toneMapped: false,
-        fog: true,
-      }),
-    );
-    tip.position.y = mastH / 2;
-    mast.add(tip);
-  };
-
-  buildTower(-0.7);
-  buildTower(0.7);
-
-  const bridgeGeo = new RoundedBoxGeometry(0.6, 0.4, 0.6, 2, 0.04);
-  for (const by of [h * 0.4, h * 0.7]) {
-    const bridge = new THREE.Mesh(bridgeGeo, concreteMat);
-    bridge.position.set(0, by, 0);
-    group.add(bridge);
-  }
-
-  return { group, w, h, d };
-}
-
-/** Window textures — every single window lit, brightness varies. */
-
-interface WindowMaps {
-  map: THREE.Texture;
-  emissiveMap: THREE.Texture;
-  roughnessMap: THREE.Texture;
-  metalnessMap: THREE.Texture;
-}
-
-function makeWindowTextures(): WindowMaps[] {
-  const out: WindowMaps[] = [];
-  for (let v = 0; v < 3; v++) {
-    // Diffuse / Emissive Canvas
-    const c = document.createElement("canvas");
-    c.width = 512;
-    c.height = 1024;
-    const ctx = c.getContext("2d")!;
-    
-    // Roughness Canvas
-    const cRough = document.createElement("canvas");
-    cRough.width = 512;
-    cRough.height = 1024;
-    const ctxRough = cRough.getContext("2d")!;
-    
-    // Metalness Canvas
-    const cMetal = document.createElement("canvas");
-    cMetal.width = 512;
-    cMetal.height = 1024;
-    const ctxMetal = cMetal.getContext("2d")!;
-
-    // Base background (Building Frame / Wall)
-    ctx.fillStyle = "#0a0b10"; 
-    ctx.fillRect(0, 0, 512, 1024);
-    
-    // Frames are rough and non-metallic
-    ctxRough.fillStyle = "#e0e0e0"; // High roughness
-    ctxRough.fillRect(0, 0, 512, 1024);
-    
-    ctxMetal.fillStyle = "#333333"; // Low metalness
-    ctxMetal.fillRect(0, 0, 512, 1024);
-    
-    const cols = 8;
-    const rows = 16;
-    const cw = 512 / cols;
-    const ch = 1024 / rows;
-    
-    for (let x = 0; x < cols; x++) {
-      for (let y = 0; y < rows; y++) {
-        
-        const winX = x * cw + cw * 0.15;
-        const winY = y * ch + ch * 0.15;
-        const winW = cw * 0.7;
-        const winH = ch * 0.7;
-
-        // Glass is very smooth and highly metallic (like a mirror)
-        ctxRough.fillStyle = "#111111"; // Low roughness (shiny)
-        ctxRough.fillRect(winX, winY, winW, winH);
-        
-        ctxMetal.fillStyle = "#ffffff"; // High metalness (reflective)
-        ctxMetal.fillRect(winX, winY, winW, winH);
-
-        const rowProb = (y % 4 === 0) ? 0.7 : 0.25;
-        const isOn = Math.random() < rowProb;
-        
-        if (isOn) {
-          const bright = 0.4 + Math.random() * 0.6;
-          let r, g, b;
-          const type = Math.random();
-          if (type < 0.08) {
-            r = 255; g = 170 + bright * 50; b = 100;
-          } else if (type < 0.3) {
-            r = 220 + bright * 35; g = 240 + bright * 15; b = 255;
-          } else {
-            r = 80 + bright * 90; g = 190 + bright * 60; b = 255;
-          }
-
-          const grad = ctx.createLinearGradient(winX, winY, winX, winY + winH);
-          grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${0.9 + bright * 0.1})`);
-          grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, ${0.1 + bright * 0.2})`);
-
-          ctx.fillStyle = grad;
-          ctx.fillRect(winX, winY, winW, winH);
-          
-          ctx.fillStyle = "#010102";
-          const detail = Math.random();
-          if (detail < 0.3) {
-            const splitW = winW * 0.5;
-            ctx.fillRect(winX + splitW - 1.5, winY, 3, winH);
-            // frame details should be rough
-            ctxRough.fillStyle = "#e0e0e0";
-            ctxRough.fillRect(winX + splitW - 1.5, winY, 3, winH);
-            ctxMetal.fillStyle = "#333333";
-            ctxMetal.fillRect(winX + splitW - 1.5, winY, 3, winH);
-          } else if (detail < 0.6) {
-            const blindH = winH * (0.2 + Math.random() * 0.6);
-            ctx.fillRect(winX, winY, winW, blindH);
-            ctxRough.fillStyle = "#dddddd";
-            ctxRough.fillRect(winX, winY, winW, blindH);
-            ctxMetal.fillStyle = "#111111";
-            ctxMetal.fillRect(winX, winY, winW, blindH);
-          } else if (detail < 0.8) {
-            const deskH = winH * (0.2 + Math.random() * 0.3);
-            ctx.fillRect(winX, winY + winH - deskH, winW, deskH);
-            ctxRough.fillStyle = "#aaaaaa";
-            ctxRough.fillRect(winX, winY + winH - deskH, winW, deskH);
-            ctxMetal.fillStyle = "#222222";
-            ctxMetal.fillRect(winX, winY + winH - deskH, winW, deskH);
-          }
-        } else {
-          ctx.fillStyle = "#030408";
-          ctx.fillRect(winX, winY, winW, winH);
-        }
-      }
-    }
-
-    const createTex = (canvas: HTMLCanvasElement) => {
-      const tex = new THREE.CanvasTexture(canvas);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.magFilter = THREE.LinearFilter;
-      tex.wrapS = THREE.RepeatWrapping;
-      tex.wrapT = THREE.RepeatWrapping;
-      tex.anisotropy = 4;
-      return tex;
-    };
-
-    out.push({
-      map: createTex(c),
-      emissiveMap: createTex(c),
-      roughnessMap: createTex(cRough),
-      metalnessMap: createTex(cMetal),
-    });
-  }
-  return out;
-}
 
 interface Building {
   x: number;
@@ -1054,8 +599,8 @@ function makeCity(): Building[] {
         list.push({
           x: x + (rnd() - 0.5) * 1.0,
           z: z + (rnd() - 0.5) * step * 0.4,
-          typeIndex: Math.floor(rnd() * 10),
-          tex: Math.floor(rnd() * 3),
+          typeIndex: Math.floor(rnd() * 5),
+          tex: 0,
           rotation: Math.floor(rnd() * 4) * (Math.PI / 2),
         });
       }
@@ -1067,106 +612,94 @@ function makeCity(): Building[] {
 function City() {
   const buildings = useMemo(() => makeCity(), []);
 
-  const windowTexs = useMemo(() => makeWindowTextures(), []);
-  
   // Load custom GLTFs
   const gltf01 = useGLTF(import.meta.env.BASE_URL + "building_02.glb") as any;
-  const gltf02 = useGLTF(import.meta.env.BASE_URL + "apartmen_building.glb") as any;
-  const gltf03 = useGLTF(import.meta.env.BASE_URL + "game_ready_mid_poly_building.glb") as any;
-  const gltf04 = useGLTF(import.meta.env.BASE_URL + "sci-fi_building.glb") as any;
-  const gltf05 = useGLTF(import.meta.env.BASE_URL + "sci-fi_building_11.glb") as any;
+  const gltf02 = useGLTF(
+    import.meta.env.BASE_URL + "apartmen_building.glb",
+  ) as any;
+  const gltf03 = useGLTF(
+    import.meta.env.BASE_URL + "game_ready_mid_poly_building.glb",
+  ) as any;
+  const gltf04 = useGLTF(
+    import.meta.env.BASE_URL + "sci-fi_building.glb",
+  ) as any;
+  const gltf05 = useGLTF(
+    import.meta.env.BASE_URL + "sci-fi_building_11.glb",
+  ) as any;
 
-  const { concreteMat, windowMats, prototypes } = useMemo(() => {
+  const { concreteMat, prototypes } = useMemo(() => {
+    // A single foundation material shared across all buildings
     const cMat = new THREE.MeshStandardMaterial({
-      color: "#0c0e12",
-      roughness: 0.12,
-      metalness: 0.4,
+      color: "#050608", // Very dark to blend with fog/abyss
+      roughness: 0.8,
+      metalness: 0.1,
       fog: true,
     });
 
-    const wMats = windowTexs.map(
-      (tex) =>
-        new THREE.MeshStandardMaterial({
-          map: tex.map,
-          emissiveMap: tex.emissiveMap,
-          roughnessMap: tex.roughnessMap,
-          metalnessMap: tex.metalnessMap,
-          emissive: new THREE.Color(1.5, 1.5, 1.5),
-          emissiveIntensity: 1.4,
-          color: "#ffffff",
-          fog: true,
-        }),
-    );
-    
     // Prepare custom GLTFs
     const createCustomPrototype = (scene: THREE.Group) => {
-        const customGroup = new THREE.Group();
-        const clonedCustom = scene.clone();
-        
-        // Auto-scale the building so its footprint fits in our city grid!
-        // We want the max width/depth to be exactly 3.2 units.
-        const tempBox = new THREE.Box3().setFromObject(clonedCustom);
-        const tempSize = new THREE.Vector3();
-        tempBox.getSize(tempSize);
-        
-        const maxFootprint = Math.max(tempSize.x, tempSize.z);
-        // If for some reason it's 0, default to 1.0, else scale it to fit 3.2 units wide.
-        let autoScale = maxFootprint > 0.001 ? 3.2 / maxFootprint : 1.0;
-        
-        // Clamp height so massive models don't completely block the camera perspective
-        // (Procedural buildings max out around 9.5. Let's cap customs at 14)
-        if (tempSize.y * autoScale > 14) {
-            autoScale = 14 / tempSize.y;
-        }
-        
-        clonedCustom.scale.setScalar(autoScale);
-        
-        // Re-measure after scaling
-        const box = new THREE.Box3().setFromObject(clonedCustom);
-        const size = new THREE.Vector3();
-        box.getSize(size);
-        const w = size.x || 3.2;
-        const h = size.y || 8;
-        const d = size.z || 3.2;
-        
-        // Center horizontally
-        const center = new THREE.Vector3();
-        box.getCenter(center);
-        clonedCustom.position.x = -center.x;
-        clonedCustom.position.z = -center.z;
-        // Snap bottom to y=0 of the group (instead of centering Y or doing h/2)
-        clonedCustom.position.y = -box.min.y; 
-        
-        customGroup.add(clonedCustom);
+      const customGroup = new THREE.Group();
+      const clonedCustom = scene.clone();
 
-        // Make materials accept fog
-        clonedCustom.traverse((child: any) => {
-            if(child.isMesh && child.material) {
-                child.material.fog = true;
-                if(child.material.emissiveMap || (child.material.emissive && child.material.emissive.getHex() > 0)) {
-                    child.material.emissiveIntensity = 2.5;
-                }
-            }
-        });
-        
-        return { group: customGroup, w, h, d };
+      // Auto-scale the building so its footprint fits in our city grid!
+      const tempBox = new THREE.Box3().setFromObject(clonedCustom);
+      const tempSize = new THREE.Vector3();
+      tempBox.getSize(tempSize);
+
+      const maxFootprint = Math.max(tempSize.x, tempSize.z);
+      let autoScale = maxFootprint > 0.001 ? 3.2 / maxFootprint : 1.0;
+
+      // Clamp height
+      if (tempSize.y * autoScale > 14) {
+        autoScale = 14 / tempSize.y;
+      }
+
+      clonedCustom.scale.setScalar(autoScale);
+
+      // Re-measure after scaling
+      const box = new THREE.Box3().setFromObject(clonedCustom);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const w = size.x || 3.2;
+      const h = size.y || 8;
+      const d = size.z || 3.2;
+
+      // Center horizontally
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      clonedCustom.position.x = -center.x;
+      clonedCustom.position.z = -center.z;
+      // Snap bottom to y=0 of the group
+      clonedCustom.position.y = -box.min.y;
+
+      customGroup.add(clonedCustom);
+
+      // Make materials accept fog and boost emissive
+      clonedCustom.traverse((child: any) => {
+        if (child.isMesh && child.material) {
+          child.material.fog = true;
+          if (
+            child.material.emissiveMap ||
+            (child.material.emissive && child.material.emissive.getHex() > 0)
+          ) {
+            child.material.emissiveIntensity = 2.5;
+          }
+        }
+      });
+
+      return { group: customGroup, w, h, d };
     };
 
     const protos = [
-      buildType1(cMat, wMats[0]),
-      buildType2(cMat, wMats[0]),
-      buildType3(cMat, wMats[0]),
-      buildType4(cMat, wMats[0]),
-      buildType5(cMat, wMats[0]),
       createCustomPrototype(gltf01.scene),
       createCustomPrototype(gltf02.scene),
-      createCustomPrototype(gltf03.scene), // some kitbash are huge, tune as needed
+      createCustomPrototype(gltf03.scene),
       createCustomPrototype(gltf04.scene),
-      createCustomPrototype(gltf05.scene)
+      createCustomPrototype(gltf05.scene),
     ];
 
-    return { concreteMat: cMat, windowMats: wMats, prototypes: protos };
-  }, [windowTexs, gltf01, gltf02, gltf03, gltf04, gltf05]);
+    return { concreteMat: cMat, prototypes: protos };
+  }, [gltf01, gltf02, gltf03, gltf04, gltf05]);
 
   const cityGroup = useMemo(() => {
     const g = new THREE.Group();
@@ -1177,7 +710,7 @@ function City() {
       instance.position.set(b.x, -1.98, b.z);
       instance.rotation.y = b.rotation;
 
-      const chosenGlassMat = windowMats[b.tex];
+      // Add a foundation block under each building so it connects cleanly to the ground
       const foundationGeo = new THREE.BoxGeometry(
         proto.w - 0.2,
         20,
@@ -1187,39 +720,23 @@ function City() {
       foundation.position.set(0, -10, 0);
       instance.add(foundation);
 
-      instance.traverse((obj) => {
-        if (obj instanceof THREE.Mesh && obj.userData.isGlass) {
-          obj.material = chosenGlassMat;
-        }
-      });
       g.add(instance);
     }
     return g;
-  }, [buildings, prototypes, windowMats]);
+  }, [buildings, prototypes, concreteMat]);
 
   useEffect(() => {
     return () => {
-      // We only dispose materials and geometries created in useMemo
       concreteMat.dispose();
-      windowMats.forEach((m) => m.dispose());
-      windowTexs.forEach((t) => { t.map.dispose(); t.emissiveMap.dispose(); t.roughnessMap.dispose(); t.metalnessMap.dispose(); });
       prototypes.forEach((p) =>
         p.group.traverse((o) => {
           if (o instanceof THREE.Mesh) {
             if (o.geometry) o.geometry.dispose();
-            if (
-              o.material &&
-              !windowMats.includes(o.material as any) &&
-              o.material !== concreteMat
-            ) {
-              // Dispose unique materials like AC or Antenna materials created inside buildType
-              (o.material as THREE.Material).dispose();
-            }
           }
         }),
       );
     };
-  }, [concreteMat, windowMats, windowTexs, prototypes]);
+  }, [concreteMat, prototypes]);
 
   return (
     <>
