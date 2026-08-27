@@ -19,6 +19,14 @@ export const paintingZ = (i: number) => -24 - i * 8;
 export const EXTRA_SECTIONS = 3;
 export const TOTAL_STATIONS = N + EXTRA_SECTIONS;
 
+/** Azadi Tower — the finale landmark standing in the middle of the road,
+ *  past the last painting. Shared with Corridor's city builder. */
+export const AZADI_Z = paintingZ(TOTAL_STATIONS - 1) - 14; // = -102
+
+/** How close to Azadi the walk's final station stands — far enough to
+ *  see the whole gate, close enough that it dominates the view. */
+export const FINALE_STAND = 12;
+
 export const stations: number[] = [
   4.6, // the P + ring
   HEADLINE_Z + FOCUS_DIST, // the headline layer
@@ -26,6 +34,7 @@ export const stations: number[] = [
     { length: TOTAL_STATIONS },
     (_, i) => paintingZ(i) + FOCUS_DIST,
   ),
+  AZADI_Z + FINALE_STAND, // the finale: face the Azadi Tower
 ];
 
 /** Painting index for the focus bar: -1 outside the gallery zone. */

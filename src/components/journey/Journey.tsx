@@ -93,12 +93,14 @@ export default function Journey({ lang }: { lang: Lang }) {
 
   return (
     <>
-      {/* scroll length for the walk: P → headline → 6 paintings → exit */}
+      {/* scroll length for the walk: P → headline → 6 paintings →
+          the finale leg that carries the camera past the last
+          painting up to the Azadi Tower */}
       <div
         ref={spacerRef}
         id="templates"
         aria-hidden
-        style={{ height: `${100 + 100 + TEMPLATES.length * 92 + 55}vh` }}
+        style={{ height: `${100 + 100 + TEMPLATES.length * 92 + 55 + 80}vh` }}
       />
 
       {/* the 3D world — Journey never fades out: it is the entire website.

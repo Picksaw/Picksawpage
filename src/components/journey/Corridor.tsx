@@ -23,7 +23,7 @@ import {
 } from "./JourneyElectricBorder";
 import {
   HEADLINE_Z,
-  TOTAL_STATIONS,
+  AZADI_Z,
   paintingZ,
   stations,
   focusedIndex,
@@ -54,6 +54,12 @@ const N = TEMPLATES.length;
 const PAINTING_W = 3.1;
 const PAINTING_H = 2.35;
 const FOCUS_DIST = 4.2;
+
+/** Azadi is the finale monument. The GLTF auto-fit leaves it a mere
+ *  ~2.8 units tall (smaller than the street buildings!), so the gate
+ *  gets its own scale: ~15 tall × ~17 wide — it spans the end of the
+ *  street like the real Azadi square arch. */
+const AZADI_SCALE = 5.5;
 
 // Walk layout math (stations, cameraZ, layerOpacity, …) lives in ./path —
 // shared with JourneyElectricBorder's draw gating without a circular import.
@@ -770,7 +776,9 @@ function makeCity(): Building[] {
   };
   
   const startZ = 8;
-  const endZ = paintingZ(TOTAL_STATIONS - 1) - 12;
+  // Side buildings stop before the plaza in front of the Azadi gate so
+  // nothing pokes through the finale landmark.
+  const endZ = AZADI_Z + 12;
   const step = 6.0;
   const nearX = 4.0;
   const rowGap = 4.5;
@@ -799,7 +807,7 @@ function makeCity(): Building[] {
   // Milad Tower is tall, so it lives ONCE among the FAR (background)
   // buildings at the deepest end of the walk — it must not appear at
   // the start of the site anymore.
-  const azadiZ = endZ - 2; // the very last / deepest building, centre road
+  const azadiZ = AZADI_Z; // the very last / deepest building, centre road
 
   // Choose Milad's slot from the DEEPEST side buildings (background).
   const sortedByZ = [...slots].sort((a, b) => a.z - b.z); // most negative = farthest
@@ -1015,6 +1023,9 @@ function City() {
       const instance = proto.group.clone();
       instance.position.set(b.x, -1.98, b.z);
       instance.rotation.y = b.rotation;
+      // The Azadi gate stands far beyond every other building, so the
+      // monumental scale can't clip anything — grow it in place.
+      if (b.typeIndex === 0) instance.scale.setScalar(AZADI_SCALE);
 
       // Add a foundation block under each building so it connects cleanly to the ground
       const foundationGeo = new THREE.BoxGeometry(
@@ -1062,10 +1073,10 @@ function City() {
     <>
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -2.0, -26]}
+        position={[0, -2.0, -30]}
         scale={[1, 1, 1]}
       >
-        <planeGeometry args={[110, 150]} />
+        <planeGeometry args={[110, 160]} />
         <Suspense fallback={<meshBasicMaterial color="#04060d" />}>
           <PuddleMaterial />
         </Suspense>
