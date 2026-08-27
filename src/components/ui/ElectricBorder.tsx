@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { cn } from "../../utils/cn";
+import { reportFrameCost } from "../../lib/perfProbe";
 
 /**
  * ElectricBorder — animated lightning that crackles around the edge of
@@ -78,12 +79,15 @@ export class ElectricPainter {
     ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
 
     const perimeter = 2 * (o.width + o.height) + 2 * Math.PI * radius;
-    const samples = Math.max(160, Math.floor(perimeter / 2));
+    // Perf: the crackle lives in the highest noise octaves, so coarser
+    // perimeter sampling still reads as lightning — and costs ~40% less.
+    const samples = Math.max(96, Math.floor(perimeter / 3.2));
     const lw = o.lineWidth * (1 + this.intensity * 0.85);
 
-    // Soft additive bloom pass, then the crisp core stroke.
+    // Soft additive bloom pass at HALF the sample count (it's a blur —
+    // it cannot show detail), then the crisp core stroke at full count.
     ctx.globalCompositeOperation = "lighter";
-    this.strokePath(ctx, samples, left, top, radius, disp, lw * 3, 0.08 + this.intensity * 0.1);
+    this.strokePath(ctx, Math.max(64, samples >> 1), left, top, radius, disp, lw * 3, 0.09 + this.intensity * 0.1);
     ctx.globalCompositeOperation = "source-over";
     this.strokePath(ctx, samples, left, top, radius, disp, lw, 0.92);
   }
@@ -299,7 +303,9 @@ const DEFAULT_OPTIONS: Omit<ElectricBorderOptions, "getActive"> = {
   radius: 24,
   overscan: 0.09, // canvas extends 9% beyond each side of the card (matches bolt wander)
   displacement: 0.09, // bolt wander, as a fraction of the card's min dimension
-  octaves: 10,
+  // Perf: 4 octaves keep the crackle (the jitter is the high octave);
+  // 10 was 2.5× the noise work with no visible gain at card scale.
+  octaves: 4,
   lacunarity: 1.6,
   gain: 0.7,
   amplitude: 0.075,
@@ -340,7 +346,9 @@ class ElectricBorderEngine {
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
 
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Perf: bolts are ~2px-wide glows — no device benefits from 2× here.
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    this.dpr = Math.min(window.devicePixelRatio || 1, coarse ? 1.25 : 1.5);
 
     this.painter = new ElectricPainter({
       width: rect.width / (1 + 2 * this.opts.overscan),
@@ -421,9 +429,11 @@ class ElectricBorderEngine {
     if (!this.painter) return;
     const dt = Math.min((now - this.last) / 1000, 0.1) * 1000;
     this.last = now;
+    const t0 = performance.now();
     this.painter.setActive(this.opts.getActive());
     this.painter.advance(dt);
     this.draw();
+    reportFrameCost("border", performance.now() - t0);
   }
 }
 

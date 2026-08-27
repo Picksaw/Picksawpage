@@ -3,6 +3,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { makePGeometry } from "../../lib/pGeometry";
 import { onLightning } from "../../lib/stormEvents";
+import { reportFrameCost } from "../../lib/perfProbe";
 import { ElectricPainter } from "../ui/ElectricBorder";
 
 /**
@@ -21,7 +22,17 @@ import { ElectricPainter } from "../ui/ElectricBorder";
  */
 
 const STATION_DIST = 4.6;
-const RTT_SIZE = 512;
+const IS_MOBILE =
+  typeof window !== "undefined" &&
+  window.matchMedia("(pointer: coarse)").matches;
+// Perf: the ghost RTT is a 512² render-to-texture with an fbm fragment
+// shader — the priciest single GPU op in the emblem. The window it fills
+// is ~1/4 of a card that is ~2.4 world units wide, so 384 (desktop) /
+// 256 (mobile) is indistinguishable once the fake-bloom blur runs.
+const RTT_SIZE = IS_MOBILE ? 256 : 384;
+// Perf: fbm octaves — the smoke drifts at 0.2 u/s; 3 octaves on mobile
+// cannot be told apart from 5 at 256px.
+const FBM_OCTAVES = IS_MOBILE ? 3 : 5;
 const ARC_POINTS = 18;
 const BRANCH_POINTS = 8;
 
@@ -513,7 +524,7 @@ float fbm(vec2 x) {
   float a = 0.5;
   vec2 shift = vec2(100.0);
   mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
-  for (int i = 0; i < 5; ++i) {
+  for (int i = 0; i < ${FBM_OCTAVES}; ++i) {
     v += a * noise(x);
     x = rot * x * 2.0 + shift;
     a *= 0.5;
@@ -665,6 +676,12 @@ export default function PEmblem() {
   const nextStrike = useRef(1.4);
   const clock = useRef(0);
   const formation = useRef(0);
+  // Perf gating — the card is off-screen for ~85% of the walk; none of
+  // its heavy work (RTT pass, border canvas, texture uploads, strikes)
+  // runs while it isn't visible.
+  const cardFadeRef = useRef(0);
+  const ghostFrame = useRef(0);
+  const borderFrame = useRef(0);
 
   const pointer = useRef({ x: 0, y: 0 });
   const eased = useRef({ x: 0, y: 0 });
@@ -789,17 +806,22 @@ export default function PEmblem() {
       radius: 28,
       overscan: CARD_OVERSCAN,
       displacement: 0.09,
-      octaves: 10,
+      // Perf: 4 octaves keep the crackle — see ElectricBorder notes.
+      octaves: 4,
       lacunarity: 1.6,
       gain: 0.7,
       amplitude: 0.075,
       frequency: 10,
       baseFlatness: 0,
     });
+    // Perf: the ring is a ~2px additive glow. Mobile draws it at 0.6×
+    // resolution — 4× fewer canvas pixels and 4× smaller texture upload.
+    const borderScale = IS_MOBILE ? 0.6 : 1;
     const canvas = document.createElement("canvas");
-    canvas.width = Math.round(painter.canvasWidth);
-    canvas.height = Math.round(painter.canvasHeight);
+    canvas.width = Math.max(2, Math.round(painter.canvasWidth * borderScale));
+    canvas.height = Math.max(2, Math.round(painter.canvasHeight * borderScale));
     const ctx = canvas.getContext("2d")!;
+    ctx.setTransform(borderScale, 0, 0, borderScale, 0, 0);
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = 8;
@@ -865,7 +887,10 @@ export default function PEmblem() {
 
   const strike = (fromStorm: boolean) => {
     const pool = arcs.current;
-    if (pool.length === 0) return;
+    // Perf: don't spend strike math (or a ribbon re-upload) while the
+    // card is off-screen — the storm's flashes will queue up as usual
+    // the moment it's visible again.
+    if (pool.length === 0 || cardFadeRef.current < 0.02) return;
     let slot = pool[0];
     for (const a of pool) if (a.life < slot.life) slot = a;
 
@@ -917,38 +942,41 @@ export default function PEmblem() {
     clock.current += dt;
     const cam = state.camera as THREE.PerspectiveCamera;
 
-    // ── the ghost RTT renders first, before the main scene ──
-    ghost.mat.uniforms.uTime.value = clock.current;
-
-    // Parallax depth: move the internal ghost camera oppositely to the card's rotation
-    // Instead of orbiting the camera 360 degrees, just shift it slightly on X/Y for parallax depth
-    const px = Math.sin(cardRot.current.y) * 1.5;
-    const py = Math.sin(cardRot.current.x) * 1.5;
-    ghost.cam.position.set(px, py, 3.8);
-    ghost.cam.lookAt(0, 0, 0);
-    ghost.pMesh.rotation.y =
-      eased.current.x * 0.35 + Math.sin(clock.current * 0.35) * 0.5;
-    ghost.pMesh.rotation.x =
-      -eased.current.y * 0.2 + Math.cos(clock.current * 0.28) * 0.1;
-    ghost.pMesh.position.y = Math.sin(clock.current * 0.7) * 0.06;
-    ghost.orb.position.set(
-      Math.cos(clock.current * 1.3) * 0.52 - 0.18,
-      Math.sin(clock.current * 1.7) * 0.22 + 0.62,
-      0.34,
-    );
-    ghost.orb.scale.setScalar(1 + 0.18 * Math.sin(clock.current * 2.6));
-
-    // Only render the RTT if the card is visible (camZ > -2) to save massive GPU overhead
-    if (cam.position.z > -2.0) {
-      const prevTarget = gl.getRenderTarget();
-      gl.setRenderTarget(ghost.rt);
-      gl.render(ghost.scene, ghost.cam);
-      gl.setRenderTarget(prevTarget);
-    }
-
-    // ── dive fades ──
+    // ── dive fades (computed FIRST — the whole heavy block is gated) ──
     const camZ = cam.position.z;
     const cardFade = Math.max(0, Math.min(1, (camZ + 1.6) / 2.8));
+    cardFadeRef.current = cardFade;
+
+    // ── the ghost RTT — only while the card window is on screen ──
+    // Mobile refreshes it at 30 Hz: the smoke drifts at 0.2 u/s, a stale
+    // frame for one tick is invisible behind the fake-bloom blur.
+    if (cardFade > 0.02) {
+      ghost.mat.uniforms.uTime.value = clock.current;
+      // Parallax depth: shift the ghost camera with the card's tilt
+      // (instead of orbiting it 360°, a small X/Y shift reads as depth)
+      ghost.cam.position.set(
+        Math.sin(cardRot.current.y) * 1.5,
+        Math.sin(cardRot.current.x) * 1.5,
+        3.8,
+      );
+      ghost.cam.lookAt(0, 0, 0);
+      ghost.pMesh.rotation.y = eased.current.x * 0.35 + Math.sin(clock.current * 0.35) * 0.5;
+      ghost.pMesh.rotation.x = -eased.current.y * 0.2 + Math.cos(clock.current * 0.28) * 0.1;
+      ghost.pMesh.position.y = Math.sin(clock.current * 0.7) * 0.06;
+      ghost.orb.position.set(
+        Math.cos(clock.current * 1.3) * 0.52 - 0.18,
+        Math.sin(clock.current * 1.7) * 0.22 + 0.62,
+        0.34
+      );
+      ghost.orb.scale.setScalar(1 + 0.18 * Math.sin(clock.current * 2.6));
+
+      if (!IS_MOBILE || ghostFrame.current++ % 2 === 0) {
+        const prevTarget = gl.getRenderTarget();
+        gl.setRenderTarget(ghost.rt);
+        gl.render(ghost.scene, ghost.cam);
+        gl.setRenderTarget(prevTarget);
+      }
+    }
 
     // ── responsive fit (phones / narrow windows) ──
     if (group.current) {
@@ -1026,10 +1054,20 @@ export default function PEmblem() {
     }
 
     // ── the lightning border — flares on strikes ──
-    border.painter.setActive(flash > 0.2 || c > 0.65);
-    border.painter.advance(dt * 1000);
-    border.painter.render(border.ctx);
-    border.texture.needsUpdate = true;
+    // Gated like the RTT: no canvas redraw + no texture upload while the
+    // card is off-screen (that's ~85% of the walk — the single biggest
+    // CPU save on mobile).
+    if (cardFade > 0.02) {
+      border.painter.setActive(flash > 0.2 || c > 0.65);
+      // O(1) clock tick every frame so the crackle never jumps.
+      border.painter.advance(dt * 1000);
+      if (!IS_MOBILE || borderFrame.current++ % 2 === 0) {
+        const bt0 = performance.now();
+        border.painter.render(border.ctx);
+        border.texture.needsUpdate = true;
+        reportFrameCost("emblem-border", performance.now() - bt0);
+      }
+    }
     if (borderMat.current) {
       borderMat.current.opacity = (0.85 + flash * 0.15) * fEase * cardFade;
     }
@@ -1056,7 +1094,7 @@ export default function PEmblem() {
     }
 
     // ── own strike cadence — quickens as the card charges ──
-    if (formation.current >= 1 && clock.current >= nextStrike.current) {
+    if (formation.current >= 1 && clock.current >= nextStrike.current && cardFade > 0.02) {
       strike(false);
       if (Math.random() < 0.3) {
         window.setTimeout(() => strike(false), 90 + Math.random() * 120);

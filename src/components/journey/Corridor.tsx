@@ -21,6 +21,18 @@ import {
   useJourneyElectricBorder,
   BORDER_OVERSCAN,
 } from "./JourneyElectricBorder";
+import {
+  HEADLINE_Z,
+  TOTAL_STATIONS,
+  paintingZ,
+  stations,
+  focusedIndex,
+  cameraZ,
+  layerOpacity,
+} from "./path";
+
+// Re-exports — Journey.tsx imports the walk layout from this module.
+export { HEADLINE_Z, paintingZ, stations, focusedIndex, cameraZ, layerOpacity };
 
 /**
  * Corridor V2 — the neon city walk.
@@ -43,45 +55,8 @@ const PAINTING_W = 3.1;
 const PAINTING_H = 2.35;
 const FOCUS_DIST = 4.2;
 
-export const HEADLINE_Z = -13;
-export const paintingZ = (i: number) => -24 - i * 8;
-
-export const EXTRA_SECTIONS = 3;
-export const TOTAL_STATIONS = N + EXTRA_SECTIONS;
-
-export const stations: number[] = [
-  4.6, // the P + ring
-  HEADLINE_Z + FOCUS_DIST, // the headline layer
-  ...Array.from(
-    { length: TOTAL_STATIONS },
-    (_, i) => paintingZ(i) + FOCUS_DIST,
-  ),
-];
-
-/** Painting index for the focus bar: -1 outside the gallery zone. */
-export function focusedIndex(progress: number): number {
-  const u = progress * (stations.length - 1);
-  const idx = Math.round(u) - 2;
-  if (u < 1.55) return -1; // Never lose focus at the end of the corridor now
-  return Math.max(0, Math.min(TOTAL_STATIONS - 1, idx));
-}
-
-const smoothstep = (t: number) => t * t * (3 - 2 * t);
-const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-
-export function cameraZ(progress: number): number {
-  const u = Math.max(0, Math.min(1, progress)) * (stations.length - 1);
-  const k = Math.min(stations.length - 2, Math.floor(u));
-  const t = smoothstep(u - k);
-  return THREE.MathUtils.lerp(stations[k], stations[k + 1], t);
-}
-
-/** How visible a layer is — fades to zero well before the next appears. */
-function layerOpacity(camZ: number, layerZ: number): number {
-  const d = camZ - layerZ; // positive while approaching
-  if (d <= 0.2) return clamp01(d / 1.2); // fade as the camera reaches it
-  return clamp01((8.4 - d) / 2.2); // fully hidden by 8.4 units away
-}
+// Walk layout math (stations, cameraZ, layerOpacity, …) lives in ./path —
+// shared with JourneyElectricBorder's draw gating without a circular import.
 
 /** Camera dolly driven by shared scroll progress + mouse parallax. */
 export function CameraRig({
@@ -262,10 +237,17 @@ function Painting({
   const map = usePaintingTexture(item, lang);
   const fit = useFitScale(PAINTING_W, PAINTING_H, FOCUS_DIST);
   const z = paintingZ(index);
+  const _scale = useRef(new THREE.Vector3()); // no per-frame allocation
 
   useFrame(({ camera }, delta) => {
     const dt = Math.min(delta, 0.05);
     const op = layerOpacity(camera.position.z, z);
+
+    // Fully outside the opacity window → stop drawing these 4 meshes
+    // (opacity 0 still rasterizes; visible=false skips the draw calls).
+    // Pointer handlers only exist on the focused painting, which is
+    // always inside the window — so no interaction is lost.
+    if (group.current) group.current.visible = op > 0.01;
 
     // solo fade — material + glow + frame all obey it
     if (planeMat.current) planeMat.current.opacity = op;
@@ -280,7 +262,7 @@ function Painting({
     if (group.current) {
       const hoverS = hovered.current ? 1.03 : 1;
       const s = fit * hoverS;
-      group.current.scale.lerp(new THREE.Vector3(s, s, s), Math.min(1, dt * 8));
+      group.current.scale.lerp(_scale.current.set(s, s, s), Math.min(1, dt * 8));
       // parallax lean — tiny, never enough to spill
       group.current.position.x = (camera.position.x || 0) * 0.06;
     }
@@ -345,6 +327,7 @@ function Painting({
       >
         <planeGeometry args={[PAINTING_W, PAINTING_H]} />
         <meshBasicMaterial
+          ref={planeMat}
           map={map}
           toneMapped={false}
           transparent
@@ -485,6 +468,7 @@ function HtmlSection({
   const z = paintingZ(index);
   const fit = useFitScale(PAINTING_W, PAINTING_H, FOCUS_DIST);
   const group = useRef<THREE.Group>(null);
+  const _scale = useRef(new THREE.Vector3()); // no per-frame allocation
 
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -507,8 +491,11 @@ function HtmlSection({
     if (glowMat.current) glowMat.current.opacity = (focused ? 0.3 : 0.1) * op;
 
     if (group.current) {
+      // The <Html> overlay ignores ancestor visibility (drei only hides
+      // it behind the camera) — the DOM div is toggled separately below.
+      group.current.visible = op > 0.01; // glow + frame meshes
       group.current.scale.lerp(
-        new THREE.Vector3(fit, fit, fit),
+        _scale.current.set(fit, fit, fit),
         Math.min(1, dt * 8),
       );
       group.current.position.x = (cam.position.x || 0) * 0.06;
@@ -516,9 +503,15 @@ function HtmlSection({
 
     if (outerRef.current && innerRef.current) {
       if (op < 0.01) {
+        // display:none skips layout + paint entirely for the off-screen
+        // section DOM (the heaviest 2D content in the scene)
+        outerRef.current.style.display = "none";
         outerRef.current.style.opacity = "0";
         outerRef.current.style.pointerEvents = "none";
         return;
+      }
+      if (outerRef.current.style.display !== "block") {
+        outerRef.current.style.display = "block";
       }
 
       // Calculate exact pixel dimensions of the 3D frame on the 2D screen
@@ -752,14 +745,6 @@ function makeWindowTextures(): WindowMaps[] {
     });
   }
   return out;
-}
-
-interface Building {
-  x: number;
-  z: number;
-  typeIndex: number;
-  tex: number;
-  rotation: number;
 }
 
 interface Building {

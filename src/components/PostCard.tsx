@@ -101,7 +101,10 @@ export default function PostCard({ post, isAdmin, onClick, onDelete }: PostCardP
       onClick={onClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-3xl border border-white/8 bg-white/[0.03] backdrop-blur-sm transition-all duration-400 hover:border-white/15 hover:bg-white/[0.06] hover:shadow-2xl hover:shadow-cyan-500/5"
+      // Perf: no backdrop-blur on a scrolling card — every phone re-blurs
+      // the storm behind it on EVERY frame of scroll. A denser plain
+      // gradient reads the same over the dark storm.
+      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-3xl border border-white/8 bg-[linear-gradient(160deg,rgba(15,21,37,0.82),rgba(7,10,18,0.9))] transition-all duration-400 hover:border-white/15 hover:shadow-2xl hover:shadow-cyan-500/5"
     >
       {/* 9:16 media area */}
       <div className="relative aspect-[9/16] w-full overflow-hidden">
@@ -178,7 +181,7 @@ export default function PostCard({ post, isAdmin, onClick, onDelete }: PostCardP
               />
             </div>
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/60 backdrop-blur-md">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/15 bg-black/50 text-white/60">
                 <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d={post.icon} />
                 </svg>
@@ -189,7 +192,7 @@ export default function PostCard({ post, isAdmin, onClick, onDelete }: PostCardP
 
         {/* type badge */}
         <div className="absolute left-3 top-3 z-10">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/80 backdrop-blur-md">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/80">
             {post.type === "video" && (
               <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
             )}
@@ -205,7 +208,7 @@ export default function PostCard({ post, isAdmin, onClick, onDelete }: PostCardP
           <button
             type="button"
             onClick={handleDelete}
-            className="absolute right-3 top-3 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-rose-500/30 bg-black/60 text-rose-400 opacity-0 backdrop-blur-md transition-all duration-300 hover:bg-rose-500/30 hover:text-rose-300 hover:opacity-100 group-hover:opacity-70"
+            className="absolute right-3 top-3 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-rose-500/30 bg-black/60 text-rose-400 opacity-0 transition-all duration-300 hover:bg-rose-500/30 hover:text-rose-300 hover:opacity-100 group-hover:opacity-70"
             aria-label="Delete post"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -227,7 +230,7 @@ export default function PostCard({ post, isAdmin, onClick, onDelete }: PostCardP
         {/* tags on hover */}
         <div className="absolute inset-x-0 top-11 flex flex-wrap gap-1 px-3 opacity-0 transition-opacity duration-300 group-hover:opacity-100 pointer-events-none">
           {post.tags.map((t) => (
-            <span key={t} className="rounded-full bg-black/50 px-2 py-0.5 text-[10px] text-white/70 backdrop-blur-sm">
+            <span key={t} className="rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-white/70">
               #{t}
             </span>
           ))}

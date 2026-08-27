@@ -5,6 +5,7 @@ import { onLightning } from "../lib/stormEvents";
 import { makePGeometry } from "../lib/pGeometry";
 import { hasWebGL } from "../lib/webgl";
 import { getStorm, setDevMode } from "../lib/stormStore";
+import { registerPerfGl } from "../lib/perfProbe";
 
 /**
  * Logo3D — the Picksaw "P" as a floating metallic object.
@@ -143,7 +144,14 @@ export default function Logo3D({ size = 64, className, fill = false }: Logo3DPro
     }
   };
 
-  if (!hasWebGL()) {
+  // Perf: on phones the header logo is a 3rd WebGL context running an
+  // 8-light scene at 60 fps for a 34-42px mark — invisible benefit.
+  // Mobile gets the static electric SVG (same look, zero contexts).
+  const coarse =
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: coarse)").matches;
+
+  if (!hasWebGL() || coarse) {
     return (
       <div
         className={`flex items-center justify-center ${className ?? ""}`}
@@ -167,11 +175,14 @@ export default function Logo3D({ size = 64, className, fill = false }: Logo3DPro
       aria-label="Picksaw logo"
     >
       <Canvas
-        dpr={[1, 1.6]}
+        dpr={[1, 1.5]}
         frameloop={reduced ? "demand" : visible ? "always" : "never"}
         camera={{ position: [0, 0, 4.6], fov: 38 }}
-        gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
+        // Perf: a 34-42px canvas doesn't need MSAA; it was the only
+        // remaining always-on GPU cost on desktop.
+        gl={{ antialias: false, alpha: true, powerPreference: "low-power" }}
         style={{ background: "transparent" }}
+        onCreated={(state) => registerPerfGl("logo", state.gl)}
       >
         <ambientLight intensity={0.35} />
         <directionalLight position={[-3, 4, 3]} intensity={1.5} color="#eaf6ff" />

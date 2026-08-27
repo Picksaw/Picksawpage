@@ -14,6 +14,7 @@ import PreviewModal from "../PreviewModal";
 import MagneticButton from "../ui/MagneticButton";
 import { useSound } from "../../audio/SoundProvider";
 import { getLenis } from "../../lib/lenis";
+import { registerPerfGl } from "../../lib/perfProbe";
 
 /**
  * Journey — Picksaw's 3D layers.
@@ -40,7 +41,6 @@ export default function Journey({ lang }: { lang: Lang }) {
   const progressRef = useRef(0);
 
   const [focusedIdx, setFocusedIdx] = useState(-1);
-  
   const [selected, setSelected] = useState<TemplateItem | null>(null);
   /** 'p' while framing the P, 'headline' on the text layer, then 'gallery'.
    *  State-driven (not transform-driven) so station UI can never linger. */
@@ -55,9 +55,6 @@ export default function Journey({ lang }: { lang: Lang }) {
     progressRef.current = v;
     const idx = focusedIndex(v);
     setFocusedIdx((prev) => (prev === idx ? prev : idx));
-    // the walk ends → hand the page back to normal sections
-    // (early enough that no painting can catch clicks near the end)
-    // Journey never fades out now because it is the entire website
     // station UI phases: u<0.6 → P, then headline, then gallery (solo)
     const u = v * (stations.length - 1);
     const ph = u < 0.6 ? "p" : u < 1.45 ? "headline" : "gallery";
@@ -87,6 +84,13 @@ export default function Journey({ lang }: { lang: Lang }) {
 
   const focusedItem = focusedIdx >= 0 ? TEMPLATES[focusedIdx] : null;
 
+  // Perf: pixel budget. Mobile GPUs are fill-rate bound — the storm 2D
+  // canvas + this canvas both fill the screen. 1.25× + no MSAA on mobile
+  // (the scene is fog-soft; AA barely matters) vs 1.5× + MSAA on desktop.
+  const isMobile =
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: coarse)").matches;
+
   return (
     <>
       {/* scroll length for the walk: P → headline → 6 paintings → exit */}
@@ -97,20 +101,11 @@ export default function Journey({ lang }: { lang: Lang }) {
         style={{ height: `${100 + 100 + TEMPLATES.length * 92 + 55}vh` }}
       />
 
-      {/* the 3D world */}
-      <div
-        className={`fixed inset-0 z-[2] transition-opacity duration-700 ${
-          false ? "pointer-events-none opacity-0" : "opacity-100"
-        }`}
-        style={{
-          pointerEvents: false ? "none" : undefined,
-          visibility: false ? "hidden" : "visible", // triple lock — can never catch a click
-        }}
-        aria-hidden={false}
-      >
+      {/* the 3D world — Journey never fades out: it is the entire website */}
+      <div className="fixed inset-0 z-[2]">
         <Canvas
-          dpr={[1, 1.25]} // Capped to 1.25 for massive performance gain on 4K monitors
-          frameloop={false ? "never" : "always"}
+          dpr={[1, 1.25]} // capped everywhere — 4K desktops are fill-rate bound
+          frameloop="always"
           camera={{
             position: [0, 0, stations[0]],
             // portrait phones need a wider lens or the city never enters
@@ -119,8 +114,14 @@ export default function Journey({ lang }: { lang: Lang }) {
             near: 0.1,
             far: 90,
           }}
-          gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+          gl={{
+            antialias: !isMobile,
+            alpha: true,
+            stencil: false,
+            powerPreference: "high-performance",
+          }}
           style={{ background: "transparent", touchAction: "pan-y" }}
+          onCreated={(state) => registerPerfGl("journey", state.gl)}
           onPointerMissed={() => {
             document.body.style.cursor = "";
           }}
