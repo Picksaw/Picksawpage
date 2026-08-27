@@ -23,7 +23,7 @@ import {
 } from "./JourneyElectricBorder";
 import {
   HEADLINE_Z,
-  TOTAL_STATIONS,
+  AZADI_Z,
   paintingZ,
   stations,
   focusedIndex,
@@ -54,6 +54,12 @@ const N = TEMPLATES.length;
 const PAINTING_W = 3.1;
 const PAINTING_H = 2.35;
 const FOCUS_DIST = 4.2;
+
+/** Azadi is the finale monument. The GLTF auto-fit leaves it a mere
+ *  ~2.8 units tall (smaller than the street buildings!), so the gate
+ *  gets its own scale: ~22 tall × ~26 wide — seen from 46 units away
+ *  it fills ~63% of the view height, half-lost in the fog haze. */
+const AZADI_SCALE = 8;
 
 // Walk layout math (stations, cameraZ, layerOpacity, …) lives in ./path —
 // shared with JourneyElectricBorder's draw gating without a circular import.
@@ -459,10 +465,14 @@ function HeadlineLayer({ lang }: { lang: Lang }) {
 function HtmlSection({
   index,
   focused,
+  dir,
   children,
 }: {
   index: number;
   focused: boolean;
+  /** CSS direction the frame content should use (so the section text
+   *  stays RTL while the 3D frame geometry remains LTR/centered). */
+  dir: "ltr" | "rtl";
   children: React.ReactNode;
 }) {
   const z = paintingZ(index);
@@ -576,14 +586,16 @@ function HtmlSection({
       </mesh>
 
       {/* HTML Content — perfectly tracking 2D overlay avoiding all CSS3D browser bugs */}
-      <Html center zIndexRange={[100, 0]}>
+      <Html center zIndexRange={[100, 0]} style={{ direction: "ltr" }}>
         <div
           ref={outerRef}
+          dir={dir}
           className="relative overflow-hidden bg-[#04060d] text-white flex items-start justify-center rounded-sm"
           style={{ opacity: 0 }}
         >
           <div
             ref={innerRef}
+            dir={dir}
             className="absolute top-0 left-0 origin-top-left overflow-y-auto overflow-x-hidden custom-scrollbar"
             style={{ width: targetW, height: targetH }}
           >
@@ -764,7 +776,9 @@ function makeCity(): Building[] {
   };
   
   const startZ = 8;
-  const endZ = paintingZ(TOTAL_STATIONS - 1) - 12;
+  // Side buildings stop before the plaza in front of the Azadi gate so
+  // nothing pokes through the finale landmark.
+  const endZ = AZADI_Z + 12;
   const step = 6.0;
   const nearX = 4.0;
   const rowGap = 4.5;
@@ -786,23 +800,37 @@ function makeCity(): Building[] {
     }
   }
   
-  // Randomly select 2 unique slots for our landmarks
-  // Let's pick them deterministically based on seed
-  const azadiIdx = Math.floor(rnd() * slots.length);
-  let miladIdx = Math.floor(rnd() * slots.length);
-  while (miladIdx === azadiIdx && slots.length > 1) {
-      miladIdx = Math.floor(rnd() * slots.length);
-  }
-  
-  slots.forEach((slot, i) => {
+  // ── Landmark placement ───────────────────────────────────────────
+  // Azadi Tower is the LAST building on the site: it stands in the
+  // MIDDLE of the road (x = 0) at the very far end, never inside the
+  // left / right building rows.
+  // Milad Tower is tall, so it lives ONCE among the FAR (background)
+  // buildings at the deepest end of the walk — it must not appear at
+  // the start of the site anymore.
+  const azadiZ = AZADI_Z; // the very last / deepest building, centre road
+
+  // Choose Milad's slot from the DEEPEST side buildings (background).
+  const sortedByZ = [...slots].sort((a, b) => a.z - b.z); // most negative = farthest
+  const farCount = Math.max(1, Math.floor(sortedByZ.length * 0.25));
+  const miladSlot = sortedByZ[Math.floor(rnd() * farCount)];
+
+  slots.forEach((slot) => {
       let typeIndex;
-      if (i === azadiIdx) typeIndex = 0;
-      else if (i === miladIdx) typeIndex = 1;
+      if (slot === miladSlot) typeIndex = 1; // Milad — far background silhouette
       else {
           // The rest are randomly chosen from index 2, 3, and 4
           typeIndex = 2 + Math.floor(rnd() * 3);
       }
       list.push({ ...slot, typeIndex, tex: 0 });
+  });
+
+  // Azadi — the final landmark, dead centre of the road at the end.
+  list.push({
+      x: 0,
+      z: azadiZ,
+      typeIndex: 0,
+      tex: 0,
+      rotation: 0,
   });
 
   return list;
@@ -977,12 +1005,11 @@ function City() {
   useFrame(({ camera }) => {
     if (groupRef.current) {
       const camZ = camera.position.z;
-      // Aggressive Distance Culling for 60 FPS
-      // The fog completely hides everything past 45 units.
-      // We also hide anything more than 10 units behind the camera.
+      // Aggressive Distance Culling for 60 FPS — kept just past the fog
+      // end (66) so nothing pops in/out while still visible.
       groupRef.current.children.forEach((child) => {
         const dist = camZ - child.position.z;
-        child.visible = dist > -15 && dist < 48;
+        child.visible = dist > -15 && dist < 68;
       });
     }
   });
@@ -995,6 +1022,9 @@ function City() {
       const instance = proto.group.clone();
       instance.position.set(b.x, -1.98, b.z);
       instance.rotation.y = b.rotation;
+      // The Azadi gate stands far beyond every other building, so the
+      // monumental scale can't clip anything — grow it in place.
+      if (b.typeIndex === 0) instance.scale.setScalar(AZADI_SCALE);
 
       // Add a foundation block under each building so it connects cleanly to the ground
       const foundationGeo = new THREE.BoxGeometry(
@@ -1042,10 +1072,10 @@ function City() {
     <>
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -2.0, -26]}
+        position={[0, -2.0, -62]}
         scale={[1, 1, 1]}
       >
-        <planeGeometry args={[110, 150]} />
+        <planeGeometry args={[110, 224]} />
         <Suspense fallback={<meshBasicMaterial color="#04060d" />}>
           <PuddleMaterial />
         </Suspense>
@@ -1073,7 +1103,7 @@ function CorridorRain() {
     
     for (let i = 0; i < count; i++) {
       const x = (Math.random() - 0.5) * 35;
-      const z = 8 - Math.random() * 60;
+      const z = 8 - Math.random() * 130;
       const y = -2 + Math.random() * 25; 
       // Much shorter lines to look like small, distinct droplets rather than long streaks
       const len = 0.15 + Math.random() * 0.25; 
@@ -1180,13 +1210,13 @@ export function CorridorScene({
           hoveredIdxRef={border.hoveredIdxRef}
         />
       ))}
-      <HtmlSection index={N} focused={focusedIdx === N}>
+      <HtmlSection index={N} focused={focusedIdx === N} dir={lang === "fa" ? "rtl" : "ltr"}>
         <TrustStats lang={lang as Lang} />
       </HtmlSection>
-      <HtmlSection index={N + 1} focused={focusedIdx === N + 1}>
+      <HtmlSection index={N + 1} focused={focusedIdx === N + 1} dir={lang === "fa" ? "rtl" : "ltr"}>
         <ProcessTimeline lang={lang as Lang} />
       </HtmlSection>
-      <HtmlSection index={N + 2} focused={focusedIdx === N + 2}>
+      <HtmlSection index={N + 2} focused={focusedIdx === N + 2} dir={lang === "fa" ? "rtl" : "ltr"}>
         <ContactSection lang={lang as Lang} />
       </HtmlSection>
     </>
