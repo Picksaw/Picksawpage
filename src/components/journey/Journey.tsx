@@ -101,8 +101,10 @@ export default function Journey({ lang }: { lang: Lang }) {
         style={{ height: `${100 + 100 + TEMPLATES.length * 92 + 55}vh` }}
       />
 
-      {/* the 3D world — Journey never fades out: it is the entire website */}
-      <div className="fixed inset-0 z-[2]">
+      {/* the 3D world — Journey never fades out: it is the entire website.
+          dir="ltr" keeps drei <Html> overlay centering geometry LTR even when
+          the page is RTL; framed section windows set their own rtl content dir. */}
+      <div className="fixed inset-0 z-[2]" dir="ltr">
         <Canvas
           dpr={[1, 1.25]} // capped everywhere — 4K desktops are fill-rate bound
           frameloop="always"
