@@ -57,9 +57,9 @@ const FOCUS_DIST = 4.2;
 
 /** Azadi is the finale monument. The GLTF auto-fit leaves it a mere
  *  ~2.8 units tall (smaller than the street buildings!), so the gate
- *  gets its own scale: ~15 tall × ~17 wide — it spans the end of the
- *  street like the real Azadi square arch. */
-const AZADI_SCALE = 5.5;
+ *  gets its own scale: ~19 tall × ~22 wide — a distant giant that
+ *  fills the end of the street (~84% of the view from the final stop). */
+const AZADI_SCALE = 7;
 
 // Walk layout math (stations, cameraZ, layerOpacity, …) lives in ./path —
 // shared with JourneyElectricBorder's draw gating without a circular import.
@@ -1073,10 +1073,10 @@ function City() {
     <>
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -2.0, -30]}
+        position={[0, -2.0, -45]}
         scale={[1, 1, 1]}
       >
-        <planeGeometry args={[110, 160]} />
+        <planeGeometry args={[110, 190]} />
         <Suspense fallback={<meshBasicMaterial color="#04060d" />}>
           <PuddleMaterial />
         </Suspense>
@@ -1104,7 +1104,7 @@ function CorridorRain() {
     
     for (let i = 0; i < count; i++) {
       const x = (Math.random() - 0.5) * 35;
-      const z = 8 - Math.random() * 60;
+      const z = 8 - Math.random() * 100;
       const y = -2 + Math.random() * 25; 
       // Much shorter lines to look like small, distinct droplets rather than long streaks
       const len = 0.15 + Math.random() * 0.25; 
