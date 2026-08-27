@@ -57,9 +57,9 @@ const FOCUS_DIST = 4.2;
 
 /** Azadi is the finale monument. The GLTF auto-fit leaves it a mere
  *  ~2.8 units tall (smaller than the street buildings!), so the gate
- *  gets its own scale: ~19 tall × ~22 wide — a distant giant that
- *  fills the end of the street (~84% of the view from the final stop). */
-const AZADI_SCALE = 7;
+ *  gets its own scale: ~22 tall × ~26 wide — seen from 46 units away
+ *  it fills ~63% of the view height, half-lost in the fog haze. */
+const AZADI_SCALE = 8;
 
 // Walk layout math (stations, cameraZ, layerOpacity, …) lives in ./path —
 // shared with JourneyElectricBorder's draw gating without a circular import.
@@ -1005,12 +1005,11 @@ function City() {
   useFrame(({ camera }) => {
     if (groupRef.current) {
       const camZ = camera.position.z;
-      // Aggressive Distance Culling for 60 FPS
-      // The fog completely hides everything past 45 units.
-      // We also hide anything more than 10 units behind the camera.
+      // Aggressive Distance Culling for 60 FPS — kept just past the fog
+      // end (66) so nothing pops in/out while still visible.
       groupRef.current.children.forEach((child) => {
         const dist = camZ - child.position.z;
-        child.visible = dist > -15 && dist < 48;
+        child.visible = dist > -15 && dist < 68;
       });
     }
   });
@@ -1073,10 +1072,10 @@ function City() {
     <>
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -2.0, -45]}
+        position={[0, -2.0, -62]}
         scale={[1, 1, 1]}
       >
-        <planeGeometry args={[110, 190]} />
+        <planeGeometry args={[110, 224]} />
         <Suspense fallback={<meshBasicMaterial color="#04060d" />}>
           <PuddleMaterial />
         </Suspense>
@@ -1104,7 +1103,7 @@ function CorridorRain() {
     
     for (let i = 0; i < count; i++) {
       const x = (Math.random() - 0.5) * 35;
-      const z = 8 - Math.random() * 100;
+      const z = 8 - Math.random() * 130;
       const y = -2 + Math.random() * 25; 
       // Much shorter lines to look like small, distinct droplets rather than long streaks
       const len = 0.15 + Math.random() * 0.25; 

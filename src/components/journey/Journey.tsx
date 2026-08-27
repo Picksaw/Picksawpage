@@ -94,13 +94,13 @@ export default function Journey({ lang }: { lang: Lang }) {
   return (
     <>
       {/* scroll length for the walk: P → headline → 6 paintings →
-          the finale leg that carries the camera past the last
-          painting up to the Azadi Tower */}
+          the long finale boulevard that carries the camera past the
+          last painting toward the distant Azadi Tower */}
       <div
         ref={spacerRef}
         id="templates"
         aria-hidden
-        style={{ height: `${100 + 100 + TEMPLATES.length * 92 + 55 + 80}vh` }}
+        style={{ height: `${100 + 100 + TEMPLATES.length * 92 + 55 + 300}vh` }}
       />
 
       {/* the 3D world — Journey never fades out: it is the entire website.
@@ -130,7 +130,7 @@ export default function Journey({ lang }: { lang: Lang }) {
             document.body.style.cursor = "";
           }}
         >
-          <fog attach="fog" args={["#06080f", 12, 45]} />
+          <fog attach="fog" args={["#06080f", 12, 66]} />
           <ambientLight intensity={0.5} />
           <directionalLight position={[-3, 5, 4]} intensity={1.4} color="#eaf6ff" />
           <pointLight position={[2.6, -0.6, 3.4]} intensity={22} color="#4fd8ff" />
