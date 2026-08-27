@@ -1,11 +1,38 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import {
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { TEMPLATES, type TemplateItem } from "../../config/templatesConfig";
 import { TEMPLATE_IMAGE_MAP } from "../../config/templateImages";
 import { SITE_TEXTS, type Lang } from "../../config/siteTexts";
+import { Html, useGLTF } from "@react-three/drei";
 import GroundFog from "./GroundFog";
-import { useJourneyElectricBorder, BORDER_OVERSCAN } from "./JourneyElectricBorder";
+import TrustStats from "../TrustStats";
+import ProcessTimeline from "../ProcessTimeline";
+import ContactSection from "../ContactSection";
+import { PuddleMaterial } from "./PuddleMaterial";
+import {
+  useJourneyElectricBorder,
+  BORDER_OVERSCAN,
+} from "./JourneyElectricBorder";
+import {
+  HEADLINE_Z,
+  TOTAL_STATIONS,
+  paintingZ,
+  stations,
+  focusedIndex,
+  cameraZ,
+  layerOpacity,
+} from "./path";
+
+// Re-exports — Journey.tsx imports the walk layout from this module.
+export { HEADLINE_Z, paintingZ, stations, focusedIndex, cameraZ, layerOpacity };
 
 /**
  * Corridor V2 — the neon city walk.
@@ -28,40 +55,8 @@ const PAINTING_W = 3.1;
 const PAINTING_H = 2.35;
 const FOCUS_DIST = 4.2;
 
-export const HEADLINE_Z = -13;
-export const paintingZ = (i: number) => -24 - i * 8;
-
-export const stations: number[] = [
-  4.6, // the P + ring
-  HEADLINE_Z + FOCUS_DIST, // the headline layer
-  ...Array.from({ length: N }, (_, i) => paintingZ(i) + FOCUS_DIST),
-  paintingZ(N - 1) + 1.2, // exit — dissolves into the page (never clips through)
-];
-
-/** Painting index for the focus bar: -1 outside the gallery zone. */
-export function focusedIndex(progress: number): number {
-  const u = progress * (stations.length - 1);
-  const idx = Math.round(u) - 2;
-  if (u < 1.55 || u > stations.length - 1.4) return -1;
-  return Math.max(0, Math.min(N - 1, idx));
-}
-
-const smoothstep = (t: number) => t * t * (3 - 2 * t);
-const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-
-export function cameraZ(progress: number): number {
-  const u = Math.max(0, Math.min(1, progress)) * (stations.length - 1);
-  const k = Math.min(stations.length - 2, Math.floor(u));
-  const t = smoothstep(u - k);
-  return THREE.MathUtils.lerp(stations[k], stations[k + 1], t);
-}
-
-/** How visible a layer is — fades to zero well before the next appears. */
-function layerOpacity(camZ: number, layerZ: number): number {
-  const d = camZ - layerZ; // positive while approaching
-  if (d <= 0.2) return clamp01(d / 1.2); // fade as the camera reaches it
-  return clamp01((8.4 - d) / 2.2); // fully hidden by 8.4 units away
-}
+// Walk layout math (stations, cameraZ, layerOpacity, …) lives in ./path —
+// shared with JourneyElectricBorder's draw gating without a circular import.
 
 /** Camera dolly driven by shared scroll progress + mouse parallax. */
 export function CameraRig({
@@ -103,13 +98,14 @@ function useFitScale(
   baseH: number,
   focusDist: number,
   maxWFrac = 0.94,
-  maxHFrac = 0.8
+  maxHFrac = 0.8,
 ): number {
   const { size, camera } = useThree();
   const [s, setS] = useState(1);
   useEffect(() => {
     const cam = camera as THREE.PerspectiveCamera;
-    const visH = 2 * focusDist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    const visH =
+      2 * focusDist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
     const visW = visH * (size.width / size.height);
     setS(Math.min((maxWFrac * visW) / baseW, (maxHFrac * visH) / baseH, 1.06));
   }, [size, camera, baseW, baseH, focusDist, maxWFrac, maxHFrac]);
@@ -117,7 +113,10 @@ function useFitScale(
 }
 
 /** Bake a painting texture: screenshot + caption strip, branded fallback. */
-function usePaintingTexture(item: TemplateItem, lang: string): THREE.CanvasTexture {
+function usePaintingTexture(
+  item: TemplateItem,
+  lang: string,
+): THREE.CanvasTexture {
   const [tex] = useState(() => {
     const c = document.createElement("canvas");
     c.width = 960;
@@ -137,7 +136,13 @@ function usePaintingTexture(item: TemplateItem, lang: string): THREE.CanvasTextu
         const iw = img.naturalWidth || 4;
         const ih = img.naturalHeight || 3;
         const scale = Math.max(W / iw, (H - CAP) / ih);
-        ctx.drawImage(img, (W - iw * scale) / 2, (H - CAP - ih * scale) / 2, iw * scale, ih * scale);
+        ctx.drawImage(
+          img,
+          (W - iw * scale) / 2,
+          (H - CAP - ih * scale) / 2,
+          iw * scale,
+          ih * scale,
+        );
       } else {
         const g = ctx.createLinearGradient(0, 0, W, H - CAP);
         g.addColorStop(0, "#0b1322");
@@ -173,7 +178,11 @@ function usePaintingTexture(item: TemplateItem, lang: string): THREE.CanvasTextu
       ctx.fillStyle = "#4fd8ff";
       ctx.font = "600 22px 'Sora Variable', sans-serif";
       ctx.textAlign = "right";
-      ctx.fillText(lang === "fa" ? "باز کردن ↗" : "OPEN ↗", W - 36, H - CAP / 2);
+      ctx.fillText(
+        lang === "fa" ? "باز کردن ↗" : "OPEN ↗",
+        W - 36,
+        H - CAP / 2,
+      );
 
       tex.tex.needsUpdate = true;
     };
@@ -183,7 +192,9 @@ function usePaintingTexture(item: TemplateItem, lang: string): THREE.CanvasTextu
     img.crossOrigin = "anonymous";
     img.onload = () => alive && draw(img);
     img.onerror = () => alive && draw(null);
-    img.src = TEMPLATE_IMAGE_MAP[item.imageKey] ?? `${import.meta.env.BASE_URL}images/${item.imageKey}.webp`;
+    img.src =
+      TEMPLATE_IMAGE_MAP[item.imageKey] ??
+      `${import.meta.env.BASE_URL}images/${item.imageKey}.webp`;
 
     return () => {
       alive = false;
@@ -226,10 +237,17 @@ function Painting({
   const map = usePaintingTexture(item, lang);
   const fit = useFitScale(PAINTING_W, PAINTING_H, FOCUS_DIST);
   const z = paintingZ(index);
+  const _scale = useRef(new THREE.Vector3()); // no per-frame allocation
 
   useFrame(({ camera }, delta) => {
     const dt = Math.min(delta, 0.05);
     const op = layerOpacity(camera.position.z, z);
+
+    // Fully outside the opacity window → stop drawing these 4 meshes
+    // (opacity 0 still rasterizes; visible=false skips the draw calls).
+    // Pointer handlers only exist on the focused painting, which is
+    // always inside the window — so no interaction is lost.
+    if (group.current) group.current.visible = op > 0.01;
 
     // solo fade — material + glow + frame all obey it
     if (planeMat.current) planeMat.current.opacity = op;
@@ -244,7 +262,7 @@ function Painting({
     if (group.current) {
       const hoverS = hovered.current ? 1.03 : 1;
       const s = fit * hoverS;
-      group.current.scale.lerp(new THREE.Vector3(s, s, s), Math.min(1, dt * 8));
+      group.current.scale.lerp(_scale.current.set(s, s, s), Math.min(1, dt * 8));
       // parallax lean — tiny, never enough to spill
       group.current.position.x = (camera.position.x || 0) * 0.06;
     }
@@ -308,14 +326,23 @@ function Painting({
         }
       >
         <planeGeometry args={[PAINTING_W, PAINTING_H]} />
-        <meshBasicMaterial map={map} toneMapped={false} transparent opacity={1} />
+        <meshBasicMaterial
+          ref={planeMat}
+          map={map}
+          toneMapped={false}
+          transparent
+          opacity={1}
+        />
       </mesh>
       {/* electric lightning ring — the same painter that drives the DOM
           cards, uploaded as a shared animated texture. Additive so the
           bolt glows over the frame without a background. */}
       <mesh position={[0, 0, 0.022]}>
         <planeGeometry
-          args={[PAINTING_W * (1 + 2 * BORDER_OVERSCAN), PAINTING_H * (1 + 2 * BORDER_OVERSCAN)]}
+          args={[
+            PAINTING_W * (1 + 2 * BORDER_OVERSCAN),
+            PAINTING_H * (1 + 2 * BORDER_OVERSCAN),
+          ]}
         />
         <meshBasicMaterial
           ref={borderMat}
@@ -345,6 +372,26 @@ function HeadlineLayer({ lang }: { lang: Lang }) {
     c.height = 630;
     const ctx = c.getContext("2d")!;
     ctx.clearRect(0, 0, c.width, c.height);
+
+    // Glassmorphism panel background
+    const margin = 40;
+    const radius = 60;
+    ctx.fillStyle = "rgba(4, 7, 14, 0.45)"; // Deep glass
+    ctx.strokeStyle = "rgba(79, 216, 255, 0.25)"; // Electric border
+    ctx.lineWidth = 4;
+    
+    // Draw rounded rect
+    ctx.beginPath();
+    ctx.roundRect(margin, margin, c.width - margin * 2, c.height - margin * 2, radius);
+    ctx.fill();
+    ctx.stroke();
+    
+    // Slight gradient glow inside the glass
+    const glow = ctx.createLinearGradient(0, 0, 0, c.height);
+    glow.addColorStop(0, "rgba(255, 255, 255, 0.08)");
+    glow.addColorStop(1, "rgba(0, 0, 0, 0.3)");
+    ctx.fillStyle = glow;
+    ctx.fill();
 
     const fa = lang === "fa";
     ctx.direction = fa ? "rtl" : "ltr";
@@ -385,16 +432,6 @@ function HeadlineLayer({ lang }: { lang: Lang }) {
 
   useEffect(() => () => texture.dispose(), [texture]);
 
-  // fonts may land after first paint — rebuild once they're ready
-  const [, force] = useState(0);
-  useEffect(() => {
-    let alive = true;
-    document.fonts?.ready.then(() => alive && force((n) => n + 1));
-    return () => {
-      alive = false;
-    };
-  }, []);
-
   useFrame(({ camera }) => {
     const op = layerOpacity(camera.position.z, HEADLINE_Z);
     if (mat.current) mat.current.opacity = op;
@@ -419,39 +456,293 @@ function HeadlineLayer({ lang }: { lang: Lang }) {
   );
 }
 
+function HtmlSection({
+  index,
+  focused,
+  children,
+}: {
+  index: number;
+  focused: boolean;
+  children: React.ReactNode;
+}) {
+  const z = paintingZ(index);
+  const fit = useFitScale(PAINTING_W, PAINTING_H, FOCUS_DIST);
+  const group = useRef<THREE.Group>(null);
+  const _scale = useRef(new THREE.Vector3()); // no per-frame allocation
+
+  const outerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+
+  const frameMat = useRef<THREE.MeshStandardMaterial>(null);
+  const glowMat = useRef<THREE.MeshBasicMaterial>(null);
+
+  const { size, camera } = useThree();
+
+  // Pick a base resolution for the UI to render at before scaling.
+  const targetW = size.width < 768 ? 400 : 1024;
+  const targetH = targetW * (PAINTING_H / PAINTING_W);
+
+  useFrame((_, delta) => {
+    const dt = Math.min(delta, 0.05);
+    const cam = camera as THREE.PerspectiveCamera;
+    const op = layerOpacity(cam.position.z, z);
+
+    if (frameMat.current) frameMat.current.opacity = op;
+    if (glowMat.current) glowMat.current.opacity = (focused ? 0.3 : 0.1) * op;
+
+    if (group.current) {
+      // The <Html> overlay ignores ancestor visibility (drei only hides
+      // it behind the camera) — the DOM div is toggled separately below.
+      group.current.visible = op > 0.01; // glow + frame meshes
+      group.current.scale.lerp(
+        _scale.current.set(fit, fit, fit),
+        Math.min(1, dt * 8),
+      );
+      group.current.position.x = (cam.position.x || 0) * 0.06;
+    }
+
+    if (outerRef.current && innerRef.current) {
+      if (op < 0.01) {
+        // display:none skips layout + paint entirely for the off-screen
+        // section DOM (the heaviest 2D content in the scene)
+        outerRef.current.style.display = "none";
+        outerRef.current.style.opacity = "0";
+        outerRef.current.style.pointerEvents = "none";
+        return;
+      }
+      if (outerRef.current.style.display !== "block") {
+        outerRef.current.style.display = "block";
+      }
+
+      // Calculate exact pixel dimensions of the 3D frame on the 2D screen
+      const dist = Math.abs(cam.position.z - z);
+      const safeDist = Math.max(dist, 0.1);
+
+      const fovRad = THREE.MathUtils.degToRad(cam.fov / 2);
+      const visible_height = 2 * safeDist * Math.tan(fovRad);
+
+      // Need to use group.current.scale to match the lerped scale
+      const currentScale = group.current ? group.current.scale.x : fit;
+
+      const pxH = (PAINTING_H / visible_height) * size.height * currentScale;
+      const pxW = (PAINTING_W / visible_height) * size.height * currentScale;
+
+      // Also account for the parallax X shift on screen
+      // If group has position.x, we must shift the overlay
+      // 3D X -> screen X
+      const shiftX = group.current
+        ? (group.current.position.x /
+            (visible_height * (size.width / size.height))) *
+          size.width
+        : 0;
+
+      outerRef.current.style.width = `${pxW}px`;
+      outerRef.current.style.height = `${pxH}px`;
+      outerRef.current.style.opacity = op.toString();
+      outerRef.current.style.pointerEvents = focused ? "auto" : "none";
+      outerRef.current.style.transform = `translateX(${shiftX}px)`;
+
+      const scale = pxW / targetW;
+      innerRef.current.style.transform = `scale(${scale})`;
+    }
+  });
+
+  return (
+    <group ref={group} position={[0, 0, z]}>
+      {/* glow halo behind the frame */}
+      <mesh position={[0, 0, -0.09]}>
+        <planeGeometry args={[PAINTING_W + 0.55, PAINTING_H + 0.55]} />
+        <meshBasicMaterial
+          ref={glowMat}
+          color="#4fd8ff"
+          transparent
+          opacity={0.1}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          fog={false}
+        />
+      </mesh>
+      {/* dark frame */}
+      <mesh position={[0, 0, -0.05]}>
+        <boxGeometry args={[PAINTING_W + 0.16, PAINTING_H + 0.16, 0.09]} />
+        <meshStandardMaterial
+          ref={frameMat}
+          color="#11182a"
+          metalness={0.6}
+          roughness={0.5}
+          transparent
+          opacity={1}
+        />
+      </mesh>
+
+      {/* HTML Content — perfectly tracking 2D overlay avoiding all CSS3D browser bugs */}
+      <Html center zIndexRange={[100, 0]}>
+        <div
+          ref={outerRef}
+          className="relative overflow-hidden bg-[#04060d] text-white flex items-start justify-center rounded-sm"
+          style={{ opacity: 0 }}
+        >
+          <div
+            ref={innerRef}
+            className="absolute top-0 left-0 origin-top-left overflow-y-auto overflow-x-hidden custom-scrollbar"
+            style={{ width: targetW, height: targetH }}
+          >
+            {children}
+          </div>
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+// ── Custom GLTF Building Loader ─────────────────────────────────────────────
+// If you download a high quality building from Sketchfab or KitBash3D,
+// place the .glb file in public/models/ and uncomment this component to use it.
+/*
+export function CustomBuilding({ url, position, rotation }: any) {
+  const { scene } = useGLTF(url);
+  // Clone it so you can use the same building multiple times
+  const clone = useMemo(() => scene.clone(), [scene]);
+  return <primitive object={clone} position={position} rotation={rotation} />;
+}
+*/
+
 // ── the city ───────────────────────────────────────────────────────────────
 
-/** Window textures — every single window lit, brightness varies. */
-function makeWindowTextures(): THREE.Texture[] {
-  const out: THREE.Texture[] = [];
+interface WindowMaps {
+  map: THREE.Texture;
+  emissiveMap: THREE.Texture;
+  roughnessMap: THREE.Texture;
+  metalnessMap: THREE.Texture;
+}
+
+function makeWindowTextures(): WindowMaps[] {
+  const out: WindowMaps[] = [];
   for (let v = 0; v < 3; v++) {
+    // Diffuse / Emissive Canvas
     const c = document.createElement("canvas");
-    c.width = 128;
-    c.height = 256;
+    c.width = 512;
+    c.height = 1024;
     const ctx = c.getContext("2d")!;
-    ctx.fillStyle = "#04060c";
-    ctx.fillRect(0, 0, 128, 256);
-    const cols = 5;
-    const rows = 12;
-    const cw = 128 / cols;
-    const ch = 256 / rows;
+
+    // Roughness Canvas
+    const cRough = document.createElement("canvas");
+    cRough.width = 512;
+    cRough.height = 1024;
+    const ctxRough = cRough.getContext("2d")!;
+
+    // Metalness Canvas
+    const cMetal = document.createElement("canvas");
+    cMetal.width = 512;
+    cMetal.height = 1024;
+    const ctxMetal = cMetal.getContext("2d")!;
+
+    // Base background (Building Frame / Wall)
+    ctx.fillStyle = "#0a0b10";
+    ctx.fillRect(0, 0, 512, 1024);
+
+    // Frames are rough and non-metallic
+    ctxRough.fillStyle = "#e0e0e0"; // High roughness
+    ctxRough.fillRect(0, 0, 512, 1024);
+
+    ctxMetal.fillStyle = "#333333"; // Low metalness
+    ctxMetal.fillRect(0, 0, 512, 1024);
+
+    const cols = 8;
+    const rows = 16;
+    const cw = 512 / cols;
+    const ch = 1024 / rows;
+
     for (let x = 0; x < cols; x++) {
       for (let y = 0; y < rows; y++) {
-        // 100% lit — brightness varies so the facade stays organic
-        const bright = 0.3 + Math.random() * 0.7;
-        const whiteBlue = Math.random() < 0.24;
-        ctx.fillStyle = whiteBlue
-          ? `rgba(${210 + bright * 45}, ${238 + bright * 17}, 255, ${0.65 + bright * 0.35})`
-          : `rgba(${90 + bright * 80}, ${195 + bright * 50}, 255, ${0.5 + bright * 0.5})`;
-        ctx.fillRect(x * cw + cw * 0.16, y * ch + ch * 0.22, cw * 0.62, ch * 0.45);
+        const winX = x * cw + cw * 0.15;
+        const winY = y * ch + ch * 0.15;
+        const winW = cw * 0.7;
+        const winH = ch * 0.7;
+
+        // Glass is very smooth and highly metallic (like a mirror)
+        ctxRough.fillStyle = "#111111"; // Low roughness (shiny)
+        ctxRough.fillRect(winX, winY, winW, winH);
+
+        ctxMetal.fillStyle = "#ffffff"; // High metalness (reflective)
+        ctxMetal.fillRect(winX, winY, winW, winH);
+
+        const rowProb = y % 4 === 0 ? 0.7 : 0.25;
+        const isOn = Math.random() < rowProb;
+
+        if (isOn) {
+          const bright = 0.4 + Math.random() * 0.6;
+          let r, g, b;
+          const type = Math.random();
+          if (type < 0.08) {
+            r = 255;
+            g = 170 + bright * 50;
+            b = 100;
+          } else if (type < 0.3) {
+            r = 220 + bright * 35;
+            g = 240 + bright * 15;
+            b = 255;
+          } else {
+            r = 80 + bright * 90;
+            g = 190 + bright * 60;
+            b = 255;
+          }
+
+          const grad = ctx.createLinearGradient(winX, winY, winX, winY + winH);
+          grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${0.9 + bright * 0.1})`);
+          grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, ${0.1 + bright * 0.2})`);
+
+          ctx.fillStyle = grad;
+          ctx.fillRect(winX, winY, winW, winH);
+
+          ctx.fillStyle = "#010102";
+          const detail = Math.random();
+          if (detail < 0.3) {
+            const splitW = winW * 0.5;
+            ctx.fillRect(winX + splitW - 1.5, winY, 3, winH);
+            // frame details should be rough
+            ctxRough.fillStyle = "#e0e0e0";
+            ctxRough.fillRect(winX + splitW - 1.5, winY, 3, winH);
+            ctxMetal.fillStyle = "#333333";
+            ctxMetal.fillRect(winX + splitW - 1.5, winY, 3, winH);
+          } else if (detail < 0.6) {
+            const blindH = winH * (0.2 + Math.random() * 0.6);
+            ctx.fillRect(winX, winY, winW, blindH);
+            ctxRough.fillStyle = "#dddddd";
+            ctxRough.fillRect(winX, winY, winW, blindH);
+            ctxMetal.fillStyle = "#111111";
+            ctxMetal.fillRect(winX, winY, winW, blindH);
+          } else if (detail < 0.8) {
+            const deskH = winH * (0.2 + Math.random() * 0.3);
+            ctx.fillRect(winX, winY + winH - deskH, winW, deskH);
+            ctxRough.fillStyle = "#aaaaaa";
+            ctxRough.fillRect(winX, winY + winH - deskH, winW, deskH);
+            ctxMetal.fillStyle = "#222222";
+            ctxMetal.fillRect(winX, winY + winH - deskH, winW, deskH);
+          }
+        } else {
+          ctx.fillStyle = "#030408";
+          ctx.fillRect(winX, winY, winW, winH);
+        }
       }
     }
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.magFilter = THREE.NearestFilter;
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    out.push(tex);
+
+    const createTex = (canvas: HTMLCanvasElement) => {
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.magFilter = THREE.LinearFilter;
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = 4;
+      return tex;
+    };
+
+    out.push({
+      map: createTex(c),
+      emissiveMap: createTex(c),
+      roughnessMap: createTex(cRough),
+      metalnessMap: createTex(cMetal),
+    });
   }
   return out;
 }
@@ -459,230 +750,404 @@ function makeWindowTextures(): THREE.Texture[] {
 interface Building {
   x: number;
   z: number;
-  w: number;
-  h: number;
-  d: number;
+  typeIndex: number;
   tex: number;
-  tier: boolean; // smaller crown block on top
-  antenna: boolean; // mast + tip light
-  tintR: number; // slight facade tint variance
-  tintG: number;
-  uRep: number; // window grid density variation
-  vRep: number;
+  rotation: number;
 }
 
-/** Deterministic per-session city layout: blocks flanking the path. */
-function makeCity(isMobile: boolean): Building[] {
+function makeCity(): Building[] {
   const list: Building[] = [];
   let seed = 20260824;
   const rnd = () => {
     seed = (seed * 16807) % 2147483647;
     return seed / 2147483647;
   };
+  
   const startZ = 8;
-  const endZ = paintingZ(N - 1) - 12;
-  // Mobile portrait screens have a very narrow horizontal FOV — the
-  // city must hug the walking path or towers never enter the frame
-  // before the fog swallows them.
-  // Tuned via frustum+fog simulation: exactly 5-6 lit towers visible at
-  // every gallery station on BOTH desktop and portrait phones.
-  const step = isMobile ? 4.0 : 4.5;
-  const nearX = isMobile ? 2.0 : 5.4;
-  const rowGap = isMobile ? 1.9 : 4.5;
+  const endZ = paintingZ(TOTAL_STATIONS - 1) - 12;
+  const step = 6.0;
+  const nearX = 4.0;
+  const rowGap = 4.5;
+  
+  // We want to collect all valid (x, z) slots first so we can assign Azadi and Milad to exactly ONE of them.
+  const slots: {x: number, z: number, rotation: number}[] = [];
+  
   for (let z = startZ; z > endZ; z -= step) {
     for (const side of [-1, 1]) {
       const rows = rnd() < 0.55 ? 2 : 1;
       for (let r = 0; r < rows; r++) {
-        const w = 1.6 + rnd() * 2.6;
-        const d = 1.6 + rnd() * 2.6;
-        const h = 2 + rnd() * 7.5;
-        const x = side * (nearX + r * rowGap + rnd() * 1.6);
-        const tall = h > 6.5;
-        // window grid follows the building's real proportions — every
-        // window is the same physical size, nothing stretched
-        list.push({
-          x: x + (rnd() - 0.5) * 1.4,
-          z: z + (rnd() - 0.5) * step * 0.7,
-          w,
-          h,
-          d,
-          tex: Math.floor(rnd() * 3),
-          tier: tall || rnd() < 0.3,
-          antenna: tall && rnd() < 0.75,
-          tintR: 0.86 + rnd() * 0.14,
-          tintG: 0.92 + rnd() * 0.08,
-          uRep: Math.max(1, Math.round(w / 1.5)),
-          vRep: Math.max(1, Math.round(h / 2.6)),
+        const x = side * (nearX + r * rowGap + rnd() * 1.5);
+        slots.push({
+          x: x + (rnd() - 0.5) * 1.0,
+          z: z + (rnd() - 0.5) * step * 0.4,
+          rotation: Math.floor(rnd() * 4) * (Math.PI / 2),
         });
       }
     }
   }
+  
+  // Randomly select 2 unique slots for our landmarks
+  // Let's pick them deterministically based on seed
+  const azadiIdx = Math.floor(rnd() * slots.length);
+  let miladIdx = Math.floor(rnd() * slots.length);
+  while (miladIdx === azadiIdx && slots.length > 1) {
+      miladIdx = Math.floor(rnd() * slots.length);
+  }
+  
+  slots.forEach((slot, i) => {
+      let typeIndex;
+      if (i === azadiIdx) typeIndex = 0;
+      else if (i === miladIdx) typeIndex = 1;
+      else {
+          // The rest are randomly chosen from index 2, 3, and 4
+          typeIndex = 2 + Math.floor(rnd() * 3);
+      }
+      list.push({ ...slot, typeIndex, tex: 0 });
+  });
+
   return list;
 }
 
-function City() {
-  const isMobile = useMemo(
-    () => window.matchMedia("(pointer: coarse)").matches,
-    []
+function MovingStreetLights() {
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame(({ camera }) => {
+    if (groupRef.current) {
+      // The lights follow the camera's Z position exactly,
+      // meaning we only ever render 4 lights, but it looks like a continuous street!
+      groupRef.current.position.z = camera.position.z;
+    }
+  });
+
+  const colors = ["#4fd8ff", "#9fe8ff", "#2a6cff", "#ffffff"];
+
+  return (
+    <group ref={groupRef}>
+      {Array.from({ length: 4 }).map((_, i) => {
+        // Space them out relative to the camera
+        const zOffset = -i * 8;
+        const side = i % 2 === 0 ? 1 : -1;
+        const color = colors[i % colors.length];
+        return (
+          <pointLight
+            key={i}
+            position={[side * 4, -1.2, zOffset]}
+            intensity={15}
+            color={color}
+            distance={20}
+          />
+        );
+      })}
+    </group>
   );
-  const buildings = useMemo(() => makeCity(isMobile), [isMobile]);
+}
+
+function City() {
+  const buildings = useMemo(() => makeCity(), []);
+
   const windowTexs = useMemo(() => makeWindowTextures(), []);
 
-  // build meshes imperatively — each building gets its OWN material so
-  // windows can be dimmed by distance (front rows bright, far fade).
-  const cityGroup = useMemo(() => {
-    const g = new THREE.Group();
-    const scaleUV = (geo: THREE.BufferGeometry, u: number, v: number) => {
-      const uv = geo.getAttribute("uv") as THREE.BufferAttribute | undefined;
-      if (!uv) return;
-      for (let i = 0; i < uv.count; i++) {
-        uv.setXY(i, uv.getX(i) * u, uv.getY(i) * v);
-      }
-      uv.needsUpdate = true;
-    };
+  // Load custom GLTFs
+  const gltfAzadi = useGLTF(import.meta.env.BASE_URL + "azadi_tower.glb") as any;
+  const gltfMilad = useGLTF(import.meta.env.BASE_URL + "milad_tower.glb") as any;
+  const gltfNY = useGLTF(import.meta.env.BASE_URL + "new_york_background_building_1.glb") as any;
+  const gltfRealistic = useGLTF(import.meta.env.BASE_URL + "realistic_building.glb") as any;
+  const gltfLowRise = useGLTF(import.meta.env.BASE_URL + "low_rise_wall_to_wall_office_building.glb") as any;
+  
 
-    for (const b of buildings) {
-      // per-building material (cloned map ref, own color for dim/tint)
-      // fog:true — the SCENE FOG decides which buildings show, exactly
-      // like the first version that worked: near rows visible, far
-      // towers swallowed by the mist. No runtime dimming needed.
-      const mat = new THREE.MeshBasicMaterial({
-        map: windowTexs[b.tex],
-        color: "#ffffff",
-        fog: true,
-      });
-      const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
-      scaleUV(geo, b.uRep, b.vRep); // varied window densities per facade
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(b.x, -2.9 + b.h / 2, b.z);
-      g.add(mesh);
+  const { concreteMat, windowMats, prototypes } = useMemo(() => {
+    // A single foundation material shared across all buildings
+    const cMat = new THREE.MeshStandardMaterial({
+      color: "#050608", // Very dark to blend with fog/abyss
+      roughness: 0.8,
+      metalness: 0.1,
+      fog: true,
+    });
 
-      const edgeMat = new THREE.LineBasicMaterial({
-        color: "#2f7bff",
-        transparent: true,
-        opacity: 0.45,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        fog: true,
-      });
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
-      edges.position.copy(mesh.position);
-      g.add(edges);
-
-      // crown tier — a second, smaller block on taller buildings
-      if (b.tier) {
-        const tw = b.w * 0.68;
-        const td = b.d * 0.68;
-        const th = b.h * 0.32;
-        const tGeo = new THREE.BoxGeometry(tw, th, td);
-        scaleUV(tGeo, Math.max(1, b.uRep - 1), 1);
-        const tMesh = new THREE.Mesh(tGeo, mat); // shares material → dims together
-        tMesh.position.set(b.x, -2.9 + b.h + th / 2, b.z);
-        g.add(tMesh);
-      }
-
-      // antenna mast + tip light
-      let tipMat: THREE.MeshBasicMaterial | undefined;
-      if (b.antenna) {
-        const mastH = 0.9 + Math.random() * 0.8;
-        const mast = new THREE.Mesh(
-          new THREE.BoxGeometry(0.045, mastH, 0.045),
-          new THREE.MeshBasicMaterial({ color: "#16233c", fog: true })
-        );
-        const topY = -2.9 + b.h + (b.tier ? b.h * 0.32 : 0);
-        mast.position.set(b.x, topY + mastH / 2, b.z);
-        g.add(mast);
-        tipMat = new THREE.MeshBasicMaterial({
-          color: "#9fe8ff",
+    const wMats = windowTexs.map(
+      (tex) =>
+        new THREE.MeshStandardMaterial({
+          map: tex.map,
+          emissiveMap: tex.emissiveMap,
+          roughnessMap: tex.roughnessMap,
+          metalnessMap: tex.metalnessMap,
+          emissive: new THREE.Color(1.5, 1.5, 1.5),
+          emissiveIntensity: 1.4,
+          color: "#ffffff",
           fog: true,
-          toneMapped: false,
-        });
-        const tip = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), tipMat);
-        tip.position.set(b.x, topY + mastH + 0.05, b.z);
-        g.add(tip);
+        }),
+    );
+
+    // Prepare custom GLTFs
+    const createCustomPrototype = (scene: THREE.Group, isLandmark: boolean) => {
+      const customGroup = new THREE.Group();
+      const clonedCustom = scene.clone();
+
+      // Auto-scale the building so its footprint fits in our city grid!
+      const tempBox = new THREE.Box3().setFromObject(clonedCustom);
+      const tempSize = new THREE.Vector3();
+      tempBox.getSize(tempSize);
+
+      const maxFootprint = Math.max(tempSize.x, tempSize.z);
+      let autoScale = maxFootprint > 0.001 ? 3.2 / maxFootprint : 1.0;
+
+      // Clamp height
+      const maxHeight = isLandmark ? 35 : 14; // Landmarks can be huge!
+      if (tempSize.y * autoScale > maxHeight) {
+        autoScale = maxHeight / tempSize.y;
       }
 
-    }
-    return g;
-  }, [buildings, windowTexs]);
+      clonedCustom.scale.setScalar(autoScale);
 
-  useEffect(
-    () => () => {
-      cityGroup.traverse((o) => {
-        if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
-          o.geometry.dispose();
-          const m = o.material;
-          if (Array.isArray(m)) m.forEach((x) => x.dispose());
-          else m.dispose();
+      // Re-measure after scaling
+      const box = new THREE.Box3().setFromObject(clonedCustom);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const w = size.x || 3.2;
+      const h = size.y || 8;
+      const d = size.z || 3.2;
+
+      // Center horizontally
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      clonedCustom.position.x = -center.x;
+      clonedCustom.position.z = -center.z;
+      // Snap bottom to y=0 of the group
+      clonedCustom.position.y = -box.min.y;
+
+      customGroup.add(clonedCustom);
+
+      // Make materials accept fog and boost emissive
+      clonedCustom.traverse((child: any) => {
+        if (child.isMesh && child.material) {
+          // Restore the building's original colors (no heavy darkening)
+          // Just make sure it receives fog and is somewhat reflective
+          if (child.material.color) {
+            child.material.color.lerp(new THREE.Color("#05070a"), 0.5); // Darken by 50%
+          }
+          child.material.fog = true;
+          child.material.roughness = Math.min(
+            child.material.roughness || 1.0,
+            0.6,
+          );
+
+          const matName = (child.material.name || "").toLowerCase();
+
+          if (
+            child.material.emissiveMap ||
+            (child.material.emissive && child.material.emissive.getHex() > 0)
+          ) {
+            // Boost existing neon lights
+            child.material.emissiveIntensity = 3.5;
+          } else if (
+            matName.includes("window") ||
+            matName.includes("glass") ||
+            matName.includes("light")
+          ) {
+            // Force emissive for materials specifically named window/glass/light
+            child.material.emissive = new THREE.Color("#4fd8ff");
+            child.material.emissiveIntensity = 2.0;
+          } else if (child.material.map) {
+            // For Atlas materials or generic walls with painted-on windows:
+            // Clone the diffuse map into the emissive slot and give it a cyan/blue tint!
+            // This forces the bright parts of the texture (windows) to glow like neon lights in the dark.
+            child.material.emissiveMap = child.material.map;
+            child.material.emissive = new THREE.Color("#1a4466"); // Soft cyberpunk ambient glow
+            child.material.emissiveIntensity = 3.0;
+          }
         }
       });
-      windowTexs.forEach((t) => t.dispose());
-    },
-    [cityGroup, windowTexs]
-  );
+
+      return { group: customGroup, w, h, d };
+    };
+
+    const protos = [
+      createCustomPrototype(gltfAzadi.scene, true),
+      createCustomPrototype(gltfMilad.scene, true),
+      createCustomPrototype(gltfNY.scene, false),
+      createCustomPrototype(gltfRealistic.scene, false),
+      createCustomPrototype(gltfLowRise.scene, false),
+    ];
+
+    return { concreteMat: cMat, windowMats: wMats, prototypes: protos };
+  }, [windowTexs, gltfAzadi, gltfMilad, gltfNY, gltfRealistic, gltfLowRise]);
+
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame(({ camera }) => {
+    if (groupRef.current) {
+      const camZ = camera.position.z;
+      // Aggressive Distance Culling for 60 FPS
+      // The fog completely hides everything past 45 units.
+      // We also hide anything more than 10 units behind the camera.
+      groupRef.current.children.forEach((child) => {
+        const dist = camZ - child.position.z;
+        child.visible = dist > -15 && dist < 48;
+      });
+    }
+  });
+
+  const cityGroup = useMemo(() => {
+    const g = new THREE.Group();
+
+    for (const b of buildings) {
+      const proto = prototypes[b.typeIndex];
+      const instance = proto.group.clone();
+      instance.position.set(b.x, -1.98, b.z);
+      instance.rotation.y = b.rotation;
+
+      // Add a foundation block under each building so it connects cleanly to the ground
+      const foundationGeo = new THREE.BoxGeometry(
+        proto.w - 0.2,
+        20,
+        proto.d - 0.2,
+      );
+      const foundation = new THREE.Mesh(foundationGeo, concreteMat);
+      foundation.position.set(0, -10, 0);
+      instance.add(foundation);
+
+      const chosenGlassMat = windowMats[b.tex];
+      instance.traverse((obj: any) => {
+        if (obj.isMesh && obj.userData.isGlass) {
+          obj.material = chosenGlassMat;
+        }
+      });
+
+      g.add(instance);
+    }
+    return g;
+  }, [buildings, prototypes, concreteMat]);
+
+  useEffect(() => {
+    return () => {
+      concreteMat.dispose();
+      windowMats.forEach((m) => m.dispose());
+      windowTexs.forEach((t) => {
+        t.map.dispose();
+        t.emissiveMap.dispose();
+        t.roughnessMap.dispose();
+        t.metalnessMap.dispose();
+      });
+      prototypes.forEach((p) =>
+        p.group.traverse((o: any) => {
+          if (o instanceof THREE.Mesh) {
+            if (o.geometry) o.geometry.dispose();
+          }
+        }),
+      );
+    };
+  }, [concreteMat, prototypes]);
 
   return (
     <>
-      {/* ground */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2.92, -26]}>
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, -2.0, -26]}
+        scale={[1, 1, 1]}
+      >
         <planeGeometry args={[110, 150]} />
-        <meshBasicMaterial color="#04060d" />
+        <Suspense fallback={<meshBasicMaterial color="#04060d" />}>
+          <PuddleMaterial />
+        </Suspense>
       </mesh>
-      <primitive object={cityGroup} />
+
+      {/* 60 FPS Optimization: Use 4 moving lights instead of 25 static lights to prevent shader loop lag */}
+      <MovingStreetLights />
+
+      <primitive object={cityGroup} ref={groupRef} />
     </>
   );
 }
 
 /** Depth rain inside the corridor. */
 function CorridorRain() {
-  const ref = useRef<THREE.Points>(null);
-  const count = 380;
+  const ref = useRef<THREE.LineSegments>(null);
+  
+  // Reduced count for less visual clutter
+  const count = 600;
 
-  const { geo, velocities } = useMemo(() => {
-    const positions = new Float32Array(count * 3);
+  const { geo, velocities, windOffsets } = useMemo(() => {
+    const positions = new Float32Array(count * 6);
     const vels = new Float32Array(count);
+    const wOffsets = new Float32Array(count);
+    
     for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 15;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 12;
-      positions[i * 3 + 2] = 6 - Math.random() * 78;
-      vels[i] = 2.2 + Math.random() * 2.6;
+      const x = (Math.random() - 0.5) * 35;
+      const z = 8 - Math.random() * 60;
+      const y = -2 + Math.random() * 25; 
+      // Much shorter lines to look like small, distinct droplets rather than long streaks
+      const len = 0.15 + Math.random() * 0.25; 
+      positions[i * 6] = x;
+      positions[i * 6 + 1] = y;
+      positions[i * 6 + 2] = z;
+      positions[i * 6 + 3] = x;
+      positions[i * 6 + 4] = y + len;
+      positions[i * 6 + 5] = z;
+      // Slightly slower to avoid looking like hyperspace
+      vels[i] = 6.0 + Math.random() * 5.0; 
+      wOffsets[i] = Math.random() * Math.PI * 2;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    return { geo: g, velocities: vels };
-  }, [count]);
+    return { geo: g, velocities: vels, windOffsets: wOffsets };
+  }, []);
 
   useEffect(() => () => geo.dispose(), [geo]);
 
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
-    const attr = ref.current?.geometry.getAttribute("position") as
-      | THREE.BufferAttribute
-      | undefined;
-    if (!attr) return;
-    const arr = attr.array as Float32Array;
+    const arr = geo.getAttribute("position").array as Float32Array;
+    
+    const elapsed = performance.now() / 1000;
+    // Smoother, less extreme wind sway
+    const windBase = Math.sin(elapsed * 0.108) * 1.5; 
+    
     for (let i = 0; i < count; i++) {
-      arr[i * 3 + 1] -= velocities[i] * dt;
-      if (arr[i * 3 + 1] < -6) arr[i * 3 + 1] = 6;
+      // Y fall
+      arr[i * 6 + 1] -= velocities[i] * dt;
+      arr[i * 6 + 4] -= velocities[i] * dt;
+      
+      // X wind drift
+      const wind = windBase + Math.sin(elapsed * 0.31 + windOffsets[i]) * 0.25;
+      const drift = wind * (0.2 + velocities[i] * 0.02) * dt;
+      arr[i * 6] += drift;
+      arr[i * 6 + 3] += drift;
+      
+      // Slant the top vertex slightly
+      arr[i * 6 + 3] = arr[i * 6] + (wind * 0.05); 
+      
+      if (arr[i * 6 + 4] < -3) {
+        // Reset to top
+        arr[i * 6 + 1] += 25;
+        arr[i * 6 + 4] += 25;
+        // Keep them contained
+        if (arr[i * 6] > 25 || arr[i * 6] < -25) {
+            arr[i * 6] = (Math.random() - 0.5) * 35;
+            arr[i * 6 + 3] = arr[i * 6] + (wind * 0.05);
+        }
+      }
     }
-    attr.needsUpdate = true;
+    geo.getAttribute("position").needsUpdate = true;
   });
 
   return (
-    <points ref={ref} geometry={geo} frustumCulled={false}>
-      <pointsMaterial
-        color="#9fc6ff"
-        size={0.045}
+    <lineSegments ref={ref} geometry={geo} frustumCulled={false}>
+      <lineBasicMaterial
+        color="#a0c2e8" 
         transparent
-        opacity={0.38}
+        opacity={0.15} // Subtle opacity so it doesn't wash out the scene
         blending={THREE.AdditiveBlending}
         depthWrite={false}
-        sizeAttenuation
       />
-    </points>
+    </lineSegments>
   );
 }
 
+useGLTF.preload(import.meta.env.BASE_URL + "azadi_tower.glb");
+useGLTF.preload(import.meta.env.BASE_URL + "milad_tower.glb");
+useGLTF.preload(import.meta.env.BASE_URL + "new_york_background_building_1.glb");
+useGLTF.preload(import.meta.env.BASE_URL + "realistic_building.glb");
+useGLTF.preload(import.meta.env.BASE_URL + "low_rise_wall_to_wall_office_building.glb");
 export function CorridorScene({
   progressRef,
   focusedIdx,
@@ -715,6 +1180,15 @@ export function CorridorScene({
           hoveredIdxRef={border.hoveredIdxRef}
         />
       ))}
+      <HtmlSection index={N} focused={focusedIdx === N}>
+        <TrustStats lang={lang as Lang} />
+      </HtmlSection>
+      <HtmlSection index={N + 1} focused={focusedIdx === N + 1}>
+        <ProcessTimeline lang={lang as Lang} />
+      </HtmlSection>
+      <HtmlSection index={N + 2} focused={focusedIdx === N + 2}>
+        <ContactSection lang={lang as Lang} />
+      </HtmlSection>
     </>
   );
 }

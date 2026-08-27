@@ -14,6 +14,7 @@ import PreviewModal from "../PreviewModal";
 import MagneticButton from "../ui/MagneticButton";
 import { useSound } from "../../audio/SoundProvider";
 import { getLenis } from "../../lib/lenis";
+import { registerPerfGl } from "../../lib/perfProbe";
 
 /**
  * Journey — Picksaw's 3D layers.
@@ -40,7 +41,6 @@ export default function Journey({ lang }: { lang: Lang }) {
   const progressRef = useRef(0);
 
   const [focusedIdx, setFocusedIdx] = useState(-1);
-  const [faded, setFaded] = useState(false);
   const [selected, setSelected] = useState<TemplateItem | null>(null);
   /** 'p' while framing the P, 'headline' on the text layer, then 'gallery'.
    *  State-driven (not transform-driven) so station UI can never linger. */
@@ -55,10 +55,6 @@ export default function Journey({ lang }: { lang: Lang }) {
     progressRef.current = v;
     const idx = focusedIndex(v);
     setFocusedIdx((prev) => (prev === idx ? prev : idx));
-    // the walk ends → hand the page back to normal sections
-    // (early enough that no painting can catch clicks near the end)
-    const endFaded = v > 0.93;
-    setFaded((prev) => (prev === endFaded ? prev : endFaded));
     // station UI phases: u<0.6 → P, then headline, then gallery (solo)
     const u = v * (stations.length - 1);
     const ph = u < 0.6 ? "p" : u < 1.45 ? "headline" : "gallery";
@@ -88,6 +84,13 @@ export default function Journey({ lang }: { lang: Lang }) {
 
   const focusedItem = focusedIdx >= 0 ? TEMPLATES[focusedIdx] : null;
 
+  // Perf: pixel budget. Mobile GPUs are fill-rate bound — the storm 2D
+  // canvas + this canvas both fill the screen. 1.25× + no MSAA on mobile
+  // (the scene is fog-soft; AA barely matters) vs 1.5× + MSAA on desktop.
+  const isMobile =
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: coarse)").matches;
+
   return (
     <>
       {/* scroll length for the walk: P → headline → 6 paintings → exit */}
@@ -98,20 +101,11 @@ export default function Journey({ lang }: { lang: Lang }) {
         style={{ height: `${100 + 100 + TEMPLATES.length * 92 + 55}vh` }}
       />
 
-      {/* the 3D world */}
-      <div
-        className={`fixed inset-0 z-[2] transition-opacity duration-700 ${
-          faded ? "pointer-events-none opacity-0" : "opacity-100"
-        }`}
-        style={{
-          pointerEvents: faded ? "none" : undefined,
-          visibility: faded ? "hidden" : "visible", // triple lock — can never catch a click
-        }}
-        aria-hidden={faded}
-      >
+      {/* the 3D world — Journey never fades out: it is the entire website */}
+      <div className="fixed inset-0 z-[2]">
         <Canvas
-          dpr={[1, 1.75]}
-          frameloop={faded ? "never" : "always"}
+          dpr={[1, 1.25]} // capped everywhere — 4K desktops are fill-rate bound
+          frameloop="always"
           camera={{
             position: [0, 0, stations[0]],
             // portrait phones need a wider lens or the city never enters
@@ -120,13 +114,19 @@ export default function Journey({ lang }: { lang: Lang }) {
             near: 0.1,
             far: 90,
           }}
-          gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+          gl={{
+            antialias: !isMobile,
+            alpha: true,
+            stencil: false,
+            powerPreference: "high-performance",
+          }}
           style={{ background: "transparent", touchAction: "pan-y" }}
+          onCreated={(state) => registerPerfGl("journey", state.gl)}
           onPointerMissed={() => {
             document.body.style.cursor = "";
           }}
         >
-          <fog attach="fog" args={["#06080f", 6, 28]} />
+          <fog attach="fog" args={["#06080f", 12, 45]} />
           <ambientLight intensity={0.5} />
           <directionalLight position={[-3, 5, 4]} intensity={1.4} color="#eaf6ff" />
           <pointLight position={[2.6, -0.6, 3.4]} intensity={22} color="#4fd8ff" />
@@ -144,7 +144,7 @@ export default function Journey({ lang }: { lang: Lang }) {
 
       {/* ── P layer UI — just the scroll invitation ── */}
       <AnimatePresence>
-        {phase === "p" && !faded && (
+        {phase === "p" &&  (
           <motion.div
             key="p-hint"
             initial={{ opacity: 0 }}
@@ -165,7 +165,7 @@ export default function Journey({ lang }: { lang: Lang }) {
       {/* ── headline layer UI — badge + CTAs live HERE (the layer after
              the P) and only here; the gallery never shows them ── */}
       <AnimatePresence>
-        {phase === "headline" && !faded && (
+        {phase === "headline" &&  (
           <motion.div
             key="headline-ui"
             initial={{ opacity: 0, y: 46 }}
@@ -204,7 +204,7 @@ export default function Journey({ lang }: { lang: Lang }) {
 
       {/* ── Layer: focus bar — the solo painting's action ── */}
       <AnimatePresence>
-        {focusedItem && !faded && !selected && (
+        {focusedItem &&  !selected && (
           <motion.div
             key="focus-bar"
             initial={{ opacity: 0, y: 30 }}

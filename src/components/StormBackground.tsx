@@ -8,6 +8,7 @@ import {
   setBolt,
   stormIntensity,
 } from "../lib/stormStore";
+import { reportFrameCost } from "../lib/perfProbe";
 
 // ============================================================
 // StormBackground V2.1 — three-depth-layer cinematic storm
@@ -199,9 +200,12 @@ export default function StormBackground() {
     let lastStormDispatch = 0;
 
     // adaptive framerate + cached layout
+    // Perf: mobile starts at a FULL 60 fps budget with a leaner particle
+    // set; the governor below only drops to 30/20 fps if the frame cost
+    // proves it (previously mobile was pinned to 30 fps from the start).
     let frameCount = 0;
-    let renderEveryN = isMobile ? 2 : 1;
-    let emaCost = 10;
+    let renderEveryN = 1;
+    let emaCost = 6;
     let cachedMaxScroll = 1;
 
     // cached gradients
@@ -245,8 +249,8 @@ export default function StormBackground() {
       canvas.style.height = `${h}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      const divisor = isMobile ? 4200 : 2800;
-      const cap = isMobile ? 210 : 340;
+      const divisor = isMobile ? 5600 : 2800;
+      const cap = isMobile ? 170 : 340;
       const targetCount = Math.min(Math.floor((w * h) / divisor), cap);
 
       drops = [];
@@ -258,7 +262,7 @@ export default function StormBackground() {
       });
 
       if (clouds.length === 0) {
-        const count = isMobile ? 5 : 7;
+        const count = isMobile ? 4 : 7;
         for (let i = 0; i < count; i++) clouds.push(createCloud());
       }
 
@@ -571,9 +575,12 @@ export default function StormBackground() {
 
       // ── adaptive framerate ───────────────────────────────────
       const cost = performance.now() - t0;
+      reportFrameCost("storm", cost);
       emaCost = emaCost * 0.9 + cost * 0.1;
       if (frameCount % 90 === 0) {
-        if (emaCost > 14 && renderEveryN < 3) renderEveryN++;
+        // Two-way governor: drop to 30/20 fps on frames that cost >11ms,
+        // climb back to 60 fps when we have headroom (<7 ms).
+        if (emaCost > 11 && renderEveryN < 3) renderEveryN++;
         else if (emaCost < 7 && renderEveryN > 1) renderEveryN--;
       }
     };
