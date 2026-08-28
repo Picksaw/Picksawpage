@@ -26,6 +26,8 @@ const MIME = {
 
 const server = http.createServer(async (req, res) => {
   try {
+    // log the Host header — platform preview probes reveal the public URL
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} Host=${req.headers.host}`);
     const url = new URL(req.url, "http://localhost");
     let p = decodeURIComponent(url.pathname);
     if (p.endsWith("/")) p += "index.html";
