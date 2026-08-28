@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useMemo } from "react";
 import { motion } from "motion/react";
 import { SITE_TEXTS, type Lang } from "../config/siteTexts";
-import Journey from "../components/journey/Journey";
-import Logo3D from "../components/Logo3D";
+import BrandMark from "../components/BrandMark";
 import MagneticButton from "../components/ui/MagneticButton";
 import TemplatesUniverse from "../components/TemplatesUniverse";
 import TrustStats from "../components/TrustStats";
 import ProcessTimeline from "../components/ProcessTimeline";
 import ContactSection from "../components/ContactSection";
 import { scrollToTarget } from "../lib/lenis";
-import { hasWebGL, prefersReducedMotion } from "../lib/webgl";
+import { shouldUseRichJourney } from "../lib/webgl";
+
+const Journey = lazy(() => import("../components/journey/Journey"));
 
 interface HomePageProps {
   lang: Lang;
@@ -47,36 +48,21 @@ function KineticTitle({ text, delay = 0 }: { text: string; delay?: number }) {
 export default function HomePage({ lang }: HomePageProps) {
   const t = SITE_TEXTS[lang];
 
-  // The 3D journey needs WebGL + full motion; everyone else gets the
-  // guaranteed classic layout (identical content, same modal).
-  const journey = useMemo(() => hasWebGL() && !prefersReducedMotion(), []);
-
-  const heroRef = useRef<HTMLElement>(null);
-  const [gyro, setGyro] = useState({ x: 0, y: 0 });
-
-  // subtle gyroscope drift on mobile (legacy hero only)
-  useEffect(() => {
-    if (journey) return;
-    const fine = window.matchMedia("(pointer: fine)").matches;
-    if (fine) return;
-    const onOrient = (e: DeviceOrientationEvent) => {
-      const x = Math.max(-1, Math.min(1, (e.gamma ?? 0) / 35));
-      const y = Math.max(-1, Math.min(1, ((e.beta ?? 0) - 45) / 35));
-      setGyro({ x, y });
-    };
-    window.addEventListener("deviceorientation", onOrient, { passive: true });
-    return () => window.removeEventListener("deviceorientation", onOrient);
-  }, [journey]);
+  // The scroll-driven WebGL journey is reserved for desktop-class input.
+  // Phones/tablets get the native DOM layout: much faster first load and
+  // no fixed WebGL canvas fighting the browser during momentum scroll.
+  const journey = useMemo(() => shouldUseRichJourney(), []);
 
   return (
     <div className="relative">
       {journey ? (
         /* ═══ THE 3D JOURNEY — P → ring → dive → gallery walk ═══ */
-        <Journey lang={lang} />
+        <Suspense fallback={<div id="top" className="min-h-[100svh]" aria-hidden />}>
+          <Journey lang={lang} />
+        </Suspense>
       ) : (
         /* ═══ CLASSIC HERO (fallback: no WebGL / reduced motion) ═══ */
         <section
-          ref={heroRef}
           id="top"
           className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden px-4 py-28 text-center sm:px-6"
         >
@@ -147,12 +133,11 @@ export default function HomePage({ lang }: HomePageProps) {
               initial={{ opacity: 0, scale: 0.85 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.5, duration: 0.9 }}
-              style={{ x: gyro.x * -14, y: gyro.y * 10 }}
               className="relative mx-auto h-44 w-44 sm:h-56 sm:w-56 lg:h-[340px] lg:w-[340px]"
             >
               <div className="absolute inset-0 rounded-full bg-electric/10 blur-3xl" />
               <div className="absolute inset-5 rounded-full border border-electric/10" />
-              <Logo3D fill />
+              <BrandMark fill />
             </motion.div>
           </div>
 

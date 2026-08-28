@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
 /**
- * Loader — premium intro, hard-capped at 2.5s.
+ * Loader — premium intro, hard-capped at 1.35s.
  * Sequence: darkness → rain → an electric spark traces the Picksaw "P"
  * → lightning strike → the interface fades in.
- * Returning visitors (sessionStorage) get a 600ms whisper instead.
+ * Returning visitors (sessionStorage) get a 360ms whisper instead.
  * Reduced-motion users skip straight to the site.
  */
 export default function Loader({ onDone }: { onDone: () => void }) {
@@ -25,7 +25,7 @@ export default function Loader({ onDone }: { onDone: () => void }) {
     document.documentElement.style.overflow = "hidden";
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const total = reduced ? 150 : returning ? 620 : 2350;
+    const total = reduced ? 120 : returning ? 360 : 1280;
 
     const done = () => {
       try {
@@ -40,9 +40,9 @@ export default function Loader({ onDone }: { onDone: () => void }) {
 
     if (!reduced && !returning) {
       const timers = [
-        window.setTimeout(() => setPhase(1), 150), // rain begins
-        window.setTimeout(() => setPhase(2), 900), // spark draws the P
-        window.setTimeout(() => setPhase(3), 1750), // lightning strike
+        window.setTimeout(() => setPhase(1), 90), // rain begins
+        window.setTimeout(() => setPhase(2), 430), // spark draws the P
+        window.setTimeout(() => setPhase(3), 920), // lightning strike
       ];
       timersRef.current = timers;
     }
@@ -159,7 +159,7 @@ export default function Loader({ onDone }: { onDone: () => void }) {
               className="h-full bg-gradient-to-r from-electric/40 via-electric to-white"
               initial={{ x: "-100%" }}
               animate={{ x: returning ? "0%" : phase >= 3 ? "0%" : "-40%" }}
-              transition={{ duration: returning ? 0.5 : 2.2, ease: "easeInOut" }}
+              transition={{ duration: returning ? 0.32 : 1.15, ease: "easeInOut" }}
             />
           </div>
         </motion.div>

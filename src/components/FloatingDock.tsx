@@ -58,13 +58,16 @@ export default function FloatingDock({ lang }: { lang: Lang }) {
   // one-time attention hint — the dock opens itself so the sound
   // channels are discovered (per session, only if never used)
   useEffect(() => {
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
     let seen = false;
     try {
       seen = sessionStorage.getItem("picksaw:dockhint") === "1";
     } catch {
       /* ignore */
     }
-    if (seen) return;
+    // On phones the hint often fires during the first scroll and adds a
+    // burst of layout/animation work. Keep mobile idle unless tapped.
+    if (seen || coarse) return;
     const id = window.setTimeout(() => {
       setOpen(true);
       setHint(true);

@@ -3,8 +3,10 @@
  * Change file paths here; replace actual files in public/images/ locally.
  * After npm build, Vite copies public/images/ to dist/, so images load.
  */
+const base = import.meta.env.BASE_URL;
+
 export const SITE_IMAGES = {
-  logo: "/images/picksaw-logo.png",
-  icon: "/images/picksaw-icon.png",
-  gameIcon: "/images/stormblade-icon.png",
+  logo: `${base}images/picksaw-logo.png`,
+  icon: `${base}images/picksaw-icon.png`,
+  gameIcon: `${base}images/stormblade-icon.png`,
 } as const;

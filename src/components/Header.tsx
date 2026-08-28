@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
 import type { Lang } from "../config/siteTexts";
 import { SITE_TEXTS } from "../config/siteTexts";
-import Logo3D from "./Logo3D";
+import BrandMark from "./BrandMark";
 import { scrollToTarget } from "../lib/lenis";
 import { cn } from "../utils/cn";
 
@@ -27,11 +27,28 @@ export default function Header({
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
 
+  const scrolledRef = useRef(false);
+
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 30);
-    onScroll();
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const next = window.scrollY > 30;
+      if (next !== scrolledRef.current) {
+        scrolledRef.current = next;
+        setScrolled(next);
+      }
+    };
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(update);
+    };
+    update();
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
+    };
   }, []);
 
   const t = SITE_TEXTS[lang];
@@ -58,10 +75,10 @@ export default function Header({
           )}
           aria-label="Primary"
         >
-          {/* Logo — the 3D P + wordmark */}
+          {/* Logo — lightweight P mark + wordmark */}
           <Link to="/" className="group flex items-center gap-2.5" aria-label="Picksaw — home">
             <motion.span whileHover={{ scale: 1.06 }} transition={{ type: "spring", stiffness: 300, damping: 18 }}>
-              <Logo3D
+              <BrandMark
                 size={scrolled ? 34 : 42}
                 className="drop-shadow-[0_0_12px_rgba(79,216,255,0.35)] transition-all duration-500"
               />

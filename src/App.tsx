@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
-import Lenis from "lenis";
 import StormBackground from "./components/StormBackground";
 import Header from "./components/Header";
 import HomePage from "./pages/HomePage";
@@ -50,24 +49,40 @@ export default function App() {
   // ── smooth scroll spine ────────────────────────────────────
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduced) return;
+    const touchDevice =
+      window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
 
-    const lenis = new Lenis({
-      duration: 1.15,
-      easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      smoothWheel: true,
-      touchMultiplier: 1.4,
-    });
-    setLenis(lenis);
+    // Native momentum scrolling is dramatically cheaper on mobile. Lenis
+    // keeps its own rAF scroll loop alive during touch scroll, which was a
+    // major contributor to the 6 fps mobile scroll drops.
+    if (reduced || touchDevice) {
+      setLenis(null);
+      return;
+    }
+
+    let lenis: import("lenis").default | null = null;
     let raf = 0;
-    const loop = (time: number) => {
-      lenis.raf(time);
+    let cancelled = false;
+
+    import("lenis").then(({ default: Lenis }) => {
+      if (cancelled) return;
+      lenis = new Lenis({
+        duration: 1.05,
+        easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+        smoothWheel: true,
+      });
+      setLenis(lenis);
+      const loop = (time: number) => {
+        lenis?.raf(time);
+        raf = requestAnimationFrame(loop);
+      };
       raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
+    });
+
     return () => {
-      cancelAnimationFrame(raf);
-      lenis.destroy();
+      cancelled = true;
+      if (raf) cancelAnimationFrame(raf);
+      lenis?.destroy();
       setLenis(null);
     };
   }, []);

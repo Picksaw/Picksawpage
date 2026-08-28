@@ -487,7 +487,13 @@ export default function ElectricBorder({
         : null;
     io?.observe(canvas);
 
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const lowMotion =
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+      window.matchMedia("(pointer: coarse)").matches;
+
+    // Touch devices cannot hover these cards; running a border rAF per
+    // visible card only burns scroll budget. Paint one static crackle.
+    if (lowMotion) {
       engine.renderStatic();
     } else {
       engine.start();

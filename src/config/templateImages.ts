@@ -1,12 +1,15 @@
 /**
  * Template preview image config.
- * Replace the reference or the actual file in public/images/ locally.
+ * Uses the Vite base path so WAMP/subfolder deployments do not accidentally
+ * request `/images/...` from the domain root.
  */
+const base = import.meta.env.BASE_URL;
+
 export const TEMPLATE_IMAGE_MAP: Record<string, string> = {
-  verda: "/images/verda.webp",
-  lumina: "/images/lumina.webp",
-  clarity: "/images/clarity.webp",
-  pulse: "/images/pulse.webp",
-  aurora: "/images/aurora.webp",
-  lumen: "/images/lumen.webp",
+  verda: `${base}images/verda.webp`,
+  lumina: `${base}images/lumina.webp`,
+  clarity: `${base}images/clarity.webp`,
+  pulse: `${base}images/pulse.webp`,
+  aurora: `${base}images/aurora.webp`,
+  lumen: `${base}images/lumen.webp`,
 } as const;

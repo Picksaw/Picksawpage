@@ -22,7 +22,8 @@ export default function CursorFX() {
   useEffect(() => {
     const fine = window.matchMedia("(pointer: fine)").matches;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    setEnabled(fine && !reduced);
+    const richPointerFx = fine && !reduced;
+    setEnabled(richPointerFx);
 
     const onMove = (e: PointerEvent) => {
       x.set(e.clientX);
@@ -30,6 +31,7 @@ export default function CursorFX() {
     };
 
     const onDown = (e: PointerEvent) => {
+      if (!richPointerFx) return;
       const target = e.target as HTMLElement | null;
       if (
         target?.closest(
@@ -53,8 +55,10 @@ export default function CursorFX() {
       );
     };
 
-    window.addEventListener("pointermove", onMove, { passive: true });
-    window.addEventListener("pointerdown", onDown, { passive: true });
+    if (richPointerFx) {
+      window.addEventListener("pointermove", onMove, { passive: true });
+      window.addEventListener("pointerdown", onDown, { passive: true });
+    }
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerdown", onDown);

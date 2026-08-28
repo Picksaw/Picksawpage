@@ -875,7 +875,9 @@ function City() {
 
   const windowTexs = useMemo(() => makeWindowTextures(), []);
 
-  // Load custom GLTFs
+  // Load custom GLTFs. These are still deferred until the visitor begins
+  // the desktop 3D journey, so the restored building set does not block
+  // initial page load.
   const gltfAzadi = useGLTF(import.meta.env.BASE_URL + "azadi_tower.glb") as any;
   const gltfMilad = useGLTF(import.meta.env.BASE_URL + "milad_tower.glb") as any;
   const gltfNY = useGLTF(import.meta.env.BASE_URL + "new_york_background_building_1.glb") as any;
@@ -1173,11 +1175,54 @@ function CorridorRain() {
   );
 }
 
-useGLTF.preload(import.meta.env.BASE_URL + "azadi_tower.glb");
-useGLTF.preload(import.meta.env.BASE_URL + "milad_tower.glb");
-useGLTF.preload(import.meta.env.BASE_URL + "new_york_background_building_1.glb");
-useGLTF.preload(import.meta.env.BASE_URL + "realistic_building.glb");
-useGLTF.preload(import.meta.env.BASE_URL + "low_rise_wall_to_wall_office_building.glb");
+const CITY_MODEL_PRELOADS = [
+  "milad_tower.glb",
+  "new_york_background_building_1.glb",
+  "realistic_building.glb",
+  "low_rise_wall_to_wall_office_building.glb",
+  // Azadi is a bit larger, but City cannot render until every useGLTF()
+  // above has resolved, so we warm it too instead of making users wait
+  // after the first scroll.
+  "azadi_tower.glb",
+].map((name) => import.meta.env.BASE_URL + name);
+
+if (typeof window !== "undefined") {
+  // The Journey chunk is requested while the intro loader is visible on
+  // desktop. Warm the restored building set + painting screenshots then,
+  // so scrolling into the corridor does not hit an empty Suspense fallback.
+  CITY_MODEL_PRELOADS.forEach((url) => useGLTF.preload(url));
+
+  Object.values(TEMPLATE_IMAGE_MAP).forEach((src) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.src = src;
+  });
+}
+
+function DeferredWorld({
+  progressRef,
+  children,
+}: {
+  progressRef: React.RefObject<number>;
+  children: React.ReactNode;
+}) {
+  const [ready, setReady] = useState(false);
+  const readyRef = useRef(false);
+
+  useFrame(() => {
+    // Start fetching/rendering the asset-heavy city/gallery only when the
+    // visitor actually begins the journey. This keeps initial load focused
+    // on the hero instead of immediately downloading models/textures that
+    // are several scroll stations away.
+    if (!readyRef.current && (progressRef.current ?? 0) > 0.006) {
+      readyRef.current = true;
+      setReady(true);
+    }
+  });
+
+  return ready ? <>{children}</> : null;
+}
+
 export function CorridorScene({
   progressRef,
   focusedIdx,
@@ -1195,30 +1240,34 @@ export function CorridorScene({
     <>
       <CameraRig progressRef={progressRef} />
       <CorridorRain />
-      <City />
       <GroundFog />
       <HeadlineLayer lang={lang as Lang} />
-      {TEMPLATES.map((item, i) => (
-        <Painting
-          key={item.id}
-          item={item}
-          index={i}
-          lang={lang}
-          focused={focusedIdx === i}
-          onOpen={onOpen}
-          borderTexture={border.texture}
-          hoveredIdxRef={border.hoveredIdxRef}
-        />
-      ))}
-      <HtmlSection index={N} focused={focusedIdx === N} dir={lang === "fa" ? "rtl" : "ltr"}>
-        <TrustStats lang={lang as Lang} />
-      </HtmlSection>
-      <HtmlSection index={N + 1} focused={focusedIdx === N + 1} dir={lang === "fa" ? "rtl" : "ltr"}>
-        <ProcessTimeline lang={lang as Lang} />
-      </HtmlSection>
-      <HtmlSection index={N + 2} focused={focusedIdx === N + 2} dir={lang === "fa" ? "rtl" : "ltr"}>
-        <ContactSection lang={lang as Lang} />
-      </HtmlSection>
+      <DeferredWorld progressRef={progressRef}>
+        <Suspense fallback={null}>
+          <City />
+        </Suspense>
+        {TEMPLATES.map((item, i) => (
+          <Painting
+            key={item.id}
+            item={item}
+            index={i}
+            lang={lang}
+            focused={focusedIdx === i}
+            onOpen={onOpen}
+            borderTexture={border.texture}
+            hoveredIdxRef={border.hoveredIdxRef}
+          />
+        ))}
+        <HtmlSection index={N} focused={focusedIdx === N} dir={lang === "fa" ? "rtl" : "ltr"}>
+          <TrustStats lang={lang as Lang} />
+        </HtmlSection>
+        <HtmlSection index={N + 1} focused={focusedIdx === N + 1} dir={lang === "fa" ? "rtl" : "ltr"}>
+          <ProcessTimeline lang={lang as Lang} />
+        </HtmlSection>
+        <HtmlSection index={N + 2} focused={focusedIdx === N + 2} dir={lang === "fa" ? "rtl" : "ltr"}>
+          <ContactSection lang={lang as Lang} />
+        </HtmlSection>
+      </DeferredWorld>
     </>
   );
 }

@@ -41,10 +41,12 @@ export default function Journey({ lang }: { lang: Lang }) {
   const progressRef = useRef(0);
 
   const [focusedIdx, setFocusedIdx] = useState(-1);
+  const focusedIdxStateRef = useRef(-1);
   const [selected, setSelected] = useState<TemplateItem | null>(null);
   /** 'p' while framing the P, 'headline' on the text layer, then 'gallery'.
    *  State-driven (not transform-driven) so station UI can never linger. */
   const [phase, setPhase] = useState<"p" | "headline" | "gallery">("p");
+  const phaseStateRef = useRef<"p" | "headline" | "gallery">("p");
 
   const { scrollYProgress } = useScroll({
     target: spacerRef,
@@ -54,11 +56,17 @@ export default function Journey({ lang }: { lang: Lang }) {
   useMotionValueEvent(scrollYProgress, "change", (v) => {
     progressRef.current = v;
     const idx = focusedIndex(v);
-    setFocusedIdx((prev) => (prev === idx ? prev : idx));
+    if (idx !== focusedIdxStateRef.current) {
+      focusedIdxStateRef.current = idx;
+      setFocusedIdx(idx);
+    }
     // station UI phases: u<0.6 → P, then headline, then gallery (solo)
     const u = v * (stations.length - 1);
     const ph = u < 0.6 ? "p" : u < 1.45 ? "headline" : "gallery";
-    setPhase((prev) => (prev === ph ? prev : ph));
+    if (ph !== phaseStateRef.current) {
+      phaseStateRef.current = ph;
+      setPhase(ph);
+    }
   });
 
   const scrollToFirstPainting = useCallback(() => {

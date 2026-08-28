@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { SITE_TEXTS, type Lang } from "../config/siteTexts";
 import { TEMPLATES, type TemplateItem } from "../config/templatesConfig";
@@ -60,9 +60,16 @@ function TemplateCard({
   const [hoverTimer, setHoverTimer] = useState<number | null>(null);
   const [live, setLive] = useState(false);
   const [hot, setHot] = useState(false);
+  const richHover = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(pointer: fine)").matches &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    []
+  );
 
   const startLive = () => {
-    if (hoverTimer !== null) return;
+    if (!richHover || hoverTimer !== null) return;
     setHoverTimer(window.setTimeout(() => setLive(true), 400));
   };
   const stopLive = () => {
@@ -77,7 +84,11 @@ function TemplateCard({
 
   return (
     <TiltCard as="article" maxTilt={8} className="h-full rounded-3xl">
-      <ElectricBorder active={hot} />
+      {richHover ? (
+        <ElectricBorder active={hot} />
+      ) : (
+        <span aria-hidden className="pointer-events-none absolute inset-0 z-10 rounded-3xl border border-electric/30" />
+      )}
       <button
         type="button"
         onClick={() => {
@@ -85,19 +96,23 @@ function TemplateCard({
           onOpen(item);
         }}
         onMouseEnter={() => {
+          if (!richHover) return;
           setHot(true);
           startLive();
           blip("hover");
         }}
         onMouseLeave={() => {
+          if (!richHover) return;
           setHot(false);
           stopLive();
         }}
         onFocus={() => {
+          if (!richHover) return;
           setHot(true);
           startLive();
         }}
         onBlur={() => {
+          if (!richHover) return;
           setHot(false);
           stopLive();
         }}

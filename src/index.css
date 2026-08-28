@@ -98,6 +98,19 @@
     -webkit-backdrop-filter: blur(12px);
   }
 
+  @media (pointer: coarse) {
+    .glass-strong {
+      /* Backdrop blur over fixed canvases is a common mobile scroll killer. */
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+
+    .grain {
+      /* Full-screen SVG noise forces extra compositing on mobile. */
+      display: none;
+    }
+  }
+
   /* glass panels catch the lightning — border + inner glow scale with --bolt */
   .bolt-lit {
     transition: none;

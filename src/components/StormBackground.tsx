@@ -207,6 +207,8 @@ export default function StormBackground() {
     let renderEveryN = 1;
     let emaCost = 6;
     let cachedMaxScroll = 1;
+    let isScrolling = false;
+    let scrollIdleTimer = 0;
 
     // cached gradients
     let skyGrad: CanvasGradient | null = null;
@@ -289,6 +291,15 @@ export default function StormBackground() {
       mx = -9999;
       my = -9999;
       cursorVX = 0;
+    };
+
+    const onScroll = () => {
+      if (!isMobile) return;
+      isScrolling = true;
+      window.clearTimeout(scrollIdleTimer);
+      scrollIdleTimer = window.setTimeout(() => {
+        isScrolling = false;
+      }, 160);
     };
 
     // click-splash ripples — spawned by the global ClickFX layer
@@ -384,7 +395,8 @@ export default function StormBackground() {
       elapsed += dt / 1000;
       frameCount++;
 
-      if (frameCount % renderEveryN !== 0) return;
+      const stride = isMobile && isScrolling ? Math.max(renderEveryN, 3) : renderEveryN;
+      if (frameCount % stride !== 0) return;
       const t0 = performance.now();
 
       // ── storm level (scroll + overrides) ────────────────────
@@ -613,6 +625,7 @@ export default function StormBackground() {
       animId = requestAnimationFrame(frame);
       window.addEventListener("pointermove", onPointerMove, { passive: true });
       window.addEventListener("pointerleave", onPointerLeave);
+      window.addEventListener("scroll", onScroll, { passive: true });
       window.addEventListener("picksaw:splash", onSplash as EventListener);
     }
     window.addEventListener("resize", resize);
@@ -621,8 +634,10 @@ export default function StormBackground() {
     return () => {
       running = false;
       cancelAnimationFrame(animId);
+      window.clearTimeout(scrollIdleTimer);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerleave", onPointerLeave);
+      window.removeEventListener("scroll", onScroll);
       window.removeEventListener("picksaw:splash", onSplash as EventListener);
       window.removeEventListener("resize", resize);
       document.removeEventListener("visibilitychange", onVisibility);
