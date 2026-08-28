@@ -672,6 +672,15 @@ export default function PEmblem() {
     (e.target as Element)?.releasePointerCapture?.(e.pointerId);
   };
 
+  // When the browser claims a touch gesture for scrolling (touch-action
+  // pan-y) it fires pointercancel — treat it exactly like pointer up so a
+  // card drag never gets stuck in the "dragging" state on phones.
+  const handlePointerCancel = (e: any) => {
+    isDragging.current = false;
+    document.body.style.cursor = "";
+    (e.target as Element)?.releasePointerCapture?.(e.pointerId);
+  };
+
   const ringFlash = useRef(0);
   const nextStrike = useRef(1.4);
   const clock = useRef(0);
@@ -1138,6 +1147,7 @@ export default function PEmblem() {
           onPointerOut={handlePointerOut}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
           onPointerLeave={handlePointerUp}
         >
           <planeGeometry args={[CARD_W, CARD_H]} />
@@ -1161,6 +1171,7 @@ export default function PEmblem() {
           onPointerOut={handlePointerOut}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
           onPointerLeave={handlePointerUp}
         >
           <planeGeometry args={[CARD_W, CARD_H]} />
