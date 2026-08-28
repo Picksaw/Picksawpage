@@ -213,7 +213,7 @@ export default function App() {
 
           <main>
             <Routes>
-              <Route path="/" element={<HomePage lang={lang} />} />
+              <Route path="/" element={<HomePage lang={lang} introDone={introDone} />} />
               <Route
                 path="/feed"
                 element={

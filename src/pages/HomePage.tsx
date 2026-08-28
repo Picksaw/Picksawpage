@@ -13,6 +13,8 @@ import { hasWebGL, prefersReducedMotion } from "../lib/webgl";
 
 interface HomePageProps {
   lang: Lang;
+  /** while the intro loader is up (opaque), the 3D loop idles */
+  introDone: boolean;
 }
 
 /** Word-by-word cinematic reveal — never character-by-character. */
@@ -44,7 +46,7 @@ function KineticTitle({ text, delay = 0 }: { text: string; delay?: number }) {
   );
 }
 
-export default function HomePage({ lang }: HomePageProps) {
+export default function HomePage({ lang, introDone = true }: HomePageProps) {
   const t = SITE_TEXTS[lang];
 
   // The 3D journey needs WebGL + full motion; everyone else gets the
@@ -72,7 +74,7 @@ export default function HomePage({ lang }: HomePageProps) {
     <div className="relative">
       {journey ? (
         /* ═══ THE 3D JOURNEY — P → ring → dive → gallery walk ═══ */
-        <Journey lang={lang} />
+        <Journey lang={lang} introDone={introDone} />
       ) : (
         /* ═══ CLASSIC HERO (fallback: no WebGL / reduced motion) ═══ */
         <section

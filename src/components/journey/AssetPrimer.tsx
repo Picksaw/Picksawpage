@@ -1,7 +1,7 @@
 import { Suspense, useEffect } from "react";
 import { useLoader } from "@react-three/fiber";
 import { TextureLoader } from "three";
-import { GLTFLoader } from "three-stdlib";
+import { GLTFLoader, MeshoptDecoder } from "three-stdlib";
 import {
   markAssetDone,
   markAssetStarted,
@@ -36,19 +36,22 @@ export const CITY_MODELS: { key: AssetKey; file: string }[] = [
   { key: "lowrise", file: "low_rise_wall_to_wall_office_building.glb" },
 ];
 
-/** Must mirror PuddleMaterial's useTexture key order (map, normal, rough, ao). */
+/** Must mirror PuddleMaterial's useTexture key order (map, normal, rough, ao).
+ *  WebP at the same 2K resolution — visually identical, ~45% smaller. */
 export const ASPHALT_URLS = [
-  B + "road/aerial_asphalt_01_diff_2k.jpg",
-  B + "road/aerial_asphalt_01_nor_gl_2k.jpg",
-  B + "road/aerial_asphalt_01_rough_2k.jpg",
-  B + "road/aerial_asphalt_01_ao_2k.jpg",
+  B + "road/aerial_asphalt_01_diff_2k.webp",
+  B + "road/aerial_asphalt_01_nor_gl_2k.webp",
+  B + "road/aerial_asphalt_01_rough_2k.webp",
+  B + "road/aerial_asphalt_01_ao_2k.webp",
 ];
 
 function ModelPrimer({ file, assetKey }: { file: string; assetKey: AssetKey }) {
   useLoader(
     GLTFLoader,
     B + file,
-    undefined,
+    // the city GLBs ship EXT_meshopt_compression — same decoder drei's
+    // useGLTF installs (City's path), so both sides read the same cache
+    (loader) => loader.setMeshoptDecoder(MeshoptDecoder),
     (e: ProgressEvent) => {
       reportAssetProgress(assetKey, e.loaded, e.total || 0);
     },

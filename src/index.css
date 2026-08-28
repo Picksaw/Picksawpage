@@ -21,6 +21,13 @@
   html {
     /* Lenis drives scrolling; native smooth fights it */
     scroll-behavior: auto;
+    /* the journey is a scroll-driven scene — an accidental
+       pull-to-refresh mid-city yanks the camera; rubber-band glow
+       at the ends is enough */
+    overscroll-behavior-y: contain;
+    /* stop iOS inflating text on rotation */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   html.lenis,
@@ -39,6 +46,34 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
+  }
+
+  /* ── mobile touch polish ───────────────────────────────────────
+     No 300ms double-tap-zoom delay on controls and no grey Android
+     tap flash — the site draws its own electric ripples. */
+  a,
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  label,
+  summary {
+    touch-action: manipulation;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* iOS Safari zooms the whole page when a <16px input is focused —
+     pin form fields to 16px on touch devices so focusing stays calm. */
+  @media (pointer: coarse) {
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
   }
 
   [dir="rtl"] body,
@@ -82,6 +117,22 @@
 }
 
 @layer utilities {
+  /* ── notch / home-bar safe areas (viewport-fit=cover) ─────────
+     Fixed chrome sits above the iOS home indicator and Android
+     gesture bar instead of underneath it. */
+  .safe-bottom {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 1.25rem);
+  }
+  .safe-bottom-lg {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem);
+  }
+  .safe-pad-bottom {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  }
+  .safe-top {
+    top: env(safe-area-inset-top, 0px);
+  }
+
   /* ── glass system ────────────────────────────────────────────
      NOTE: backdrop-filter is GPU-expensive when elements scroll.
      Cards use plain translucent glass (no blur); only the fixed

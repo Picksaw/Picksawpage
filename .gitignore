@@ -17,6 +17,10 @@ node_modules/
 dist/
 dist-ssr/
 
+# Mobile-audit artifacts (screenshots / reports)
+scripts/mobile-audit/out/
+.asset-tmp/
+
 # Local env files
 .env
 .env.local

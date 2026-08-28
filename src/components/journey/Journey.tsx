@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
+import { PerformanceMonitor } from "@react-three/drei";
 import {
   AnimatePresence,
   motion,
@@ -35,7 +36,14 @@ import { registerPerfGl } from "../../lib/perfProbe";
  * sections continue underneath.
  */
 
-export default function Journey({ lang }: { lang: Lang }) {
+export default function Journey({
+  lang,
+  introDone = true,
+}: {
+  lang: Lang;
+  /** the opaque intro loader covers the canvas — idle the loop while up */
+  introDone?: boolean;
+}) {
   const t = SITE_TEXTS[lang];
   const { blip } = useSound();
   const spacerRef = useRef<HTMLDivElement>(null);
@@ -92,9 +100,17 @@ export default function Journey({ lang }: { lang: Lang }) {
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: coarse)").matches;
 
+  // Adaptive resolution: start at the full 1.25× cap; if the device
+  // can't hold the framerate, PerformanceMonitor steps the backing store
+  // down (0.25 steps, floor 0.75 — a subtle soften, never a look change)
+  // and back up again when there's headroom. Strong phones never dip.
+  const DPR_MAX = 1.25;
+  const DPR_MIN = 0.75;
+  const [dpr, setDpr] = useState(DPR_MAX);
+
   return (
     <>
-      {/* starts the city's ~28MB of models + road textures right after
+      {/* starts the city's models + road textures right after
           first paint (shared loader cache, byte-level progress) */}
       <AssetPrimer />
 
@@ -113,8 +129,12 @@ export default function Journey({ lang }: { lang: Lang }) {
           the page is RTL; framed section windows set their own rtl content dir. */}
       <div className="fixed inset-0 z-[2]" dir="ltr">
         <Canvas
-          dpr={[1, 1.25]} // capped everywhere — 4K desktops are fill-rate bound
-          frameloop="always"
+          dpr={dpr} // capped everywhere — 4K desktops are fill-rate bound
+          // While the live-preview modal or the intro loader covers the
+          // screen there is nothing to animate — render on demand only
+          // (the last presented frame stays up). Phones stop burning GPU
+          // on a hidden canvas during the most thermal moment: loading.
+          frameloop={selected || !introDone ? "demand" : "always"}
           camera={{
             position: [0, 0, stations[0]],
             // portrait phones need a wider lens or the city never enters
@@ -135,6 +155,14 @@ export default function Journey({ lang }: { lang: Lang }) {
             document.body.style.cursor = "";
           }}
         >
+          <PerformanceMonitor
+            ms={500}
+            iterations={6}
+            flipflops={4}
+            onDecline={() => setDpr((d) => Math.max(DPR_MIN, +(d - 0.25).toFixed(2)))}
+            onIncline={() => setDpr((d) => Math.min(DPR_MAX, +(d + 0.1).toFixed(2)))}
+            onFallback={() => setDpr(DPR_MIN)}
+          />
           <fog attach="fog" args={["#06080f", 12, 66]} />
           <ambientLight intensity={0.5} />
           <directionalLight position={[-3, 5, 4]} intensity={1.4} color="#eaf6ff" />
@@ -159,7 +187,7 @@ export default function Journey({ lang }: { lang: Lang }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1, transition: { delay: 1.2, duration: 0.8 } }}
             exit={{ opacity: 0, transition: { duration: 0.35 } }}
-            className="pointer-events-none fixed inset-x-0 bottom-8 z-10 flex flex-col items-center gap-2"
+            className="pointer-events-none fixed inset-x-0 safe-bottom-lg z-10 flex flex-col items-center gap-2"
           >
             <span className="text-[10px] font-medium uppercase tracking-[0.24em] text-slate-400">
               {t.scrollHint}
@@ -180,7 +208,7 @@ export default function Journey({ lang }: { lang: Lang }) {
             initial={{ opacity: 0, y: 46 }}
             animate={{ opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } }}
             exit={{ opacity: 0, y: 34, transition: { duration: 0.35 } }}
-            className="pointer-events-none fixed inset-x-0 bottom-0 z-10 flex flex-col items-center gap-5 px-4 pb-14"
+            className="pointer-events-none fixed inset-x-0 bottom-0 z-10 flex flex-col items-center gap-5 px-4 pb-[calc(env(safe-area-inset-bottom,0px)+5.5rem)] sm:pb-14"
           >
             <motion.div
               initial={{ opacity: 0, y: 14 }}
@@ -220,7 +248,12 @@ export default function Journey({ lang }: { lang: Lang }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 24 }}
             transition={{ type: "spring", stiffness: 280, damping: 24 }}
-            className="pointer-events-none fixed inset-x-0 bottom-6 z-20 flex justify-center px-4"
+            className={[
+              "pointer-events-none fixed inset-x-0 z-20 flex justify-center px-4",
+              // phones: the action bar lifts clear of the storm orb dock
+              // (14 = orb 56px + dock bottom 20px + breathing room)
+              "bottom-[calc(env(safe-area-inset-bottom,0px)+5.5rem)] sm:bottom-6",
+            ].join(" ")}
           >
             <div className="glass-strong bolt-lit pointer-events-auto flex items-center gap-4 rounded-2xl px-4 py-3 sm:gap-6 sm:px-6">
               <div className="text-start" dir={lang === "fa" ? "rtl" : "ltr"}>

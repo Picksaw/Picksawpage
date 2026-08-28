@@ -240,7 +240,10 @@ export default function StormBackground() {
     }
 
     const resize = () => {
-      dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2) * (isMobile ? 0.75 : 1);
+      // Mobile: flat 1.0 — the storm canvas sits BEHIND the journey's
+      // WebGL canvas, so its rain is soft-focus anyway; every extra
+      // pixel here is double fill-rate on a fill-rate-bound phone.
+      dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.0 : 2);
       w = window.innerWidth;
       h = window.innerHeight;
       canvas.width = Math.max(1, Math.round(w * dpr));

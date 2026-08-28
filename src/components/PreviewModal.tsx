@@ -118,8 +118,8 @@ export default function PreviewModal({
           />
         </div>
 
-        {/* CTA */}
-        <div className="flex flex-col items-center justify-between gap-3 border-t border-white/10 px-5 py-4 sm:flex-row">
+        {/* CTA — home-bar safe on notched phones */}
+        <div className="flex flex-col items-center justify-between gap-3 border-t border-white/10 px-5 py-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] sm:flex-row sm:pb-4">
           <div className="text-sm text-slate-400">
             <span className="font-bold text-white">{item.name.en}</span>
             {" — "}
