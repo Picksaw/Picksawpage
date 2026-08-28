@@ -338,15 +338,16 @@ function Painting({
           opacity={1}
         />
       </mesh>
-      {/* the painting itself — on touch devices the focus bar button is the
-          primary open affordance so the canvas never traps vertical scroll */}
+      {/* the painting itself — tappable on touch (opens the live preview)
+          and hoverable on desktop; vertical scroll is never blocked
+          because the canvas uses touch-action: pan-y */}
       <mesh
         position={[0, 0, 0.012]}
         onPointerOver={focused && !isCoarse ? over : undefined}
         onPointerMove={focused && !isCoarse ? over : undefined}
         onPointerOut={focused && !isCoarse ? out : undefined}
         onClick={
-          focused && !isCoarse
+          focused
             ? (e) => {
                 e.stopPropagation();
                 onOpen(item);

@@ -161,10 +161,11 @@ export default function Journey({
         className="fixed inset-0 z-[2]"
         dir="ltr"
         style={{
-          // On touch devices the canvas must not trap vertical scroll —
-          // the focus bar is the tap target, not the painting mesh itself.
-          // Desktop keeps pointer events for hover.
-          pointerEvents: isMobile ? "none" : "auto",
+          // The canvas must never trap vertical scroll — and on touch it
+          // must stay interactive too: drag the P card to turn it, tap a
+          // focused painting to open the live preview. `touch-action:
+          // pan-y` hands vertical pan gestures to the browser (native
+          // scroll stays smooth) while taps/clicks still reach the meshes.
           touchAction: "pan-y",
         }}
       >
@@ -191,8 +192,9 @@ export default function Journey({
           }}
           style={{
             background: "transparent",
+            // pan-y: vertical swipes scroll the page (never trapped by the
+            // canvas), taps still reach the meshes for drag + tap-to-open.
             touchAction: "pan-y",
-            pointerEvents: isMobile ? "none" : "auto",
           }}
           onCreated={(state) => registerPerfGl("journey", state.gl)}
           onPointerMissed={() => {
