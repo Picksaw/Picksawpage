@@ -10,7 +10,13 @@ import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { TEMPLATES, type TemplateItem } from "../../config/templatesConfig";
 import { TEMPLATE_IMAGE_MAP } from "../../config/templateImages";
-import { JOURNEY_MODEL_URLS, preloadJourneyModels } from "../../lib/journeyAssets";
+import {
+  JOURNEY_BACKGROUND_MODEL_URLS,
+  JOURNEY_CRITICAL_MODEL_URLS,
+  JOURNEY_MODEL_URLS,
+  preloadBackgroundSiteAssets,
+  preloadCriticalJourneyModels,
+} from "../../lib/journeyAssets";
 import { SITE_TEXTS, type Lang } from "../../config/siteTexts";
 import { Html, useGLTF } from "@react-three/drei";
 import GroundFog from "./GroundFog";
@@ -882,13 +888,12 @@ function City() {
 
   const windowTexs = useMemo(() => makeWindowTextures(), []);
 
-  // Load custom GLTFs. These are warmed by the loader first, so the
-  // restored building set is ready before scroll unlocks.
-  const gltfAzadi = useGLTF(import.meta.env.BASE_URL + "azadi_tower.glb") as any;
-  const gltfMilad = useGLTF(import.meta.env.BASE_URL + "milad_tower.glb") as any;
-  const gltfNY = useGLTF(import.meta.env.BASE_URL + "new_york_background_building_1.glb") as any;
-  const gltfRealistic = useGLTF(import.meta.env.BASE_URL + "realistic_building.glb") as any;
-  const gltfLowRise = useGLTF(import.meta.env.BASE_URL + "low_rise_wall_to_wall_office_building.glb") as any;
+  // Load the core city GLTFs. The large Azadi finale is split into its own
+  // Suspense island below so it never blocks the first scroll.
+  const gltfMilad = useGLTF(JOURNEY_MODEL_URLS[0]) as any;
+  const gltfNY = useGLTF(JOURNEY_MODEL_URLS[1]) as any;
+  const gltfRealistic = useGLTF(JOURNEY_MODEL_URLS[2]) as any;
+  const gltfLowRise = useGLTF(JOURNEY_MODEL_URLS[3]) as any;
   
 
   const { concreteMat, windowMats, prototypes } = useMemo(() => {
@@ -998,7 +1003,7 @@ function City() {
     };
 
     const protos = [
-      createCustomPrototype(gltfAzadi.scene, true),
+      null,
       createCustomPrototype(gltfMilad.scene, true),
       createCustomPrototype(gltfNY.scene, false),
       createCustomPrototype(gltfRealistic.scene, false),
@@ -1006,7 +1011,7 @@ function City() {
     ];
 
     return { concreteMat: cMat, windowMats: wMats, prototypes: protos };
-  }, [windowTexs, gltfAzadi, gltfMilad, gltfNY, gltfRealistic, gltfLowRise]);
+  }, [windowTexs, gltfMilad, gltfNY, gltfRealistic, gltfLowRise]);
 
   const groupRef = useRef<THREE.Group>(null);
 
@@ -1027,12 +1032,10 @@ function City() {
 
     for (const b of buildings) {
       const proto = prototypes[b.typeIndex];
+      if (!proto) continue; // Azadi renders in its own late-loading island.
       const instance = proto.group.clone();
       instance.position.set(b.x, -1.98, b.z);
       instance.rotation.y = b.rotation;
-      // The Azadi gate stands far beyond every other building, so the
-      // monumental scale can't clip anything — grow it in place.
-      if (b.typeIndex === 0) instance.scale.setScalar(AZADI_SCALE);
 
       // Add a foundation block under each building so it connects cleanly to the ground
       const foundationGeo = new THREE.BoxGeometry(
@@ -1054,7 +1057,7 @@ function City() {
       g.add(instance);
     }
     return g;
-  }, [buildings, prototypes, concreteMat]);
+  }, [buildings, prototypes, concreteMat, windowMats]);
 
   useEffect(() => {
     return () => {
@@ -1067,7 +1070,7 @@ function City() {
         t.metalnessMap.dispose();
       });
       prototypes.forEach((p) =>
-        p.group.traverse((o: any) => {
+        p?.group.traverse((o: any) => {
           if (o instanceof THREE.Mesh) {
             if (o.geometry) o.geometry.dispose();
           }
@@ -1076,7 +1079,63 @@ function City() {
     };
   }, [concreteMat, prototypes]);
 
-  return <primitive object={cityGroup} ref={groupRef} />;
+  return (
+    <>
+      <primitive object={cityGroup} ref={groupRef} />
+      <Suspense fallback={null}>
+        <AzadiTower />
+      </Suspense>
+    </>
+  );
+}
+
+function AzadiTower() {
+  const gltfAzadi = useGLTF(JOURNEY_MODEL_URLS[4]) as any;
+
+  const instance = useMemo(() => {
+    const group = new THREE.Group();
+    const cloned = gltfAzadi.scene.clone();
+
+    const tempBox = new THREE.Box3().setFromObject(cloned);
+    const tempSize = new THREE.Vector3();
+    tempBox.getSize(tempSize);
+    const maxFootprint = Math.max(tempSize.x, tempSize.z);
+    let autoScale = maxFootprint > 0.001 ? 3.2 / maxFootprint : 1.0;
+    if (tempSize.y * autoScale > 35) autoScale = 35 / tempSize.y;
+    cloned.scale.setScalar(autoScale);
+
+    const box = new THREE.Box3().setFromObject(cloned);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    cloned.position.x = -center.x;
+    cloned.position.z = -center.z;
+    cloned.position.y = -box.min.y;
+    cloned.traverse((child: any) => {
+      if (child.isMesh && child.material) {
+        if (child.material.color) child.material.color.lerp(new THREE.Color("#05070a"), 0.5);
+        child.material.fog = true;
+        child.material.roughness = Math.min(child.material.roughness || 1.0, 0.6);
+        const matName = (child.material.name || "").toLowerCase();
+        if (child.material.emissiveMap || (child.material.emissive && child.material.emissive.getHex() > 0)) {
+          child.material.emissiveIntensity = 3.5;
+        } else if (matName.includes("window") || matName.includes("glass") || matName.includes("light")) {
+          child.material.emissive = new THREE.Color("#4fd8ff");
+          child.material.emissiveIntensity = 2.0;
+        } else if (child.material.map) {
+          child.material.emissiveMap = child.material.map;
+          child.material.emissive = new THREE.Color("#1a4466");
+          child.material.emissiveIntensity = 3.0;
+        }
+      }
+    });
+
+    group.add(cloned);
+    group.position.set(0, -1.98, AZADI_Z);
+    group.scale.setScalar(AZADI_SCALE);
+    return group;
+  }, [gltfAzadi]);
+
+  return <primitive object={instance} />;
 }
 
 function Street() {
@@ -1191,10 +1250,14 @@ function CorridorRain() {
 
 if (typeof window !== "undefined") {
   // The Journey chunk is requested while the intro loader is visible. Warm
-  // the restored building set + painting screenshots then, so scrolling into
-  // the corridor does not hit an empty Suspense fallback.
-  preloadJourneyModels();
-  JOURNEY_MODEL_URLS.forEach((url) => useGLTF.preload(url));
+  // the core city set first; larger finale assets continue in the background
+  // after the scroll gate is ready.
+  preloadCriticalJourneyModels();
+  JOURNEY_CRITICAL_MODEL_URLS.forEach((url) => useGLTF.preload(url));
+  window.setTimeout(() => {
+    void preloadBackgroundSiteAssets();
+    JOURNEY_BACKGROUND_MODEL_URLS.forEach((url) => useGLTF.preload(url));
+  }, 1200);
 
   Object.values(TEMPLATE_IMAGE_MAP).forEach((src) => {
     const img = new Image();

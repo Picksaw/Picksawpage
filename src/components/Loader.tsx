@@ -8,7 +8,7 @@ import {
 /**
  * Loader — cinematic intro + real asset gate.
  * The page stays locked at scrollY=0 (the ghost card station) until the
- * Journey's road, city models, gallery previews and audio are warmed.
+ * the Journey's road, core city models, and gallery previews are warmed.
  */
 export default function Loader({ onDone }: { onDone: () => void }) {
   const [show, setShow] = useState(true);

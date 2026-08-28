@@ -20,7 +20,13 @@ export const JOURNEY_MODEL_URLS = [
   `${base}azadi_tower.glb`,
 ] as const;
 
-export type AssetGroupId = "road" | "models" | "gallery" | "audio";
+// Load the <= ~7 MB city pieces before scroll unlocks. The larger finale
+// landmark (Azadi) warms in the background so it doesn't make the intro feel
+// heavier than the old site.
+export const JOURNEY_CRITICAL_MODEL_URLS = JOURNEY_MODEL_URLS.slice(0, 4);
+export const JOURNEY_BACKGROUND_MODEL_URLS = JOURNEY_MODEL_URLS.slice(4);
+
+export type AssetGroupId = "road" | "models" | "gallery";
 
 export interface AssetGroupProgress {
   id: AssetGroupId;
@@ -42,39 +48,44 @@ interface AssetTask {
   id: string;
   label: string;
   href: string;
-  group: AssetGroupId;
+  group: AssetGroupId | "background";
   kind: "image" | "fetch";
+  critical: boolean;
 }
 
 const GROUP_LABELS: Record<AssetGroupId, string> = {
   road: "Wet road textures",
-  models: "Neon city buildings",
+  models: "Core city buildings",
   gallery: "Template gallery previews",
-  audio: "Storm ambience",
 };
 
 const TASKS: AssetTask[] = [
-  { id: "road-diffuse", label: "Road surface", href: JOURNEY_ROAD_MAPS.map, group: "road", kind: "image" },
-  { id: "road-normal", label: "Road rain normals", href: JOURNEY_ROAD_MAPS.normalMap, group: "road", kind: "image" },
-  { id: "road-roughness", label: "Road reflections", href: JOURNEY_ROAD_MAPS.roughnessMap, group: "road", kind: "image" },
-  { id: "road-ao", label: "Road shadow map", href: JOURNEY_ROAD_MAPS.aoMap, group: "road", kind: "image" },
-  { id: "model-milad", label: "Milad tower", href: JOURNEY_MODEL_URLS[0], group: "models", kind: "fetch" },
-  { id: "model-ny", label: "New York building", href: JOURNEY_MODEL_URLS[1], group: "models", kind: "fetch" },
-  { id: "model-realistic", label: "Realistic tower", href: JOURNEY_MODEL_URLS[2], group: "models", kind: "fetch" },
-  { id: "model-lowrise", label: "Low-rise office", href: JOURNEY_MODEL_URLS[3], group: "models", kind: "fetch" },
-  { id: "model-azadi", label: "Azadi tower finale", href: JOURNEY_MODEL_URLS[4], group: "models", kind: "fetch" },
+  { id: "road-diffuse", label: "Road surface", href: JOURNEY_ROAD_MAPS.map, group: "road", kind: "image", critical: true },
+  { id: "road-normal", label: "Road rain normals", href: JOURNEY_ROAD_MAPS.normalMap, group: "road", kind: "image", critical: true },
+  { id: "road-roughness", label: "Road reflections", href: JOURNEY_ROAD_MAPS.roughnessMap, group: "road", kind: "image", critical: true },
+  { id: "road-ao", label: "Road shadow map", href: JOURNEY_ROAD_MAPS.aoMap, group: "road", kind: "image", critical: true },
+  { id: "model-milad", label: "Milad tower", href: JOURNEY_MODEL_URLS[0], group: "models", kind: "fetch", critical: true },
+  { id: "model-ny", label: "New York building", href: JOURNEY_MODEL_URLS[1], group: "models", kind: "fetch", critical: true },
+  { id: "model-realistic", label: "Realistic tower", href: JOURNEY_MODEL_URLS[2], group: "models", kind: "fetch", critical: true },
+  { id: "model-lowrise", label: "Low-rise office", href: JOURNEY_MODEL_URLS[3], group: "models", kind: "fetch", critical: true },
+  { id: "model-azadi", label: "Azadi finale", href: JOURNEY_MODEL_URLS[4], group: "background", kind: "fetch", critical: false },
   ...Object.entries(TEMPLATE_IMAGE_MAP).map(([key, href]) => ({
     id: `gallery-${key}`,
     label: `${key[0].toUpperCase()}${key.slice(1)} preview`,
     href,
     group: "gallery" as const,
     kind: "image" as const,
+    critical: true,
   })),
-  { id: "audio-rain", label: "Rain loop", href: `${base}audio/rain-loop.ogg`, group: "audio", kind: "fetch" },
+  { id: "audio-rain", label: "Rain loop", href: `${base}audio/rain-loop.ogg`, group: "background", kind: "fetch", critical: false },
 ];
+
+const CRITICAL_TASKS = TASKS.filter((task) => task.critical);
+const BACKGROUND_TASKS = TASKS.filter((task) => !task.critical);
 
 const preloaded = new Set<string>();
 let criticalPromise: Promise<void> | null = null;
+let backgroundPromise: Promise<void> | null = null;
 let completed = new Set<string>();
 let errors: string[] = [];
 let lastProgress: AssetLoadProgress = makeProgress("Preparing storm systems");
@@ -82,7 +93,7 @@ const subscribers = new Set<(progress: AssetLoadProgress) => void>();
 
 function makeProgress(current: string): AssetLoadProgress {
   const groups = (Object.keys(GROUP_LABELS) as AssetGroupId[]).map((id) => {
-    const groupTasks = TASKS.filter((task) => task.group === id);
+    const groupTasks = CRITICAL_TASKS.filter((task) => task.group === id);
     return {
       id,
       label: GROUP_LABELS[id],
@@ -90,8 +101,8 @@ function makeProgress(current: string): AssetLoadProgress {
       total: groupTasks.length,
     };
   });
-  const loaded = completed.size;
-  const total = TASKS.length;
+  const loaded = CRITICAL_TASKS.filter((task) => completed.has(task.id)).length;
+  const total = CRITICAL_TASKS.length;
   return {
     loaded,
     total,
@@ -107,12 +118,12 @@ function emit(current: string) {
   subscribers.forEach((fn) => fn(lastProgress));
 }
 
-function addPreload(href: string, as: "image" | "fetch" | "audio") {
+function addPreload(href: string, as: "image" | "fetch" | "audio", priority: "high" | "low" = "high") {
   if (typeof document === "undefined" || preloaded.has(href)) return;
   preloaded.add(href);
 
   const link = document.createElement("link");
-  link.rel = "preload";
+  link.rel = priority === "low" ? "prefetch" : "preload";
   link.href = href;
   link.as = as;
   if (as === "fetch") link.crossOrigin = "anonymous";
@@ -149,39 +160,39 @@ async function loadImage(task: AssetTask) {
 }
 
 async function loadFetch(task: AssetTask) {
-  addPreload(task.href, task.group === "audio" ? "audio" : "fetch");
+  addPreload(task.href, task.label.includes("Rain") ? "audio" : "fetch", task.critical ? "high" : "low");
   await withTimeout(
     fetch(task.href, { cache: "force-cache" }).then((res) => {
       if (!res.ok) throw new Error(`${task.label} returned ${res.status}`);
       // Pull the body now so later GLTF/audio loaders hit a warm HTTP cache.
       return res.arrayBuffer();
     }),
-    25000,
+    task.critical ? 22000 : 30000,
     task.label,
   );
 }
 
-async function runTask(task: AssetTask) {
+async function runTask(task: AssetTask, report = true) {
   if (completed.has(task.id)) return;
-  emit(`Loading ${GROUP_LABELS[task.group]} · ${task.label}`);
+  if (report && task.critical) emit(`Loading ${GROUP_LABELS[task.group as AssetGroupId]} · ${task.label}`);
   try {
     if (task.kind === "image") await loadImage(task);
     else await loadFetch(task);
   } catch (err) {
     const message = err instanceof Error ? err.message : `Failed to load ${task.label}`;
-    errors.push(message);
+    if (task.critical) errors.push(message);
   } finally {
     completed.add(task.id);
-    emit(`Loaded ${task.label}`);
+    if (report && task.critical) emit(`Loaded ${task.label}`);
   }
 }
 
-async function runWithConcurrency(tasks: AssetTask[], concurrency: number) {
+async function runWithConcurrency(tasks: AssetTask[], concurrency: number, report = true) {
   let index = 0;
   const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
     while (index < tasks.length) {
       const task = tasks[index++];
-      await runTask(task);
+      await runTask(task, report);
     }
   });
   await Promise.all(workers);
@@ -198,15 +209,29 @@ export function preloadJourneyRoad() {
   }
 }
 
-/** Warm the 3D model requests without importing three/drei into the loader. */
+export function preloadCriticalJourneyModels() {
+  for (const href of JOURNEY_CRITICAL_MODEL_URLS) addPreload(href, "fetch");
+}
+
+/** Warm the full 3D model set after the scroll gate is ready. */
 export function preloadJourneyModels() {
-  for (const href of JOURNEY_MODEL_URLS) addPreload(href, "fetch");
+  preloadCriticalJourneyModels();
+  for (const href of JOURNEY_BACKGROUND_MODEL_URLS) addPreload(href, "fetch", "low");
+}
+
+export function preloadBackgroundSiteAssets() {
+  if (!backgroundPromise) {
+    preloadJourneyModels();
+    backgroundPromise = runWithConcurrency(BACKGROUND_TASKS, 2, false);
+  }
+  return backgroundPromise;
 }
 
 /**
- * Blocks the intro until the Journey's network-heavy assets are warm.
- * The page remains on the ghost card and scrolling stays locked until this
- * resolves, so the first scroll should not reveal missing road/buildings.
+ * Blocks the intro only until the assets needed for the opening scroll are
+ * warm: the road, core city buildings, and gallery cards. Larger finale/audio
+ * assets continue in the background so the loader does not become heavier
+ * than the original site.
  */
 export function preloadCriticalSiteAssets(onProgress?: (progress: AssetLoadProgress) => void) {
   if (onProgress) {
@@ -215,18 +240,19 @@ export function preloadCriticalSiteAssets(onProgress?: (progress: AssetLoadProgr
   }
 
   preloadJourneyRoad();
-  preloadJourneyModels();
+  preloadCriticalJourneyModels();
 
   if (!criticalPromise) {
     emit("Preparing storm systems");
-    const road = TASKS.filter((task) => task.group === "road");
-    const rest = TASKS.filter((task) => task.group !== "road");
+    const road = CRITICAL_TASKS.filter((task) => task.group === "road");
+    const rest = CRITICAL_TASKS.filter((task) => task.group !== "road");
     criticalPromise = (async () => {
       // Road first: it is small, visible early, and should always be ready
       // by the time the loader releases scroll.
       await runWithConcurrency(road, 4);
       await runWithConcurrency(rest, 4);
-      emit(errors.length ? "Loaded with cached fallbacks" : "All systems ready");
+      emit(errors.length ? "Ready with cached fallbacks" : "Opening scene ready");
+      void preloadBackgroundSiteAssets();
     })();
   }
 
