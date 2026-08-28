@@ -251,15 +251,19 @@ function Painting({
   const fit = useFitScale(PAINTING_W, PAINTING_H, FOCUS_DIST);
   const z = paintingZ(index);
   const _scale = useRef(new THREE.Vector3()); // no per-frame allocation
+  // touch devices should never block vertical scroll — hover is desktop-only
+  const isCoarse = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(pointer: coarse)").matches,
+    [],
+  );
 
   useFrame(({ camera }, delta) => {
     const dt = Math.min(delta, 0.05);
     const op = layerOpacity(camera.position.z, z);
 
     // Fully outside the opacity window → stop drawing these 4 meshes
-    // (opacity 0 still rasterizes; visible=false skips the draw calls).
-    // Pointer handlers only exist on the focused painting, which is
-    // always inside the window — so no interaction is lost.
     if (group.current) group.current.visible = op > 0.01;
 
     // solo fade — material + glow + frame all obey it
@@ -273,21 +277,32 @@ function Painting({
     if (borderMat.current) borderMat.current.opacity = op;
 
     if (group.current) {
-      const hoverS = hovered.current ? 1.03 : 1;
-      const s = fit * hoverS;
+      // fade-through scale: when we go *further* into the painting (d → 0),
+      // gently shrink it so it never sits opaque covering the whole phone.
+      const d = (camera as THREE.PerspectiveCamera).position.z - z;
+      let throughScale = 1;
+      if (d < 2.8) {
+        const t = Math.max(0, Math.min(1, (d + 0.8) / 3.6));
+        throughScale = 0.75 + 0.25 * t;
+      }
+      const hoverS = hovered.current && !isCoarse ? 1.03 : 1;
+      const s = fit * hoverS * throughScale;
       group.current.scale.lerp(_scale.current.set(s, s, s), Math.min(1, dt * 8));
-      // parallax lean — tiny, never enough to spill
-      group.current.position.x = (camera.position.x || 0) * 0.06;
+      group.current.position.x = isCoarse
+        ? 0
+        : (camera.position.x || 0) * 0.06;
     }
   });
 
   const over = (e: ThreeEvent<PointerEvent>) => {
+    if (isCoarse) return;
     e.stopPropagation();
     hovered.current = true;
     hoveredIdxRef.current = index;
     document.body.style.cursor = "pointer";
   };
   const out = () => {
+    if (isCoarse) return;
     hovered.current = false;
     hoveredIdxRef.current = -1;
     document.body.style.cursor = "";
@@ -323,14 +338,15 @@ function Painting({
           opacity={1}
         />
       </mesh>
-      {/* the painting itself */}
+      {/* the painting itself — on touch devices the focus bar button is the
+          primary open affordance so the canvas never traps vertical scroll */}
       <mesh
         position={[0, 0, 0.012]}
-        onPointerOver={focused ? over : undefined}
-        onPointerMove={focused ? over : undefined}
-        onPointerOut={focused ? out : undefined}
+        onPointerOver={focused && !isCoarse ? over : undefined}
+        onPointerMove={focused && !isCoarse ? over : undefined}
+        onPointerOut={focused && !isCoarse ? out : undefined}
         onClick={
-          focused
+          focused && !isCoarse
             ? (e) => {
                 e.stopPropagation();
                 onOpen(item);
@@ -499,6 +515,13 @@ function HtmlSection({
   const targetW = size.width < 768 ? 400 : 1024;
   const targetH = targetW * (PAINTING_H / PAINTING_W);
 
+  const isCoarse = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(pointer: coarse)").matches,
+    [],
+  );
+
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
     const cam = camera as THREE.PerspectiveCamera;
@@ -508,20 +531,24 @@ function HtmlSection({
     if (glowMat.current) glowMat.current.opacity = (focused ? 0.3 : 0.1) * op;
 
     if (group.current) {
-      // The <Html> overlay ignores ancestor visibility (drei only hides
-      // it behind the camera) — the DOM div is toggled separately below.
-      group.current.visible = op > 0.01; // glow + frame meshes
+      group.current.visible = op > 0.01;
+      // fade-through shrink so it never sits opaque full-screen on phone
+      const d = cam.position.z - z;
+      let throughScale = 1;
+      if (d < 2.8) {
+        const t = Math.max(0, Math.min(1, (d + 0.8) / 3.6));
+        throughScale = 0.75 + 0.25 * t;
+      }
+      const targetScale = fit * throughScale;
       group.current.scale.lerp(
-        _scale.current.set(fit, fit, fit),
+        _scale.current.set(targetScale, targetScale, targetScale),
         Math.min(1, dt * 8),
       );
-      group.current.position.x = (cam.position.x || 0) * 0.06;
+      group.current.position.x = isCoarse ? 0 : (cam.position.x || 0) * 0.06;
     }
 
     if (outerRef.current && innerRef.current) {
       if (op < 0.01) {
-        // display:none skips layout + paint entirely for the off-screen
-        // section DOM (the heaviest 2D content in the scene)
         outerRef.current.style.display = "none";
         outerRef.current.style.opacity = "0";
         outerRef.current.style.pointerEvents = "none";
@@ -531,22 +558,17 @@ function HtmlSection({
         outerRef.current.style.display = "block";
       }
 
-      // Calculate exact pixel dimensions of the 3D frame on the 2D screen
       const dist = Math.abs(cam.position.z - z);
       const safeDist = Math.max(dist, 0.1);
 
       const fovRad = THREE.MathUtils.degToRad(cam.fov / 2);
       const visible_height = 2 * safeDist * Math.tan(fovRad);
 
-      // Need to use group.current.scale to match the lerped scale
       const currentScale = group.current ? group.current.scale.x : fit;
 
       const pxH = (PAINTING_H / visible_height) * size.height * currentScale;
       const pxW = (PAINTING_W / visible_height) * size.height * currentScale;
 
-      // Also account for the parallax X shift on screen
-      // If group has position.x, we must shift the overlay
-      // 3D X -> screen X
       const shiftX = group.current
         ? (group.current.position.x /
             (visible_height * (size.width / size.height))) *
@@ -555,18 +577,28 @@ function HtmlSection({
 
       outerRef.current.style.width = `${pxW}px`;
       outerRef.current.style.height = `${pxH}px`;
+      // fade effect when going further in: opacity already eased, but also
+      // add a subtle blur + scale hint via CSS for the DOM content
       outerRef.current.style.opacity = op.toString();
+      outerRef.current.style.filter =
+        op < 0.9 ? `blur(${(1 - op) * 6}px)` : "none";
+      // On touch, keep pointerEvents auto when focused so forms still work,
+      // but allow scroll chaining — inner handles its own scroll and then
+      // lets the page scroll.
       outerRef.current.style.pointerEvents = focused ? "auto" : "none";
       outerRef.current.style.transform = `translateX(${shiftX}px)`;
+      outerRef.current.style.touchAction = "pan-y";
+      (outerRef.current.style as any).overscrollBehavior = "auto";
 
       const scale = pxW / targetW;
       innerRef.current.style.transform = `scale(${scale})`;
+      innerRef.current.style.touchAction = "pan-y";
+      (innerRef.current.style as any).overscrollBehavior = "auto";
     }
   });
 
   return (
     <group ref={group} position={[0, 0, z]}>
-      {/* glow halo behind the frame */}
       <mesh position={[0, 0, -0.09]}>
         <planeGeometry args={[PAINTING_W + 0.55, PAINTING_H + 0.55]} />
         <meshBasicMaterial
@@ -579,7 +611,6 @@ function HtmlSection({
           fog={false}
         />
       </mesh>
-      {/* dark frame */}
       <mesh position={[0, 0, -0.05]}>
         <boxGeometry args={[PAINTING_W + 0.16, PAINTING_H + 0.16, 0.09]} />
         <meshStandardMaterial
@@ -592,13 +623,20 @@ function HtmlSection({
         />
       </mesh>
 
-      {/* HTML Content — perfectly tracking 2D overlay avoiding all CSS3D browser bugs */}
       <Html center zIndexRange={[100, 0]} style={{ direction: "ltr" }}>
         <div
           ref={outerRef}
           dir={dir}
           className="relative overflow-hidden bg-[#04060d] text-white flex items-start justify-center rounded-sm"
-          style={{ opacity: 0 }}
+          style={{
+            opacity: 0,
+            // fade mask when going further — top and bottom feather on mobile
+            // so content doesn't abruptly cut when covering full screen
+            WebkitMaskImage:
+              "linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)",
+            maskImage:
+              "linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)",
+          }}
         >
           <div
             ref={innerRef}

@@ -11,7 +11,14 @@ import { SITE_TEXTS, type Lang } from "../../config/siteTexts";
 import { TEMPLATES, type TemplateItem } from "../../config/templatesConfig";
 import PEmblem from "./PEmblem";
 import AssetPrimer from "./AssetPrimer";
-import { CorridorScene, focusedIndex, stations } from "./Corridor";
+import {
+  CorridorScene,
+  focusedIndex,
+  stations,
+  cameraZ,
+  paintingZ,
+  layerOpacity,
+} from "./Corridor";
 import PreviewModal from "../PreviewModal";
 import MagneticButton from "../ui/MagneticButton";
 import { useSound } from "../../audio/SoundProvider";
@@ -54,6 +61,9 @@ export default function Journey({
   /** 'p' while framing the P, 'headline' on the text layer, then 'gallery'.
    *  State-driven (not transform-driven) so station UI can never linger. */
   const [phase, setPhase] = useState<"p" | "headline" | "gallery">("p");
+  // fade overlay that appears when we go *further* into a painting — it
+  // softens the frame before it covers the whole phone screen
+  const [throughFade, setThroughFade] = useState(0);
 
   const { scrollYProgress } = useScroll({
     target: spacerRef,
@@ -68,6 +78,26 @@ export default function Journey({
     const u = v * (stations.length - 1);
     const ph = u < 0.6 ? "p" : u < 1.45 ? "headline" : "gallery";
     setPhase((prev) => (prev === ph ? prev : ph));
+
+    // through-fade: when camera is inside fade-out zone of focused painting
+    // (d 2.8 → -0.8), drive a soft overlay that fades painting into fog.
+    if (idx >= 0) {
+      const camZ = cameraZ(v);
+      const pZ = paintingZ(idx);
+      const d = camZ - pZ;
+      const op = layerOpacity(camZ, pZ);
+      if (d < 2.8 && d > -0.8) {
+        const fade = 1 - op;
+        setThroughFade((prev) => {
+          const next = prev + (fade - prev) * 0.22;
+          return Math.abs(next - prev) < 0.01 ? fade : next;
+        });
+      } else {
+        setThroughFade((prev) => (prev === 0 ? 0 : prev * 0.82));
+      }
+    } else {
+      setThroughFade((prev) => (prev === 0 ? 0 : prev * 0.82));
+    }
   });
 
   const scrollToFirstPainting = useCallback(() => {
@@ -127,7 +157,17 @@ export default function Journey({
       {/* the 3D world — Journey never fades out: it is the entire website.
           dir="ltr" keeps drei <Html> overlay centering geometry LTR even when
           the page is RTL; framed section windows set their own rtl content dir. */}
-      <div className="fixed inset-0 z-[2]" dir="ltr">
+      <div
+        className="fixed inset-0 z-[2]"
+        dir="ltr"
+        style={{
+          // On touch devices the canvas must not trap vertical scroll —
+          // the focus bar is the tap target, not the painting mesh itself.
+          // Desktop keeps pointer events for hover.
+          pointerEvents: isMobile ? "none" : "auto",
+          touchAction: "pan-y",
+        }}
+      >
         <Canvas
           dpr={dpr} // capped everywhere — 4K desktops are fill-rate bound
           // While the live-preview modal or the intro loader covers the
@@ -149,7 +189,11 @@ export default function Journey({
             stencil: false,
             powerPreference: "high-performance",
           }}
-          style={{ background: "transparent", touchAction: "pan-y" }}
+          style={{
+            background: "transparent",
+            touchAction: "pan-y",
+            pointerEvents: isMobile ? "none" : "auto",
+          }}
           onCreated={(state) => registerPerfGl("journey", state.gl)}
           onPointerMissed={() => {
             document.body.style.cursor = "";
@@ -178,6 +222,43 @@ export default function Journey({
           />
         </Canvas>
       </div>
+
+      {/* ── Fade-through overlay — when we go further into a painting it
+           softly fades the frame into the city fog, so on phones the
+           painting never stays opaque covering the whole screen.
+           Pointer-events none so scroll is never blocked. */}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 z-[3]"
+        style={{
+          opacity: throughFade,
+          background:
+            "radial-gradient(ellipse at center, rgba(4,6,13,0) 28%, rgba(4,6,13,0.55) 68%, rgba(4,6,13,0.92) 100%)",
+          backdropFilter: throughFade > 0.15 ? `blur(${throughFade * 8}px)` : "none",
+          WebkitBackdropFilter:
+            throughFade > 0.15 ? `blur(${throughFade * 8}px)` : "none",
+        }}
+      />
+      {/* extra top/bottom feather for phones — hides the hard edge when
+          the painting fills the screen */}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 top-0 z-[3] h-[18vh] sm:h-[14vh]"
+        style={{
+          opacity: throughFade,
+          background:
+            "linear-gradient(to bottom, rgba(4,6,13,0.92) 0%, rgba(4,6,13,0) 100%)",
+        }}
+      />
+      <motion.div
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-[3] h-[22vh] sm:h-[16vh]"
+        style={{
+          opacity: throughFade,
+          background:
+            "linear-gradient(to top, rgba(4,6,13,0.92) 0%, rgba(4,6,13,0) 100%)",
+        }}
+      />
 
       {/* ── P layer UI — just the scroll invitation ── */}
       <AnimatePresence>
@@ -245,9 +326,10 @@ export default function Journey({
           <motion.div
             key="focus-bar"
             initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
+            animate={{ opacity: 1 - throughFade * 0.85, y: 0 }}
             exit={{ opacity: 0, y: 24 }}
             transition={{ type: "spring", stiffness: 280, damping: 24 }}
+            style={{ opacity: 1 - throughFade * 0.85 }}
             className={[
               "pointer-events-none fixed inset-x-0 z-20 flex justify-center px-4",
               // phones: the action bar lifts clear of the storm orb dock
