@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { preloadJourneyRoad } from "../lib/journeyAssets";
 
 /**
  * Loader — premium intro, hard-capped at 1.35s.
@@ -23,6 +24,7 @@ export default function Loader({ onDone }: { onDone: () => void }) {
 
   useEffect(() => {
     document.documentElement.style.overflow = "hidden";
+    preloadJourneyRoad();
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const total = reduced ? 120 : returning ? 360 : 1280;

@@ -4,23 +4,13 @@ import { useFrame } from "@react-three/fiber";
 import { useLayoutEffect, useMemo } from "react";
 import * as THREE from "three";
 import CSM from "three-custom-shader-material";
+import { JOURNEY_ROAD_MAPS, JOURNEY_ROAD_URLS } from "../../lib/journeyAssets";
 
-const ROAD_MAPS = {
-  // Optimized 1K WebP set: ~430 KB total instead of ~9 MB of 2K JPGs.
-  map: import.meta.env.BASE_URL + "road/optimized/aerial_asphalt_01_diff_1k.webp",
-  normalMap: import.meta.env.BASE_URL + "road/optimized/aerial_asphalt_01_nor_gl_1k.webp",
-  roughnessMap: import.meta.env.BASE_URL + "road/optimized/aerial_asphalt_01_rough_1k.webp",
-  aoMap: import.meta.env.BASE_URL + "road/optimized/aerial_asphalt_01_ao_1k.webp",
-} as const;
-
-const ROAD_PRELOADS = Object.values(ROAD_MAPS);
-
-// Start the road download as soon as the desktop Journey chunk is imported
-// (during the intro loader), not when the user reaches the city.
-useTexture.preload(ROAD_PRELOADS);
+// Also warm drei's texture cache as soon as this module is imported.
+useTexture.preload(JOURNEY_ROAD_URLS);
 
 export function PuddleMaterial() {
-  const maps = useTexture(ROAD_MAPS);
+  const maps = useTexture(JOURNEY_ROAD_MAPS);
 
   useLayoutEffect(() => {
     for (const key in maps) {

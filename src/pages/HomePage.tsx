@@ -48,9 +48,8 @@ function KineticTitle({ text, delay = 0 }: { text: string; delay?: number }) {
 export default function HomePage({ lang }: HomePageProps) {
   const t = SITE_TEXTS[lang];
 
-  // The scroll-driven WebGL journey is reserved for desktop-class input.
-  // Phones/tablets get the native DOM layout: much faster first load and
-  // no fixed WebGL canvas fighting the browser during momentum scroll.
+  // Keep the cinematic 3D journey on WebGL-capable browsers, including
+  // mobile. Individual effects lower their quality on touch devices.
   const journey = useMemo(() => shouldUseRichJourney(), []);
 
   return (

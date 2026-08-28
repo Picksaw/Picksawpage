@@ -116,7 +116,7 @@ export default function Journey({ lang }: { lang: Lang }) {
           the page is RTL; framed section windows set their own rtl content dir. */}
       <div className="fixed inset-0 z-[2]" dir="ltr">
         <Canvas
-          dpr={[1, 1.25]} // capped everywhere — 4K desktops are fill-rate bound
+          dpr={isMobile ? [0.7, 0.9] : [1, 1.25]} // mobile is fill-rate bound while scrolling
           frameloop="always"
           camera={{
             position: [0, 0, stations[0]],

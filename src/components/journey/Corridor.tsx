@@ -10,6 +10,7 @@ import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { TEMPLATES, type TemplateItem } from "../../config/templatesConfig";
 import { TEMPLATE_IMAGE_MAP } from "../../config/templateImages";
+import { JOURNEY_MODEL_URLS, preloadJourneyModels } from "../../lib/journeyAssets";
 import { SITE_TEXTS, type Lang } from "../../config/siteTexts";
 import { Html, useGLTF } from "@react-three/drei";
 import GroundFog from "./GroundFog";
@@ -767,7 +768,7 @@ interface Building {
   rotation: number;
 }
 
-function makeCity(): Building[] {
+function makeCity(isMobile = false): Building[] {
   const list: Building[] = [];
   let seed = 20260824;
   const rnd = () => {
@@ -779,8 +780,8 @@ function makeCity(): Building[] {
   // Side buildings stop before the plaza in front of the Azadi gate so
   // nothing pokes through the finale landmark.
   const endZ = AZADI_Z + 12;
-  const step = 6.0;
-  const nearX = 4.0;
+  const step = isMobile ? 8.5 : 6.0;
+  const nearX = isMobile ? 4.4 : 4.0;
   const rowGap = 4.5;
   
   // We want to collect all valid (x, z) slots first so we can assign Azadi and Milad to exactly ONE of them.
@@ -788,7 +789,7 @@ function makeCity(): Building[] {
   
   for (let z = startZ; z > endZ; z -= step) {
     for (const side of [-1, 1]) {
-      const rows = rnd() < 0.55 ? 2 : 1;
+      const rows = isMobile ? 1 : rnd() < 0.55 ? 2 : 1;
       for (let r = 0; r < rows; r++) {
         const x = side * (nearX + r * rowGap + rnd() * 1.5);
         slots.push({
@@ -871,7 +872,13 @@ function MovingStreetLights() {
 }
 
 function City() {
-  const buildings = useMemo(() => makeCity(), []);
+  const isMobile = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(pointer: coarse)").matches,
+    []
+  );
+  const buildings = useMemo(() => makeCity(isMobile), [isMobile]);
 
   const windowTexs = useMemo(() => makeWindowTextures(), []);
 
@@ -1070,6 +1077,10 @@ function City() {
     };
   }, [concreteMat, prototypes]);
 
+  return <primitive object={cityGroup} ref={groupRef} />;
+}
+
+function Street() {
   return (
     <>
       <mesh
@@ -1085,8 +1096,6 @@ function City() {
 
       {/* 60 FPS Optimization: Use 4 moving lights instead of 25 static lights to prevent shader loop lag */}
       <MovingStreetLights />
-
-      <primitive object={cityGroup} ref={groupRef} />
     </>
   );
 }
@@ -1094,9 +1103,15 @@ function City() {
 /** Depth rain inside the corridor. */
 function CorridorRain() {
   const ref = useRef<THREE.LineSegments>(null);
+  const isMobile = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(pointer: coarse)").matches,
+    []
+  );
   
-  // Reduced count for less visual clutter
-  const count = 600;
+  // Reduced count for less visual clutter; extra lean on mobile scroll.
+  const count = isMobile ? 240 : 600;
 
   const { geo, velocities, windOffsets } = useMemo(() => {
     const positions = new Float32Array(count * 6);
@@ -1122,7 +1137,7 @@ function CorridorRain() {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     return { geo: g, velocities: vels, windOffsets: wOffsets };
-  }, []);
+  }, [count]);
 
   useEffect(() => () => geo.dispose(), [geo]);
 
@@ -1175,22 +1190,12 @@ function CorridorRain() {
   );
 }
 
-const CITY_MODEL_PRELOADS = [
-  "milad_tower.glb",
-  "new_york_background_building_1.glb",
-  "realistic_building.glb",
-  "low_rise_wall_to_wall_office_building.glb",
-  // Azadi is a bit larger, but City cannot render until every useGLTF()
-  // above has resolved, so we warm it too instead of making users wait
-  // after the first scroll.
-  "azadi_tower.glb",
-].map((name) => import.meta.env.BASE_URL + name);
-
 if (typeof window !== "undefined") {
-  // The Journey chunk is requested while the intro loader is visible on
-  // desktop. Warm the restored building set + painting screenshots then,
-  // so scrolling into the corridor does not hit an empty Suspense fallback.
-  CITY_MODEL_PRELOADS.forEach((url) => useGLTF.preload(url));
+  // The Journey chunk is requested while the intro loader is visible. Warm
+  // the restored building set + painting screenshots then, so scrolling into
+  // the corridor does not hit an empty Suspense fallback.
+  preloadJourneyModels();
+  JOURNEY_MODEL_URLS.forEach((url) => useGLTF.preload(url));
 
   Object.values(TEMPLATE_IMAGE_MAP).forEach((src) => {
     const img = new Image();
@@ -1209,15 +1214,30 @@ function DeferredWorld({
   const [ready, setReady] = useState(false);
   const readyRef = useRef(false);
 
-  useFrame(() => {
-    // Start fetching/rendering the asset-heavy city/gallery only when the
-    // visitor actually begins the journey. This keeps initial load focused
-    // on the hero instead of immediately downloading models/textures that
-    // are several scroll stations away.
-    if (!readyRef.current && (progressRef.current ?? 0) > 0.006) {
-      readyRef.current = true;
-      setReady(true);
+  const makeReady = () => {
+    if (readyRef.current) return;
+    readyRef.current = true;
+    setReady(true);
+  };
+
+  useEffect(() => {
+    // Mount the asset-heavy layers while the intro loader is still covering
+    // the screen, instead of waiting for the first real scroll gesture.
+    const win = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (win.requestIdleCallback) {
+      const id = win.requestIdleCallback(makeReady, { timeout: 500 });
+      return () => win.cancelIdleCallback?.(id);
     }
+    const id = window.setTimeout(makeReady, 300);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  useFrame(() => {
+    // Safety net for users who scroll immediately before the idle callback.
+    if (!readyRef.current && (progressRef.current ?? 0) > 0.006) makeReady();
   });
 
   return ready ? <>{children}</> : null;
@@ -1243,6 +1263,7 @@ export function CorridorScene({
       <GroundFog />
       <HeadlineLayer lang={lang as Lang} />
       <DeferredWorld progressRef={progressRef}>
+        <Street />
         <Suspense fallback={null}>
           <City />
         </Suspense>
