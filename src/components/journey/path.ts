@@ -58,9 +58,27 @@ export function cameraZ(progress: number): number {
   return THREE.MathUtils.lerp(stations[k], stations[k + 1], t);
 }
 
-/** How visible a layer is — fades to zero well before the next appears. */
+/** How visible a layer is — fades to zero well before the next appears.
+ *  New curve: longer, smooth fade-out when going *through* a painting so
+ *  the frame never sits opaque covering the whole phone screen. It starts
+ *  fading at ~2.8u before the plane and is gone by -0.8u past it, with
+ *  smoothstep easing. Fade-in is also eased over 3.5u.
+ */
 export function layerOpacity(camZ: number, layerZ: number): number {
-  const d = camZ - layerZ; // positive while approaching
-  if (d <= 0.2) return clamp01(d / 1.2); // fade as the camera reaches it
-  return clamp01((8.4 - d) / 2.2); // fully hidden by 8.4 units away
+  const d = camZ - layerZ; // positive while approaching, 0 at plane, negative after passing
+  // fully passed → invisible
+  if (d <= -0.8) return 0;
+  // fade OUT as we go through: -0.8 → 2.8  (0 → 1)
+  if (d <= 2.8) {
+    const t = clamp01((d + 0.8) / 3.6);
+    return smoothstep(t);
+  }
+  // fully visible plateau
+  if (d <= 5.5) return 1;
+  // fade IN while approaching: 5.5 → 9.0 (1 → 0)
+  if (d <= 9.0) {
+    const t = clamp01((9.0 - d) / 3.5);
+    return smoothstep(t);
+  }
+  return 0;
 }
