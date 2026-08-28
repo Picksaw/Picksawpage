@@ -198,12 +198,19 @@ function usePaintingTexture(
     img.crossOrigin = "anonymous";
     img.onload = () => alive && draw(img);
     img.onerror = () => alive && draw(null);
-    img.src =
-      TEMPLATE_IMAGE_MAP[item.imageKey] ??
-      `${import.meta.env.BASE_URL}images/${item.imageKey}.webp`;
+    // Defer the webp fetch past the intro: the painting is hidden until
+    // the camera reaches its station, so the download never needs to
+    // compete with first paint or the city's models.
+    const imgTimer = window.setTimeout(() => {
+      if (!alive) return;
+      img.src =
+        TEMPLATE_IMAGE_MAP[item.imageKey] ??
+        `${import.meta.env.BASE_URL}images/${item.imageKey}.webp`;
+    }, 3500);
 
     return () => {
       alive = false;
+      window.clearTimeout(imgTimer);
     };
   }, [item, lang, tex]);
 
@@ -1173,11 +1180,11 @@ function CorridorRain() {
   );
 }
 
-useGLTF.preload(import.meta.env.BASE_URL + "azadi_tower.glb");
-useGLTF.preload(import.meta.env.BASE_URL + "milad_tower.glb");
-useGLTF.preload(import.meta.env.BASE_URL + "new_york_background_building_1.glb");
-useGLTF.preload(import.meta.env.BASE_URL + "realistic_building.glb");
-useGLTF.preload(import.meta.env.BASE_URL + "low_rise_wall_to_wall_office_building.glb");
+// NOTE: the city's GLBs are NOT preloaded at module scope anymore — that
+// kicked off ~28MB of downloads in the middle of script evaluation and
+// (worse) suspended the WHOLE canvas behind them. AssetPrimer now starts
+// the same downloads (shared loader cache) right after first paint, and
+// <City /> renders from cache the moment they resolve.
 export function CorridorScene({
   progressRef,
   focusedIdx,
@@ -1195,7 +1202,11 @@ export function CorridorScene({
     <>
       <CameraRig progressRef={progressRef} />
       <CorridorRain />
-      <City />
+      {/* City streams in from the fog as each GLB resolves — the emblem,
+          rain and paintings never wait behind the ~28MB city. */}
+      <Suspense fallback={null}>
+        <City />
+      </Suspense>
       <GroundFog />
       <HeadlineLayer lang={lang as Lang} />
       {TEMPLATES.map((item, i) => (

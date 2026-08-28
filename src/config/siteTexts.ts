@@ -73,6 +73,12 @@ export const SITE_TEXTS: Record<Lang, Record<string, string>> = {
     formSubmit: "Send it",
     formSending: "Sending…",
     formSuccess: "Message received — we'll get back to you soon.",
+    // Custom 404
+    notFoundTitle: "Lost in the storm",
+    notFoundBody:
+      "The page you're looking for dissolved in the rain somewhere between the towers. The rest of the city is still standing.",
+    notFoundHome: "Back to the safe side",
+    notFoundHint: "Error 404 — the bolt missed this page",
   },
   fa: {
     siteName: "پیکساو",
@@ -138,5 +144,11 @@ export const SITE_TEXTS: Record<Lang, Record<string, string>> = {
     formSubmit: "ارسال",
     formSending: "در حال ارسال…",
     formSuccess: "پیام دریافت شد — به‌زودی پاسخ می‌دهیم.",
+    // Custom 404
+    notFoundTitle: "در طوفان گم شد",
+    notFoundBody:
+      "صفحه‌ای که دنبالش بودی، بین برج‌ها در باران حل شد. بقیه‌ی شهر هنوز سر جایشان است.",
+    notFoundHome: "بازگشت به ساحل امن",
+    notFoundHint: "خطای ۴۰۴ — برق از این صفحه رد شد",
   },
 };

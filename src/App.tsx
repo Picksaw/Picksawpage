@@ -5,6 +5,7 @@ import StormBackground from "./components/StormBackground";
 import Header from "./components/Header";
 import HomePage from "./pages/HomePage";
 import FeedPage from "./pages/FeedPage";
+import NotFoundPage from "./pages/NotFoundPage";
 import AdminPanel from "./components/AdminPanel";
 import PostModal from "./components/PostModal";
 import LoginModal from "./components/LoginModal";
@@ -226,7 +227,7 @@ export default function App() {
                   />
                 }
               />
-              <Route path="*" element={<HomePage lang={ lang} />} />
+              <Route path="*" element={<NotFoundPage lang={lang} />} />
             </Routes>
           </main>
 
@@ -282,7 +283,9 @@ export default function App() {
         {selectedPost && <PostModal post={selectedPost} onClose={handleCloseModal} />}
 
         {/* premium intro — last so it sits above everything */}
-        {!introDone && <Loader onDone={() => setIntroDone(true)} />}
+        {!introDone && (
+          <Loader onDone={() => setIntroDone(true)} lang={lang} />
+        )}
       </div>
     </SoundProvider>
   );
