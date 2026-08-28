@@ -226,7 +226,7 @@ export default function App() {
                   />
                 }
               />
-              <Route path="*" element={<HomePage lang={ lang} />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </main>
 

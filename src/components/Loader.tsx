@@ -25,7 +25,8 @@ export default function Loader({ onDone }: { onDone: () => void }) {
     document.documentElement.style.overflow = "hidden";
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const total = reduced ? 150 : returning ? 620 : 2350;
+    // Reduced total: 1s for reduced motion, 600ms returning visitor whisper, 1200ms for new visitors
+    const total = reduced ? 150 : returning ? 600 : 1200;
 
     const done = () => {
       try {
@@ -40,9 +41,9 @@ export default function Loader({ onDone }: { onDone: () => void }) {
 
     if (!reduced && !returning) {
       const timers = [
-        window.setTimeout(() => setPhase(1), 150), // rain begins
-        window.setTimeout(() => setPhase(2), 900), // spark draws the P
-        window.setTimeout(() => setPhase(3), 1750), // lightning strike
+        window.setTimeout(() => setPhase(1), 80), // rain begins
+        window.setTimeout(() => setPhase(2), 450), // spark draws the P
+        window.setTimeout(() => setPhase(3), 850), // lightning strike
       ];
       timersRef.current = timers;
     }
