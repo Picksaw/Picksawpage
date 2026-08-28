@@ -31,7 +31,7 @@ export function isLowPowerDevice(): boolean {
 }
 
 export function shouldUseRichJourney(): boolean {
-  // Mobile should keep the 3D look; only fall back when motion is reduced,
-  // WebGL is unavailable, or the browser exposes a very low memory budget.
-  return !prefersReducedMotion() && !isLowPowerDevice() && hasWebGL();
+  // Mobile keeps the 3D look; only fall back when motion is reduced or WebGL
+  // is unavailable.
+  return !prefersReducedMotion() && hasWebGL();
 }

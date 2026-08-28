@@ -882,9 +882,8 @@ function City() {
 
   const windowTexs = useMemo(() => makeWindowTextures(), []);
 
-  // Load custom GLTFs. These are still deferred until the visitor begins
-  // the desktop 3D journey, so the restored building set does not block
-  // initial page load.
+  // Load custom GLTFs. These are warmed by the loader first, so the
+  // restored building set is ready before scroll unlocks.
   const gltfAzadi = useGLTF(import.meta.env.BASE_URL + "azadi_tower.glb") as any;
   const gltfMilad = useGLTF(import.meta.env.BASE_URL + "milad_tower.glb") as any;
   const gltfNY = useGLTF(import.meta.env.BASE_URL + "new_york_background_building_1.glb") as any;

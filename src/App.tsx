@@ -191,6 +191,10 @@ export default function App() {
   }, [isAdmin]);
 
   const handleLogout = useCallback(() => logout(), [logout]);
+  const handleIntroDone = useCallback(() => {
+    window.scrollTo(0, 0);
+    setIntroDone(true);
+  }, []);
 
   const t = SITE_TEXTS[lang];
 
@@ -297,7 +301,7 @@ export default function App() {
         {selectedPost && <PostModal post={selectedPost} onClose={handleCloseModal} />}
 
         {/* premium intro — last so it sits above everything */}
-        {!introDone && <Loader onDone={() => setIntroDone(true)} />}
+        {!introDone && <Loader onDone={handleIntroDone} />}
       </div>
     </SoundProvider>
   );
