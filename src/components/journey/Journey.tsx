@@ -9,6 +9,7 @@ import {
 import { SITE_TEXTS, type Lang } from "../../config/siteTexts";
 import { TEMPLATES, type TemplateItem } from "../../config/templatesConfig";
 import PEmblem from "./PEmblem";
+import AssetPrimer from "./AssetPrimer";
 import { CorridorScene, focusedIndex, stations } from "./Corridor";
 import PreviewModal from "../PreviewModal";
 import MagneticButton from "../ui/MagneticButton";
@@ -93,6 +94,10 @@ export default function Journey({ lang }: { lang: Lang }) {
 
   return (
     <>
+      {/* starts the city's ~28MB of models + road textures right after
+          first paint (shared loader cache, byte-level progress) */}
+      <AssetPrimer />
+
       {/* scroll length for the walk: P → headline → 6 paintings →
           the long finale boulevard that carries the camera past the
           last painting toward the distant Azadi Tower */}
