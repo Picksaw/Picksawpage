@@ -43,9 +43,11 @@ export default function Header({
 
   return (
     <header
+      // notch-safe: keep the nav clear of the status-bar cutout
+      style={{ paddingTop: `calc(env(safe-area-inset-top, 0px) + ${scrolled ? "0.75rem" : "1.25rem"})` }}
       className={cn(
         "fixed inset-x-0 top-0 z-50 transition-all duration-500",
-        scrolled ? "py-3" : "py-5"
+        scrolled ? "pb-3" : "pb-5"
       )}
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6">

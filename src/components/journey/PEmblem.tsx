@@ -947,6 +947,11 @@ export default function PEmblem() {
     const cardFade = Math.max(0, Math.min(1, (camZ + 1.6) / 2.8));
     cardFadeRef.current = cardFade;
 
+    // Perf: once the dive has passed the card, skip its draw calls
+    // entirely — transparent planes still burn fill-rate on phones
+    // for the whole remaining walk (~85% of the scroll).
+    if (group.current) group.current.visible = cardFade > 0.005;
+
     // ── the ghost RTT — only while the card window is on screen ──
     // Mobile refreshes it at 30 Hz: the smoke drifts at 0.2 u/s, a stale
     // frame for one tick is invisible behind the fake-bloom blur.

@@ -61,10 +61,10 @@ export default function PostModal({ post, onClose }: PostModalProps) {
         </svg>
       </button>
 
-      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-950/95 shadow-2xl shadow-black/60 backdrop-blur-xl md:flex-row">
+      <div className="flex max-h-[90vh] max-h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-950/95 shadow-2xl shadow-black/60 backdrop-blur-xl md:flex-row">
         {/* Media panel — 9:16 aspect */}
         <div className="relative flex items-center justify-center bg-black md:w-[45%]">
-          <div className="relative aspect-[9/16] w-full max-h-[80vh] overflow-hidden">
+          <div className="relative aspect-[9/16] w-full max-h-[80vh] max-h-[80dvh] overflow-hidden">
             {post.mediaUrl ? (
               post.type === "video" || post.type === "music" ? (
                 <LightningPlayer src={post.mediaUrl} type={post.type} title={post.type === "music" ? post.title : undefined} />

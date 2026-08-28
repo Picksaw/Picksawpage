@@ -171,7 +171,7 @@ export default function FloatingDock({ lang }: { lang: Lang }) {
 
   return (
     <div
-      className="fixed bottom-5 z-[70] flex flex-col items-end gap-3 end-5 sm:bottom-7 sm:end-7"
+      className="fixed safe-bottom z-[70] flex flex-col items-end gap-3 end-5 sm:bottom-7 sm:end-7"
       onMouseEnter={openNow}
       onMouseLeave={closeSoon}
     >

@@ -86,7 +86,7 @@ export default function AdminPanel({ onAddPost, onClose }: AdminPanelProps) {
       aria-modal="true"
       aria-label="Admin panel"
     >
-      <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-white/10 bg-slate-950/95 shadow-2xl shadow-black/60 backdrop-blur-xl">
+      <div className="relative flex max-h-[90vh] max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-950/95 shadow-2xl shadow-black/60 backdrop-blur-xl">
 
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/8 px-6 py-4">
@@ -180,7 +180,7 @@ export default function AdminPanel({ onAddPost, onClose }: AdminPanelProps) {
         ) : (
           <form
             onSubmit={handleSubmit}
-            className="flex flex-col gap-4 p-6"
+            className="flex flex-1 flex-col gap-4 overflow-y-auto p-6"
           >
 
             {/* Media Type */}

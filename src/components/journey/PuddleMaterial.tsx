@@ -7,10 +7,10 @@ import CSM from "three-custom-shader-material";
 
 export function PuddleMaterial() {
   const maps = useTexture({
-    map: import.meta.env.BASE_URL + "road/aerial_asphalt_01_diff_2k.jpg",
-    normalMap: import.meta.env.BASE_URL + "road/aerial_asphalt_01_nor_gl_2k.jpg",
-    roughnessMap: import.meta.env.BASE_URL + "road/aerial_asphalt_01_rough_2k.jpg",
-    aoMap: import.meta.env.BASE_URL + "road/aerial_asphalt_01_ao_2k.jpg",
+    map: import.meta.env.BASE_URL + "road/aerial_asphalt_01_diff_2k.webp",
+    normalMap: import.meta.env.BASE_URL + "road/aerial_asphalt_01_nor_gl_2k.webp",
+    roughnessMap: import.meta.env.BASE_URL + "road/aerial_asphalt_01_rough_2k.webp",
+    aoMap: import.meta.env.BASE_URL + "road/aerial_asphalt_01_ao_2k.webp",
   });
 
   useLayoutEffect(() => {
