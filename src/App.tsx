@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import Lenis from "lenis";
 import StormBackground from "./components/StormBackground";
 import Header from "./components/Header";
@@ -15,7 +15,7 @@ import CursorFX from "./components/CursorFX";
 import Loader from "./components/Loader";
 import DevPanel from "./components/DevPanel";
 import { SoundProvider } from "./audio/SoundProvider";
-import { setLenis } from "./lib/lenis";
+import { setLenis, getLenis } from "./lib/lenis";
 import { getStorm, setDevMode, setStormOverride, subscribeStorm } from "./lib/stormStore";
 import { useThemeId } from "./lib/themeStore";
 import { useAdmin } from "./hooks/useAdmin";
@@ -39,6 +39,19 @@ import { AboutStaticText } from "./components/AboutSection";
 // Then rebuild/redeploy the website.
 // ============================================================
 export const GAME_LINK = "https://stormblade.picksaw.ir";
+
+/** Reset scroll to the top whenever the route changes — without this,
+ *  leaving a deeply scrolled journey (e.g. /about frame 5) for Home
+ *  drops the visitor halfway down the new walk. */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const lenis = getLenis();
+    if (lenis) lenis.scrollTo(0, { immediate: true });
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
 
 export default function App() {
   const { lang, toggle } = useLanguage();
@@ -187,6 +200,7 @@ export default function App() {
 
   return (
     <SoundProvider>
+      <ScrollToTop />
       <Seo lang={lang} />
       <div className="relative min-h-screen overflow-x-hidden bg-storm-950 text-slate-100 antialiased">
         {/* the storm never stops */}
