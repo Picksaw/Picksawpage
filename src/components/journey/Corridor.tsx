@@ -531,6 +531,8 @@ export function Window3D({
   scrollable = true,
   maxWFrac = 0.94,
   maxHFrac = 0.8,
+  surfaceClass = "bg-[#04060d]",
+  openFrame = false,
 }: {
   index: number;
   focused: boolean;
@@ -549,6 +551,14 @@ export function Window3D({
   scrollable?: boolean;
   maxWFrac?: number;
   maxHFrac?: number;
+  /** Surface treatment behind the DOM content. Home sections use an
+   *  opaque panel; the About panes use a translucent frosted glass so
+   *  the neon city stays visible behind the text. */
+  surfaceClass?: string;
+  /** true: replace the solid backplate mesh with four thin frame bars,
+   *  making the DOM surface itself the only "glass" — the city shows
+   *  through it (the About portrait windows). */
+  openFrame?: boolean;
 }) {
   const layout = useWalkLayout();
   const z = layout.frameZ(index);
@@ -560,6 +570,7 @@ export function Window3D({
   const innerRef = useRef<HTMLDivElement>(null);
 
   const frameMat = useRef<THREE.MeshStandardMaterial>(null);
+  const barMats = useRef<(THREE.MeshStandardMaterial | null)[]>([]);
   const glowMat = useRef<THREE.MeshBasicMaterial>(null);
   const live = useRef<ThemeParams>(createLiveTheme(getTheme()));
 
@@ -583,6 +594,7 @@ export function Window3D({
     const op = layerOpacity(cam.position.z, z);
 
     if (frameMat.current) frameMat.current.opacity = op;
+    for (const m of barMats.current) if (m) m.opacity = op;
     if (glowMat.current) {
       glowMat.current.color.setRGB(
         tp.accent[0] / 255,
@@ -674,23 +686,49 @@ export function Window3D({
           fog={false}
         />
       </mesh>
-      <mesh position={[0, 0, -0.05]}>
-        <boxGeometry args={[width + 0.16, height + 0.16, 0.09]} />
-        <meshStandardMaterial
-          ref={frameMat}
-          color="#11182a"
-          metalness={0.6}
-          roughness={0.5}
-          transparent
-          opacity={1}
-        />
-      </mesh>
+      {openFrame ? (
+        // Four thin metal bars — a real window frame with open glass so
+        // the city reads through the translucent DOM surface.
+        <group>
+          {[
+            [0, height / 2 + 0.015, width + 0.17, 0.075],
+            [0, -height / 2 - 0.015, width + 0.17, 0.075],
+            [-width / 2 - 0.015, 0, 0.075, height + 0.17],
+            [width / 2 + 0.015, 0, 0.075, height + 0.17],
+          ].map(([x, y, bw, bh], i) => (
+            <mesh key={i} position={[x, y, -0.05]}>
+              <boxGeometry args={[bw, bh, 0.1]} />
+              <meshStandardMaterial
+                ref={(m) => {
+                  barMats.current[i] = m;
+                }}
+                color="#11182a"
+                metalness={0.6}
+                roughness={0.5}
+                transparent
+              />
+            </mesh>
+          ))}
+        </group>
+      ) : (
+        <mesh position={[0, 0, -0.05]}>
+          <boxGeometry args={[width + 0.16, height + 0.16, 0.09]} />
+          <meshStandardMaterial
+            ref={frameMat}
+            color="#11182a"
+            metalness={0.6}
+            roughness={0.5}
+            transparent
+            opacity={1}
+          />
+        </mesh>
+      )}
 
       <Html center zIndexRange={[100, 0]} style={{ direction: "ltr" }}>
         <div
           ref={outerRef}
           dir={dir}
-          className={`relative overflow-hidden bg-[#04060d] text-white flex ${
+          className={`relative overflow-hidden text-white flex ${surfaceClass} ${
             scrollable ? "items-start" : "items-center"
           } justify-center rounded-sm`}
           style={{
