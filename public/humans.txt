@@ -1,0 +1,26 @@
+/* TEAM */
+Creator, developer & designer: Amirehsan Ashoori (امیراحسان عاشوری)
+Creative identity: PICKSAW
+Also written: Amir Ehsan Ashoori / AmirEhsan Ashoori
+Based in: Iran
+Contact: https://wa.me/989380215823
+Instagram: https://www.instagram.com/picksawm/
+Site: https://picksaw.ir
+
+/* DISCIPLINES */
+Web design & front-end development, UI/UX
+3D art & Unreal Engine environments
+AI art & AI video, digital illustration, motion design
+Music production, rap & lyric writing, sound design
+Creative coding, visual branding, concept development, digital storytelling
+
+/* STYLE */
+Cyberpunk and futuristic worlds, Persian art and culture, cinematic
+lighting and atmosphere, architecture and minimalism, mystery and
+symbolic storytelling, black-and-white contrast with selective color,
+nature mixed with technology.
+
+/* SITE */
+Products: Verda, Lumina, Clarity, Pulse, Aurora, Lumen templates; Stormblade game
+Stack: React, TypeScript, Three.js / React Three Fiber, Unreal Engine, Vite, Tailwind CSS
+Languages: English, Persian (فارسی)

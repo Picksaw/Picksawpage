@@ -5,16 +5,49 @@
     Roboto, sans-serif;
   /* Persian — premium geometric companion */
   --font-fa: "Vazirmatn Variable", "Vazirmatn", "Sora Variable", ui-sans-serif, system-ui, sans-serif;
-  --color-storm-950: #06080f;
-  --color-storm-900: #0a0e1a;
-  --color-electric: #4fd8ff;
-  --color-electric-soft: #9fe8ff;
+  /* atmosphere-driven colours — the triplets are swapped on
+     <html data-theme="…"> by the theme store (see lib/themes.ts) */
+  --color-storm-950: rgb(var(--page-bg));
+  --color-storm-900: rgb(var(--page-bg));
+  --color-electric: rgb(var(--accent));
+  --color-electric-soft: rgb(var(--accent-soft));
 }
 
 /* ── global lightning variable (0..1) — driven by StormBackground ── */
 :root {
   --bolt: 0;
   --accent: 79 216 255; /* electric cyan, rgb space */
+  --accent-soft: 159 232 255;
+  --page-bg: 6 8 15; /* night abyss behind the canvas */
+  --scrim: 0; /* legibility scrim over bright daylight skies */
+}
+
+/* ── atmosphere themes ───────────────────────────────────────────
+   Only accent / page background live in CSS — the sky, sun, city and
+   street are painted from lib/themes.ts and crossfade there. */
+[data-theme="sunrise-clear"] {
+  --accent: 232 150 56; /* dawn gold */
+  --accent-soft: 255 216 164;
+  --page-bg: 28 38 58;
+  --scrim: 0.55;
+}
+[data-theme="sunrise-cloudy"] {
+  --accent: 214 148 90; /* muted amber */
+  --accent-soft: 240 200 165;
+  --page-bg: 34 36 44;
+  --scrim: 0.5;
+}
+[data-theme="sunset-clear"] {
+  --accent: 255 138 72; /* ember orange */
+  --accent-soft: 255 196 150;
+  --page-bg: 36 22 40;
+  --scrim: 0.45;
+}
+[data-theme="sunset-cloudy"] {
+  --accent: 236 110 96; /* dusk coral */
+  --accent-soft: 248 178 158;
+  --page-bg: 26 22 34;
+  --scrim: 0.55;
 }
 
 @layer base {
@@ -41,7 +74,8 @@
 
   body {
     font-family: var(--font-sans);
-    background-color: #06080f;
+    background-color: rgb(var(--page-bg));
+    transition: background-color 1.4s ease;
     color: #f1f5f9;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -82,12 +116,12 @@
   }
 
   ::selection {
-    background: rgba(79, 216, 255, 0.35);
+    background: rgb(var(--accent) / 0.35);
     color: #fff;
   }
 
   :focus-visible {
-    outline: 2px solid rgba(79, 216, 255, 0.85);
+    outline: 2px solid rgb(var(--accent) / 0.85);
     outline-offset: 3px;
     border-radius: 4px;
   }
@@ -97,12 +131,12 @@
     width: 10px;
   }
   ::-webkit-scrollbar-track {
-    background: #06080f;
+    background: rgb(var(--page-bg));
   }
   ::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, rgba(79, 216, 255, 0.25), rgba(79, 216, 255, 0.08));
+    background: linear-gradient(180deg, rgb(var(--accent) / 0.25), rgb(var(--accent) / 0.08));
     border-radius: 8px;
-    border: 2px solid #06080f;
+    border: 2px solid rgb(var(--page-bg));
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -152,22 +186,32 @@
   /* glass panels catch the lightning — border + inner glow scale with --bolt */
   .bolt-lit {
     transition: none;
-    border-color: rgba(159, 232, 255, calc(0.1 + var(--bolt) * 0.55));
+    border-color: rgb(var(--accent-soft) / calc(0.1 + var(--bolt) * 0.55));
     box-shadow:
-      0 0 calc(10px + var(--bolt) * 34px) rgba(79, 216, 255, calc(var(--bolt) * 0.28)),
-      inset 0 0 calc(6px + var(--bolt) * 26px) rgba(159, 232, 255, calc(var(--bolt) * 0.1));
+      0 0 calc(10px + var(--bolt) * 34px) rgb(var(--accent) / calc(var(--bolt) * 0.28)),
+      inset 0 0 calc(6px + var(--bolt) * 26px) rgb(var(--accent-soft) / calc(var(--bolt) * 0.1));
   }
 
   .bolt-text {
-    text-shadow: 0 0 calc(4px + var(--bolt) * 26px) rgba(159, 232, 255, calc(0.12 + var(--bolt) * 0.75));
+    text-shadow: 0 0 calc(4px + var(--bolt) * 26px) rgb(var(--accent-soft) / calc(0.12 + var(--bolt) * 0.75));
   }
 
   .bolt-glow {
-    box-shadow: 0 0 calc(8px + var(--bolt) * 40px) rgba(79, 216, 255, calc(0.1 + var(--bolt) * 0.5));
+    box-shadow: 0 0 calc(8px + var(--bolt) * 40px) rgb(var(--accent) / calc(0.1 + var(--bolt) * 0.5));
   }
 
   .text-glow-cyan {
-    text-shadow: 0 0 22px rgba(79, 216, 255, 0.5);
+    text-shadow: 0 0 22px rgb(var(--accent) / 0.5);
+  }
+
+  /* ── legibility scrim — sits between the sky canvas and the page,
+     faded in only by the daylight themes (see [data-theme] below) ── */
+  .theme-scrim {
+    background:
+      linear-gradient(to bottom, rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0) 24%),
+      linear-gradient(to top, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0) 30%);
+    opacity: var(--scrim, 0);
+    transition: opacity 1.4s ease;
   }
 
   /* ── electric underline (nav links) ────────────────────────── */
@@ -181,10 +225,10 @@
     right: 12%;
     bottom: 2px;
     height: 1.5px;
-    background: linear-gradient(90deg, transparent, #4fd8ff, transparent);
+    background: linear-gradient(90deg, transparent, rgb(var(--accent)), transparent);
     transform: scaleX(0);
     transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
-    filter: drop-shadow(0 0 4px rgba(79, 216, 255, 0.9));
+    filter: drop-shadow(0 0 4px rgb(var(--accent) / 0.9));
   }
   .electric-underline:hover::after,
   .electric-underline[data-active="true"]::after {
@@ -204,7 +248,7 @@
       105deg,
       transparent 40%,
       rgba(255, 255, 255, 0.14) 48%,
-      rgba(159, 232, 255, 0.28) 50%,
+      rgb(var(--accent-soft) / 0.28) 50%,
       rgba(255, 255, 255, 0.14) 52%,
       transparent 60%
     );
@@ -237,7 +281,7 @@
     top: -15%;
     width: 1.5px;
     border-radius: 2px;
-    background: linear-gradient(180deg, transparent, rgba(159, 232, 255, 0.55));
+    background: linear-gradient(180deg, transparent, rgb(var(--accent-soft) / 0.55));
     animation: loader-rain linear infinite;
   }
 
@@ -263,7 +307,7 @@
     appearance: none;
     height: 4px;
     border-radius: 999px;
-    background: linear-gradient(90deg, rgba(79, 216, 255, 0.7), rgba(79, 216, 255, 0.15));
+    background: linear-gradient(90deg, rgb(var(--accent) / 0.7), rgb(var(--accent) / 0.15));
     outline: none;
     cursor: pointer;
     direction: ltr;
@@ -275,8 +319,8 @@
     height: 13px;
     border-radius: 50%;
     background: #eaffff;
-    border: 2px solid #4fd8ff;
-    box-shadow: 0 0 8px rgba(79, 216, 255, 0.8);
+    border: 2px solid rgb(var(--accent));
+    box-shadow: 0 0 8px rgb(var(--accent) / 0.8);
     transition: transform 0.15s ease;
   }
   .dock-slider::-webkit-slider-thumb:hover {
@@ -287,8 +331,8 @@
     height: 13px;
     border-radius: 50%;
     background: #eaffff;
-    border: 2px solid #4fd8ff;
-    box-shadow: 0 0 8px rgba(79, 216, 255, 0.8);
+    border: 2px solid rgb(var(--accent));
+    box-shadow: 0 0 8px rgb(var(--accent) / 0.8);
   }
 
   .animate-float {
@@ -373,7 +417,7 @@ body.idle-shimmer .logo-wordmark {
 }
 @keyframes wordmark-shimmer {
   0%, 100% { text-shadow: none; }
-  50% { text-shadow: 0 0 8px rgba(255,255,255,0.6), 0 0 26px rgba(159,232,255,0.9); }
+  50% { text-shadow: 0 0 8px rgba(255,255,255,0.6), 0 0 26px rgb(var(--accent-soft) / 0.9); }
 }
 
 /* skeleton shimmer for loading previews */
@@ -382,7 +426,7 @@ body.idle-shimmer .logo-wordmark {
   100% { background-position: 200% 0; }
 }
 .skeleton {
-  background: linear-gradient(110deg, rgba(255,255,255,0.03) 40%, rgba(159,232,255,0.09) 50%, rgba(255,255,255,0.03) 60%);
+  background: linear-gradient(110deg, rgba(255,255,255,0.03) 40%, rgb(var(--accent-soft) / 0.09) 50%, rgba(255,255,255,0.03) 60%);
   background-size: 200% 100%;
   animation: skeleton 1.6s linear infinite;
 }

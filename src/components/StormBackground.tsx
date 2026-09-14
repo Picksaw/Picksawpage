@@ -9,29 +9,30 @@ import {
   stormIntensity,
 } from "../lib/stormStore";
 import { reportFrameCost } from "../lib/perfProbe";
+import { getTheme, subscribeTheme } from "../lib/themeStore";
+import {
+  THEMES,
+  createLiveTheme,
+  easeTheme,
+  rgbCss,
+  type ThemeParams,
+  type V3,
+} from "../lib/themes";
 
 // ============================================================
-// StormBackground V2.1 — three-depth-layer cinematic storm
+// StormBackground — cinematic atmosphere canvas.
 // ------------------------------------------------------------
-// Depth layers:
+// Themes (lib/themes.ts) retime the whole sky:
+//   • storm   — the original night: rain, lightning, blue clouds
+//   • sunrise / sunset × clear / cloudy — sun discs, warm haze,
+//     tinted cloud cover, dry air
+// Every colour / opacity is eased per frame toward the selected
+// theme, so switching is a crossfade, not a cut.
+//
+// Depth layers (kept from V2.1):
 //   FAR   — fine distant rain, thin/faint/slow, no interaction
 //   MID   — medium rain, slight parallax, gentle cursor wind
-//   NEAR  — foreground rain: thick/bright/fast drops that are
-//           repelled by the cursor and catch lightning reflections
-//
-// Lightning: strikes every 8–20s; each spikes a `--bolt` CSS var
-// that illuminates the whole UI. The var is only written while a
-// strike is actually decaying (writing it every frame forces a
-// full-page style recalc — the #1 scroll-fps killer in V2.0).
-//
-// Perf budget (learned via dev-mode FPS meter):
-//   • --bolt CSS var writes gated to lightning windows only
-//   • scrollHeight cached (refreshed every ~2s, not per frame)
-//   • rain buckets are precomputed numeric arrays (no string keys)
-//   • zero per-frame allocations beyond 6 small path arrays
-//   • cards no longer use backdrop-filter (see index.css .glass)
-//   • adaptive framerate, cached gradients, mobile profile,
-//     reduced-motion static sky — all kept from V1
+//   NEAR  — foreground rain repelled by the cursor
 // ============================================================
 
 type LayerName = "far" | "mid" | "near";
@@ -102,22 +103,49 @@ interface CloudPuff {
   r: number;
   speed: number;
   opacity: number;
-  sprite: HTMLCanvasElement;
+  variant: number;
+  /** cloud-cover value (0..1) at which this puff joins the sky */
+  minCover: number;
 }
 
-function makeCloudSprite(size: number): HTMLCanvasElement {
+function makeCloudSprite(size: number, tint: V3): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = size;
   c.height = size;
   const cx = c.getContext("2d");
   if (cx) {
-    const g = cx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    g.addColorStop(0, "rgba(70, 88, 140, 1)");
-    g.addColorStop(1, "rgba(0, 0, 0, 0)");
-    cx.fillStyle = g;
+    const [r, g, b] = tint;
+    const grad = cx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, `rgba(${r | 0}, ${g | 0}, ${b | 0}, 1)`);
+    grad.addColorStop(1, `rgba(${r | 0}, ${g | 0}, ${b | 0}, 0)`);
+    cx.fillStyle = grad;
     cx.fillRect(0, 0, size, size);
   }
   return c;
+}
+
+/** Tinted cloud-sprite sets, lazily built per quantized theme tint
+ *  (a crossfade only ever rebuilds 2–3 sets). */
+class CloudSpriteCache {
+  private sets = new Map<string, HTMLCanvasElement[]>();
+  get(tint: V3): HTMLCanvasElement[] {
+    const key = `${tint[0] >> 5}-${tint[1] >> 5}-${tint[2] >> 5}`;
+    let set = this.sets.get(key);
+    if (!set) {
+      set = [
+        makeCloudSprite(160, tint),
+        makeCloudSprite(240, tint),
+        makeCloudSprite(360, tint),
+      ];
+      this.sets.set(key, set);
+      // trivial LRU cap — transitions are the only churn source
+      if (this.sets.size > 18) {
+        const first = this.sets.keys().next().value;
+        if (first !== undefined) this.sets.delete(first);
+      }
+    }
+    return set;
+  }
 }
 
 function buildBolt(w: number, h: number, isMobile: boolean): Bolt {
@@ -161,6 +189,17 @@ function buildBolt(w: number, h: number, isMobile: boolean): Bolt {
   };
 }
 
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+const smooth = (edge0: number, edge1: number, v: number) => {
+  const t = clamp01((v - edge0) / (edge1 - edge0));
+  return t * t * (3 - 2 * t);
+};
+const mix3 = (a: V3, b: V3, t: number): V3 => [
+  a[0] + (b[0] - a[0]) * t,
+  a[1] + (b[1] - a[1]) * t,
+  a[2] + (b[2] - a[2]) * t,
+];
+
 export default function StormBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -172,6 +211,9 @@ export default function StormBackground() {
 
     const isMobile = window.matchMedia("(pointer: coarse)").matches;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    // eased atmosphere — crossfades toward the selected theme
+    const live: ThemeParams = createLiveTheme(getTheme());
 
     let w = 0;
     let h = 0;
@@ -187,6 +229,7 @@ export default function StormBackground() {
     let animId = 0;
     let running = true;
     let elapsed = 0;
+    let themeCarry = 0; // real time accrued across skipped frames
     let lastT = performance.now();
 
     // cursor field — repulsion + wind
@@ -200,9 +243,6 @@ export default function StormBackground() {
     let lastStormDispatch = 0;
 
     // adaptive framerate + cached layout
-    // Perf: mobile starts at a FULL 60 fps budget with a leaner particle
-    // set; the governor below only drops to 30/20 fps if the frame cost
-    // proves it (previously mobile was pinned to 30 fps from the start).
     let frameCount = 0;
     let renderEveryN = 1;
     let emaCost = 6;
@@ -210,19 +250,90 @@ export default function StormBackground() {
 
     // cached gradients
     let skyGrad: CanvasGradient | null = null;
-    let lastSkyBucket = -1;
+    let lastSkyKey = "";
     let flashGrad: CanvasGradient | null = null;
     let vignetteGrad: CanvasGradient | null = null;
+    const cleanupExtra: Array<() => void> = [];
 
-    const cloudSprites = [makeCloudSprite(160), makeCloudSprite(240), makeCloudSprite(360)];
+    const spriteCache = new CloudSpriteCache();
 
-    const createCloud = (): CloudPuff => ({
+    // ── sun sprite cache ───────────────────────────────────────
+    // Rasterising 3 full-screen radial gradients every frame is one of
+    // the heaviest 2D operations on slow renderers. The sun + its haze
+    // only move/change colour during a theme crossfade (~2.5s), so we
+    // bake them to offscreen sprites while transitioning and then just
+    // drawImage the cached bitmaps each frame (near-zero steady cost).
+    const hazeSprites = new Map<string, HTMLCanvasElement>();
+    const qkey = (v: V3) => `${v[0] >> 4}-${v[1] >> 4}-${v[2] >> 4}`;
+    const glowSprite = (tint: V3): HTMLCanvasElement => {
+      const key = qkey(tint);
+      let s = hazeSprites.get(key);
+      if (!s) {
+        const HS = 256;
+        s = document.createElement("canvas");
+        s.width = s.height = HS;
+        const hx = s.getContext("2d")!;
+        const g = hx.createRadialGradient(HS / 2, HS / 2, 0, HS / 2, HS / 2, HS / 2);
+        g.addColorStop(0, rgbCss(tint, 0.16));
+        g.addColorStop(0.5, rgbCss(tint, 0.06));
+        g.addColorStop(1, rgbCss(tint, 0));
+        hx.fillStyle = g;
+        hx.fillRect(0, 0, HS, HS);
+        hazeSprites.set(key, s);
+        if (hazeSprites.size > 12)
+          hazeSprites.delete(hazeSprites.keys().next().value!);
+      }
+      return s;
+    };
+    let sunSprite: HTMLCanvasElement | null = null;
+    let sunSpriteKey = "";
+    let sunBuildUntil = 0;
+
+    const makeSunSprite = (p: ThemeParams): HTMLCanvasElement => {
+      const sun = p.sun!;
+      const S = isMobile ? 384 : 512;
+      const c = document.createElement("canvas");
+      c.width = c.height = S;
+      const sx = c.getContext("2d")!;
+      const half = S / 2;
+      const R = sun.r * Math.max(0.62, h / 860);
+      const gR = Math.max(R * sun.glowR, R * 4);
+      // sprite side = the bloom diameter; map the disc radius inside it
+      const uR = (R / gR) * half;
+      const bloom = sx.createRadialGradient(half, half, R * 0.2 * (half / gR), half, half, half);
+      bloom.addColorStop(0, rgbCss(sun.edge, 0.5 * sun.glowAlpha));
+      bloom.addColorStop(0.18, rgbCss(sun.glow, 0.4 * sun.glowAlpha));
+      bloom.addColorStop(0.55, rgbCss(sun.glow, 0.12 * sun.glowAlpha));
+      bloom.addColorStop(1, rgbCss(sun.glow, 0));
+      sx.fillStyle = bloom;
+      sx.fillRect(0, 0, S, S);
+      if (sun.discAlpha > 0.012) {
+        const disc = sx.createRadialGradient(half, half, 0, half, half, uR);
+        disc.addColorStop(0, rgbCss(sun.core, sun.discAlpha));
+        disc.addColorStop(0.7, rgbCss(sun.edge, sun.discAlpha * 0.95));
+        disc.addColorStop(1, rgbCss(sun.edge, 0));
+        sx.fillStyle = disc;
+        sx.beginPath();
+        sx.arc(half, half, uR, 0, Math.PI * 2);
+        sx.fill();
+      }
+      return c;
+    };
+
+    // cloud-cover thresholds — the first few always sail, extras join
+    // only under cloudy weather
+    const COVER_STEPS = isMobile
+      ? [0, 0, 0, 0.55, 0.8, 0.95]
+      : [0, 0, 0, 0, 0.3, 0.45, 0.6, 0.8, 0.95];
+
+    const createCloud = (i: number): CloudPuff => ({
       x: Math.random() * w,
       y: Math.random() * h * 0.55,
       r: (isMobile ? 120 : 150) + Math.random() * (isMobile ? 220 : 300),
       speed: 2.5 + Math.random() * 8,
       opacity: 0.025 + Math.random() * 0.045,
-      sprite: cloudSprites[(Math.random() * cloudSprites.length) | 0],
+      variant: (Math.random() * 3) | 0,
+      minCover: COVER_STEPS[i % COVER_STEPS.length],
     });
 
     function createDrop(layerIdx: number, bucketIdx: number, fromTop: boolean): Drop {
@@ -240,9 +351,6 @@ export default function StormBackground() {
     }
 
     const resize = () => {
-      // Mobile: flat 1.0 — the storm canvas sits BEHIND the journey's
-      // WebGL canvas, so its rain is soft-focus anyway; every extra
-      // pixel here is double fill-rate on a fill-rate-bound phone.
       dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.0 : 2);
       w = window.innerWidth;
       h = window.innerHeight;
@@ -264,14 +372,14 @@ export default function StormBackground() {
         }
       });
 
+      const count = isMobile ? 6 : 9;
       if (clouds.length === 0) {
-        const count = isMobile ? 4 : 7;
-        for (let i = 0; i < count; i++) clouds.push(createCloud());
+        for (let i = 0; i < count; i++) clouds.push(createCloud(i));
       }
 
       cachedMaxScroll = document.documentElement.scrollHeight - window.innerHeight;
 
-      lastSkyBucket = -1;
+      lastSkyKey = "";
       skyGrad = null;
       flashGrad = ctx.createRadialGradient(w * 0.5, 0, 0, w * 0.5, h * 0.25, h * 1.1);
       flashGrad.addColorStop(0, "rgba(200, 224, 255, 0.34)");
@@ -302,14 +410,57 @@ export default function StormBackground() {
       }
     };
 
-    const getSkyGradient = (s: number): CanvasGradient => {
-      const bucket = Math.round(s * 20);
-      if (!skyGrad || bucket !== lastSkyBucket) {
-        lastSkyBucket = bucket;
+    /** Draw the sun disc, its glow and the warm atmospheric haze.
+     *  Steady-state is two cached drawImage blits; the baked sprites are
+     *  only rebuilt during the ~2.8 s theme crossfade. */
+    const drawSun = (p: ThemeParams) => {
+      const sun = p.sun;
+      if (!sun || sun.glowAlpha < 0.012) {
+        sunSprite = null; // force a rebuild once the sun fades back in
+        return;
+      }
+      const px = sun.x * w;
+      const py = sun.y * h;
+      const R = sun.r * Math.max(0.62, h / 860);
+      const gR = Math.max(R * sun.glowR, R * 4);
+
+      // wide atmospheric haze halo (cached soft radial tinted with glow)
+      if (p.haze > 0.01) {
+        const hD = Math.max(w, h) * 1.5;
+        ctx.save();
+        ctx.globalAlpha = p.haze * sun.glowAlpha;
+        ctx.drawImage(glowSprite(sun.glow), px - hD / 2, py - hD / 2, hD, hD);
+        ctx.restore();
+      }
+
+      // tight bloom + disc (rebuilt while the crossfade is in flight)
+      const now = performance.now();
+      const key = [
+        sun.x.toFixed(3), sun.y.toFixed(3), R.toFixed(1), sun.glowR.toFixed(2),
+        sun.discAlpha.toFixed(2), sun.glowAlpha.toFixed(2),
+        qkey(sun.core), qkey(sun.edge), qkey(sun.glow),
+      ].join("|");
+      if (!sunSprite || key !== sunSpriteKey || now < sunBuildUntil) {
+        sunSprite = makeSunSprite(p);
+        sunSpriteKey = key;
+      }
+      const gD = gR * 2;
+      ctx.drawImage(sunSprite, px - gD / 2, py - gD / 2, gD, gD);
+    };
+
+    const getSkyGradient = (s: number, p: ThemeParams): CanvasGradient => {
+      const top = mix3(p.skyTop, p.skyTopActive, s);
+      const mid = mix3(p.skyMid, p.skyMidActive, s);
+      const bottom = p.skyBottom;
+      const key = `${Math.round(s * 20)}-${top.map((v) => v | 0).join(",")}-${mid
+        .map((v) => v | 0)
+        .join(",")}-${bottom.map((v) => v | 0).join(",")}`;
+      if (!skyGrad || key !== lastSkyKey) {
+        lastSkyKey = key;
         const g = ctx.createLinearGradient(0, 0, 0, h);
-        g.addColorStop(0, `rgb(${5 + s * 6},${7 + s * 5},${18 + s * 9})`);
-        g.addColorStop(0.4, `rgb(${9 - s * 3},${11 - s * 3},${26 + s * 7})`);
-        g.addColorStop(1, "rgb(3,4,12)");
+        g.addColorStop(0, rgbCss(top));
+        g.addColorStop(0.4, rgbCss(mid));
+        g.addColorStop(1, rgbCss(bottom));
         skyGrad = g;
       }
       return skyGrad;
@@ -374,53 +525,62 @@ export default function StormBackground() {
       }
     };
 
-    const frame = () => {
-      if (!running) return;
-      animId = requestAnimationFrame(frame);
+    /** One full painted frame (also used by the reduced-motion path).
+     *  themeDt is uncapped-by-sim real elapsed seconds (clamped to 0.5s)
+     *  so the atmosphere crossfade finishes even on very low-fps devices. */
+    const paintFrame = (dtN: number, themeDt: number) => {
+      // ── atmosphere crossfade ─────────────────────────────────
+      easeTheme(live, THEMES[getTheme()], themeDt, 2.2);
 
-      const now = performance.now();
-      let dt = now - lastT;
-      lastT = now;
-      if (dt > 64) dt = 64;
-      if (dt < 0) dt = 0;
-      const dtN = dt / 16.667;
-      elapsed += dt / 1000;
-      frameCount++;
-
-      if (frameCount % renderEveryN !== 0) return;
-      const t0 = performance.now();
-
-      // ── storm level (scroll + overrides) ────────────────────
-      // scrollHeight forces layout — refresh the cache rarely.
+      // ── storm level (scroll + overrides), storm themes only ──
       if (frameCount % 120 === 0) {
         cachedMaxScroll = document.documentElement.scrollHeight - window.innerHeight;
       }
       const scrollTarget = cachedMaxScroll > 0 ? Math.min(window.scrollY / cachedMaxScroll, 1) : 0;
       const storm = getStorm();
       storm.level = storm.level + (scrollTarget - storm.level) * Math.min(1, dtN * 0.03);
-      const s = stormIntensity();
+      // rain factor silences the whole storm channel in daylight themes
+      const s = stormIntensity() * live.rain;
 
       if (elapsed - lastStormDispatch > 0.25) {
         lastStormDispatch = elapsed;
         dispatchStormLevel(s);
       }
 
-      // ── lightning cadence: every 8–20s ──────────────────────
-      if (elapsed >= nextBoltAt) {
-        const intense = Math.random() < 0.07; // rare intense event
-        strike(intense);
-        nextBoltAt = elapsed + 8 + Math.random() * 12;
+      // ── lightning cadence — storm weather only ───────────────
+      if (live.lightning > 0.5) {
+        if (elapsed >= nextBoltAt) {
+          const intense = Math.random() < 0.07;
+          strike(intense);
+          nextBoltAt = elapsed + 8 + Math.random() * 12;
+        }
+      } else {
+        // stay armed for the moment a storm theme returns
+        nextBoltAt = Math.max(nextBoltAt, elapsed + 3);
       }
 
       // ── sky ──────────────────────────────────────────────────
-      ctx.fillStyle = getSkyGradient(s);
+      ctx.fillStyle = getSkyGradient(s, live);
       ctx.fillRect(0, 0, w, h);
 
+      // ── sun + warm haze (behind the clouds) ──────────────────
+      drawSun(live);
+
+      // ── clouds ───────────────────────────────────────────────
+      const sprites = spriteCache.get(live.cloudTint);
+      const windDrift = 0.06 + live.cloudSpeed * 0.12 + s * 0.45;
       for (const c of clouds) {
-        c.x += c.speed * (0.14 + s * 0.4) * dtN;
+        c.x += c.speed * windDrift * dtN;
         if (c.x - c.r > w) c.x = -c.r;
-        ctx.globalAlpha = Math.min(1, c.opacity + 0.02 + s * 0.05 + flash * 0.08);
-        ctx.drawImage(c.sprite, c.x - c.r, c.y - c.r, c.r * 2, c.r * 2);
+        const coverFade = smooth(c.minCover - 0.12, c.minCover, live.cloudCover);
+        const a =
+          Math.min(1, c.opacity + 0.02 + s * 0.05 + flash * 0.08) *
+          live.cloudAlpha *
+          coverFade;
+        if (a > 0.002) {
+          ctx.globalAlpha = Math.min(1, a);
+          ctx.drawImage(sprites[c.variant], c.x - c.r, c.y - c.r, c.r * 2, c.r * 2);
+        }
       }
       ctx.globalAlpha = 1;
 
@@ -442,130 +602,146 @@ export default function StormBackground() {
       });
 
       // ── rain — three layers, 6 numeric buckets ───────────────
-      const speedMul = 0.55 + s * 1.3;
-      const windBase = Math.sin(elapsed * 0.108) * (1.2 + s * 2.5);
-      const cursorWind = isMobile ? 0 : Math.max(-3, Math.min(3, cursorVX * 0.06));
-      cursorVX *= Math.pow(0.94, dtN);
+      if (live.rain > 0.01) {
+        const speedMul = (0.55 + s * 1.3) * Math.max(0.25, live.rain);
+        const windBase = Math.sin(elapsed * 0.108) * (1.2 + s * 2.5);
+        const cursorWind = isMobile ? 0 : Math.max(-3, Math.min(3, cursorVX * 0.06));
+        cursorVX *= Math.pow(0.94, dtN);
 
-      const REPULSION_R = isMobile ? 0 : 110;
-      const R2 = REPULSION_R * REPULSION_R;
-      const R_MID = REPULSION_R * 0.55;
-      const R_MID2 = R_MID * R_MID;
+        const REPULSION_R = isMobile ? 0 : 110;
+        const R2 = REPULSION_R * REPULSION_R;
+        const R_MID = REPULSION_R * 0.55;
+        const R_MID2 = R_MID * R_MID;
 
-      const b0: { x: number; y: number; x2: number; y2: number }[] = [];
-      const b1: { x: number; y: number; x2: number; y2: number }[] = [];
-      const b2: { x: number; y: number; x2: number; y2: number }[] = [];
-      const b3: { x: number; y: number; x2: number; y2: number }[] = [];
-      const b4: { x: number; y: number; x2: number; y2: number }[] = [];
-      const b5: { x: number; y: number; x2: number; y2: number }[] = [];
-      const bucketPaths = [b0, b1, b2, b3, b4, b5];
+        const b0: { x: number; y: number; x2: number; y2: number }[] = [];
+        const b1: { x: number; y: number; x2: number; y2: number }[] = [];
+        const b2: { x: number; y: number; x2: number; y2: number }[] = [];
+        const b3: { x: number; y: number; x2: number; y2: number }[] = [];
+        const b4: { x: number; y: number; x2: number; y2: number }[] = [];
+        const b5: { x: number; y: number; x2: number; y2: number }[] = [];
+        const bucketPaths = [b0, b1, b2, b3, b4, b5];
 
-      for (let i = 0; i < drops.length; i++) {
-        const d = drops[i];
-        const isNear = d.layer === "near";
-        const isMid = d.layer === "mid";
+        for (let i = 0; i < drops.length; i++) {
+          const d = drops[i];
+          const isNear = d.layer === "near";
+          const isMid = d.layer === "mid";
 
-        d.y += d.speed * speedMul * dtN;
+          d.y += d.speed * speedMul * dtN;
 
-        let wind = windBase;
-        if (isNear) wind += cursorWind * 1.6;
-        if (isMid) wind += cursorWind * 0.6 + Math.sin(elapsed * 0.31 + i) * 0.15;
+          let wind = windBase;
+          if (isNear) wind += cursorWind * 1.6;
+          if (isMid) wind += cursorWind * 0.6 + Math.sin(elapsed * 0.31 + i) * 0.15;
 
-        if (d.repelled && mx > -100) {
-          const dx = d.x - mx;
-          const dy = d.y - my;
-          const dist2 = dx * dx + dy * dy;
-          if (isNear ? dist2 < R2 : dist2 < R_MID2) {
-            const dist = Math.sqrt(dist2) || 1;
-            const force = (1 - dist / (isNear ? REPULSION_R : R_MID)) * (isNear ? 2.6 : 1.1);
-            d.x += (dx / dist) * force * dtN * 3.2;
-            wind += (dx / dist) * force * 0.9;
+          if (d.repelled && mx > -100) {
+            const dx = d.x - mx;
+            const dy = d.y - my;
+            const dist2 = dx * dx + dy * dy;
+            if (isNear ? dist2 < R2 : dist2 < R_MID2) {
+              const dist = Math.sqrt(dist2) || 1;
+              const force = (1 - dist / (isNear ? REPULSION_R : R_MID)) * (isNear ? 2.6 : 1.1);
+              d.x += (dx / dist) * force * dtN * 3.2;
+              wind += (dx / dist) * force * 0.9;
+            }
           }
-        }
 
-        d.x += wind * (0.3 + d.speed * 0.045) * dtN;
+          d.x += wind * (0.3 + d.speed * 0.045) * dtN;
 
-        if (d.y > h + 16 || d.x < -40 || d.x > w + 40) {
-          const nd = createDrop((d.bucketIndex / 2) | 0, d.bucketIndex % 2, true);
-          d.x = nd.x;
-          d.y = nd.y;
-          d.len = nd.len;
-          d.speed = nd.speed;
-          if (isNear && Math.random() < 0.1 && splashes.length < (isMobile ? 14 : 30)) {
-            splashes.push({
-              x: d.x + (Math.random() - 0.5) * 16,
-              y: h - 1 - Math.random() * 8,
-              life: 0,
-              maxLife: 7 + Math.random() * 9,
-              radius: 2 + Math.random() * 4,
-            });
+          if (d.y > h + 16 || d.x < -40 || d.x > w + 40) {
+            const nd = createDrop((d.bucketIndex / 2) | 0, d.bucketIndex % 2, true);
+            d.x = nd.x;
+            d.y = nd.y;
+            d.len = nd.len;
+            d.speed = nd.speed;
+            if (
+              live.rain > 0.5 &&
+              isNear &&
+              Math.random() < 0.1 &&
+              splashes.length < (isMobile ? 14 : 30)
+            ) {
+              splashes.push({
+                x: d.x + (Math.random() - 0.5) * 16,
+                y: h - 1 - Math.random() * 8,
+                life: 0,
+                maxLife: 7 + Math.random() * 9,
+                radius: 2 + Math.random() * 4,
+              });
+            }
+            continue;
           }
-          continue;
+
+          bucketPaths[d.bucketIndex].push({
+            x: d.x,
+            y: d.y,
+            x2: d.x + wind * 1.3,
+            y2: d.y + d.len * 0.75,
+          });
         }
 
-        bucketPaths[d.bucketIndex].push({
-          x: d.x,
-          y: d.y,
-          x2: d.x + wind * 1.3,
-          y2: d.y + d.len * 0.75,
-        });
-      }
-
-      ctx.lineCap = "round";
-      for (let b = 0; b < 6; b++) {
-        const pts = bucketPaths[b];
-        if (pts.length === 0) continue;
-        const def = LAYER_DEFS[b];
-        const boost =
-          def.layer === "near" ? 1 + flash * 1.8 : def.layer === "mid" ? 1 + flash * 0.7 : 1;
-        ctx.beginPath();
-        for (let i = 0; i < pts.length; i++) {
-          const p = pts[i];
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.x2, p.y2);
+        ctx.lineCap = "round";
+        const [rr, gg, bb] = live.rainColor;
+        for (let b = 0; b < 6; b++) {
+          const pts = bucketPaths[b];
+          if (pts.length === 0) continue;
+          const def = LAYER_DEFS[b];
+          const boost =
+            def.layer === "near" ? 1 + flash * 1.8 : def.layer === "mid" ? 1 + flash * 0.7 : 1;
+          ctx.beginPath();
+          for (let i = 0; i < pts.length; i++) {
+            const p = pts[i];
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(p.x2, p.y2);
+          }
+          ctx.strokeStyle = `rgba(${rr | 0}, ${gg | 0}, ${bb | 0}, ${Math.min(
+            0.9,
+            def.style.op * boost * live.rain,
+          )})`;
+          ctx.lineWidth = def.style.th;
+          ctx.stroke();
         }
-        ctx.strokeStyle = `rgba(150, 190, 235, ${Math.min(0.9, def.style.op * boost)})`;
-        ctx.lineWidth = def.style.th;
-        ctx.stroke();
       }
 
       // ── ground splashes ──────────────────────────────────────
-      splashes = splashes.filter((sp) => {
-        sp.life += dtN;
-        const t = sp.life / sp.maxLife;
-        if (t >= 1) return false;
-        ctx.beginPath();
-        ctx.ellipse(sp.x, sp.y, sp.radius * (1 + t * 2.4), sp.radius * 0.35 * (1 + t * 2.4), 0, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(140, 190, 240, ${(1 - t) * 0.24})`;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        return true;
-      });
+      if (live.rain > 0.02) {
+        splashes = splashes.filter((sp) => {
+          sp.life += dtN;
+          const t = sp.life / sp.maxLife;
+          if (t >= 1) return false;
+          ctx.beginPath();
+          ctx.ellipse(sp.x, sp.y, sp.radius * (1 + t * 2.4), sp.radius * 0.35 * (1 + t * 2.4), 0, 0, Math.PI * 2);
+          ctx.strokeStyle = rgbCss(live.rainColor, (1 - t) * 0.24 * live.rain);
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          return true;
+        });
+      }
 
-      // ── click ripples (hidden detail) ────────────────────────
+      // ── click ripples — tinted with the atmosphere accent ────
       ripples = ripples.filter((rp) => {
         rp.life += dtN;
         const t = rp.life / rp.maxLife;
         if (t >= 1) return false;
         ctx.beginPath();
         ctx.arc(rp.x, rp.y, rp.radius + t * 46, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(120, 210, 255, ${(1 - t) * 0.35})`;
+        ctx.strokeStyle = rgbCss(live.accent, (1 - t) * 0.35);
         ctx.lineWidth = 1.6 - t;
         ctx.stroke();
         ctx.beginPath();
         ctx.arc(rp.x, rp.y, (rp.radius + t * 46) * 0.55, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(200, 240, 255, ${(1 - t) * 0.22})`;
+        ctx.strokeStyle = rgbCss(live.accentSoft, (1 - t) * 0.22);
         ctx.lineWidth = 1;
         ctx.stroke();
         return true;
       });
 
-      // ── vignette ─────────────────────────────────────────────
-      ctx.fillStyle = vignetteGrad!;
-      ctx.fillRect(0, 0, w, h);
+      // ── vignette (theme strength; baked at 0.55) ─────────────
+      if (live.vignette > 0.005) {
+        ctx.globalAlpha = Math.min(1, live.vignette / 0.55);
+        ctx.fillStyle = vignetteGrad!;
+        ctx.fillRect(0, 0, w, h);
+        ctx.globalAlpha = 1;
+      }
 
       // ── --bolt CSS var — ONLY while a strike is decaying ────
-      // (a per-frame write forces a full-page style recalc)
       if (boltCssDirty) {
         boltCss *= Math.pow(0.9, dtN);
         if (boltCss <= 0.004) {
@@ -575,14 +751,35 @@ export default function StormBackground() {
         setBolt(boltCss);
         document.documentElement.style.setProperty("--bolt", boltCss.toFixed(3));
       }
+    };
+
+    const frame = () => {
+      if (!running) return;
+      animId = requestAnimationFrame(frame);
+
+      const now = performance.now();
+      let dt = now - lastT;
+      lastT = now;
+      if (dt < 0) dt = 0;
+      // real elapsed seconds for the theme crossfade (independent of the
+      // simulation's 64ms clamp — slow frames must not freeze the fade)
+      themeCarry += Math.min(dt, 500) / 1000;
+      if (dt > 64) dt = 64;
+      const dtN = dt / 16.667;
+      elapsed += dt / 1000;
+      frameCount++;
+
+      if (frameCount % renderEveryN !== 0) return;
+      const t0 = performance.now();
+
+      paintFrame(dtN, themeCarry);
+      themeCarry = 0;
 
       // ── adaptive framerate ───────────────────────────────────
       const cost = performance.now() - t0;
       reportFrameCost("storm", cost);
       emaCost = emaCost * 0.9 + cost * 0.1;
       if (frameCount % 90 === 0) {
-        // Two-way governor: drop to 30/20 fps on frames that cost >11ms,
-        // climb back to 60 fps when we have headroom (<7 ms).
         if (emaCost > 11 && renderEveryN < 3) renderEveryN++;
         else if (emaCost < 7 && renderEveryN > 1) renderEveryN--;
       }
@@ -599,26 +796,53 @@ export default function StormBackground() {
       }
     };
 
-    resize();
-
-    if (reducedMotion) {
-      // Static painted sky — one frame, no loop, still beautiful
-      ctx.fillStyle = getSkyGradient(0.25);
+    /** Static painted sky for reduced-motion visitors. */
+    const paintStatic = () => {
+      easeTheme(live, THEMES[getTheme()], 10, 2.2); // snap straight to the theme
+      ctx.fillStyle = getSkyGradient(0.25 * live.rain, live);
       ctx.fillRect(0, 0, w, h);
+      drawSun(live);
+      const sprites = spriteCache.get(live.cloudTint);
       for (const c of clouds) {
-        ctx.globalAlpha = c.opacity + 0.04;
-        ctx.drawImage(c.sprite, c.x - c.r, c.y - c.r, c.r * 2, c.r * 2);
+        const coverFade = smooth(c.minCover - 0.12, c.minCover, live.cloudCover);
+        ctx.globalAlpha = (c.opacity + 0.04) * live.cloudAlpha * coverFade;
+        ctx.drawImage(sprites[c.variant], c.x - c.r, c.y - c.r, c.r * 2, c.r * 2);
       }
       ctx.globalAlpha = 1;
-      ctx.fillStyle = vignetteGrad!;
-      ctx.fillRect(0, 0, w, h);
+      if (live.vignette > 0.005) {
+        ctx.globalAlpha = Math.min(1, live.vignette / 0.55);
+        ctx.fillStyle = vignetteGrad!;
+        ctx.fillRect(0, 0, w, h);
+        ctx.globalAlpha = 1;
+      }
+    };
+
+    const onResize = () => {
+      resize();
+      if (reducedMotion) paintStatic();
+    };
+
+    resize();
+
+    // keep the baked sun sprites refreshing through a theme crossfade
+    const markSunDirty = () => {
+      sunBuildUntil = performance.now() + 2800;
+      sunSprite = null;
+    };
+    cleanupExtra.push(subscribeTheme(markSunDirty));
+
+    if (reducedMotion) {
+      // One frame, no loop — repainted whenever the atmosphere changes.
+      paintStatic();
+      cleanupExtra.push(subscribeTheme(paintStatic));
     } else {
       animId = requestAnimationFrame(frame);
       window.addEventListener("pointermove", onPointerMove, { passive: true });
       window.addEventListener("pointerleave", onPointerLeave);
       window.addEventListener("picksaw:splash", onSplash as EventListener);
     }
-    window.addEventListener("resize", resize);
+
+    window.addEventListener("resize", onResize);
     document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
@@ -627,8 +851,9 @@ export default function StormBackground() {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerleave", onPointerLeave);
       window.removeEventListener("picksaw:splash", onSplash as EventListener);
-      window.removeEventListener("resize", resize);
+      window.removeEventListener("resize", onResize);
       document.removeEventListener("visibilitychange", onVisibility);
+      cleanupExtra.forEach((fn) => fn());
     };
   }, []);
 

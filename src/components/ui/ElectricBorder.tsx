@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { cn } from "../../utils/cn";
 import { reportFrameCost } from "../../lib/perfProbe";
+import { useThemeId } from "../../lib/themeStore";
+import { THEMES, rgbCss } from "../../lib/themes";
 
 /**
  * ElectricBorder — animated lightning that crackles around the edge of
@@ -455,12 +457,15 @@ interface ElectricBorderProps {
  * is drawn 18% larger than the host so bolts can flick past its edges.
  */
 export default function ElectricBorder({
-  color = "#4fd8ff",
+  color,
   speed = 1.15,
   lineWidth = 1.4,
   active = false,
   className,
 }: ElectricBorderProps) {
+  // default bolt colour follows the selected atmosphere theme
+  const themeId = useThemeId();
+  color = color ?? rgbCss(THEMES[themeId].accent);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<ElectricBorderEngine | null>(null);
   const activeRef = useRef(active);

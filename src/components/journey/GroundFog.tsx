@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
+import { getTheme } from "../../lib/themeStore";
+import { THEMES, createLiveTheme, easeTheme, type ThemeParams } from "../../lib/themes";
 
 /**
  * GroundFog — true volumetric-FEELING mist via spherical impostors.
@@ -111,6 +113,9 @@ const FOG_VERT = /* glsl */ `
 
 const FOG_FRAG = /* glsl */ `
   uniform sampler2D uMap;
+  uniform vec3 uMistColor;
+  uniform vec3 uMistGlow;
+  uniform float uMistAmount;
   varying float vAlpha;
   varying float vRot;
   varying float vTex;
@@ -144,12 +149,12 @@ const FOG_FRAG = /* glsl */ `
     a *= 1.0 - rim * 0.85;
     if (a < 0.004) discard;
 
-    // cool blue-grey mist: moonlit from above, cyan city glow from below,
-    // sinking slightly darker + bluer with distance
-    vec3 col = vec3(0.56, 0.68, 0.9) * (0.55 + 0.45 * diff);
-    col += vec3(0.11, 0.36, 0.5) * under * under * 1.1; // electric underglow
-    col *= mix(vec3(1.0), vec3(0.78, 0.87, 1.08), smoothstep(5.0, 34.0, vDist));
-    gl_FragColor = vec4(col, a);
+    // mist colour follows the atmosphere theme — cool cyan by night,
+    // warm gold at dawn, bruised coral at dusk (uniform-driven)
+    vec3 col = uMistColor * (0.55 + 0.45 * diff);
+    col += uMistGlow * under * under * 1.1; // city underglow
+    col *= mix(vec3(1.0), uMistColor * 1.4, smoothstep(5.0, 34.0, vDist));
+    gl_FragColor = vec4(col, a * uMistAmount);
   }
 `;
 
@@ -208,10 +213,16 @@ export default function GroundFog() {
         uSpan: { value: 88 },
         uScale: { value: 600 },
         uMap: { value: atlas },
+        // storm-night defaults; eased per frame from lib/themes.ts
+        uMistColor: { value: new THREE.Color(0.56, 0.68, 0.9) },
+        uMistGlow: { value: new THREE.Color(0.11, 0.36, 0.5) },
+        uMistAmount: { value: 1 },
       },
     });
     return { geo: g, material: m };
   }, [isMobile, atlas]);
+
+  const live = useRef<ThemeParams>(createLiveTheme(getTheme()));
 
   useEffect(() => {
     const cam = camera as THREE.PerspectiveCamera;
@@ -219,9 +230,23 @@ export default function GroundFog() {
       size.height / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)));
   }, [size, camera, material]);
 
-  useFrame(({ camera: cam }) => {
+  useFrame(({ camera: cam }, delta) => {
     material.uniforms.uTime.value = performance.now() / 1000;
     material.uniforms.uCamZ.value = cam.position.z;
+    const p = easeTheme(live.current, THEMES[getTheme()], Math.min(delta, 0.25));
+    (material.uniforms.uMistColor.value as THREE.Color).setRGB(
+      p.mist[0] / 255,
+      p.mist[1] / 255,
+      p.mist[2] / 255,
+      THREE.SRGBColorSpace,
+    );
+    (material.uniforms.uMistGlow.value as THREE.Color).setRGB(
+      p.mistGlow[0] / 255,
+      p.mistGlow[1] / 255,
+      p.mistGlow[2] / 255,
+      THREE.SRGBColorSpace,
+    );
+    material.uniforms.uMistAmount.value = p.mistAmount;
   });
 
   useEffect(

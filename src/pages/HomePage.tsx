@@ -10,6 +10,7 @@ import ProcessTimeline from "../components/ProcessTimeline";
 import ContactSection from "../components/ContactSection";
 import { scrollToTarget } from "../lib/lenis";
 import { hasWebGL, prefersReducedMotion } from "../lib/webgl";
+import { useThemeId } from "../lib/themeStore";
 
 interface HomePageProps {
   lang: Lang;
@@ -48,6 +49,7 @@ function KineticTitle({ text, delay = 0 }: { text: string; delay?: number }) {
 
 export default function HomePage({ lang, introDone = true }: HomePageProps) {
   const t = SITE_TEXTS[lang];
+  const themeId = useThemeId();
 
   // The 3D journey needs WebGL + full motion; everyone else gets the
   // guaranteed classic layout (identical content, same modal).
@@ -165,7 +167,7 @@ export default function HomePage({ lang, introDone = true }: HomePageProps) {
             className="absolute bottom-8 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2"
           >
             <span className="text-[10px] font-medium uppercase tracking-[0.24em] text-slate-500">
-              {t.scrollHint}
+              {themeId === "storm" ? t.scrollHint : t.scrollHintDay}
             </span>
             <span className="flex h-10 w-6 items-start justify-center rounded-full border border-white/15 p-1.5">
               <span className="h-2 w-1 animate-scroll-dot rounded-full bg-electric/80" />

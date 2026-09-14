@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import type { Lang } from "../config/siteTexts";
 import { SITE_TEXTS } from "../config/siteTexts";
 import Logo3D from "./Logo3D";
+import ThemeSwitcher from "./ThemeSwitcher";
 import { scrollToTarget } from "../lib/lenis";
 import { cn } from "../utils/cn";
 
@@ -38,6 +39,7 @@ export default function Header({
 
   const navLinks = [
     { to: "/", label: t.navHome },
+    { to: "/about", label: t.navAbout },
     { to: "/feed", label: t.navFeed },
   ];
 
@@ -65,7 +67,7 @@ export default function Header({
             <motion.span whileHover={{ scale: 1.06 }} transition={{ type: "spring", stiffness: 300, damping: 18 }}>
               <Logo3D
                 size={scrolled ? 34 : 42}
-                className="drop-shadow-[0_0_12px_rgba(79,216,255,0.35)] transition-all duration-500"
+                className="drop-shadow-[0_0_12px_rgb(var(--accent)/0.35)] transition-all duration-500"
               />
             </motion.span>
             <span
@@ -116,6 +118,9 @@ export default function Header({
 
           {/* Actions */}
           <div className="flex items-center gap-2">
+            {/* Atmosphere switcher — storm / sunrise / sunset */}
+            <ThemeSwitcher lang={lang} />
+
             {/* Language toggle */}
             <button
               type="button"
@@ -185,7 +190,7 @@ export default function Header({
 
                 <Link
                   to="/feed"
-                  className="reflect-sweep group relative overflow-hidden rounded-xl bg-gradient-to-b from-white to-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-[0_4px_28px_-6px_rgba(79,216,255,0.5)] transition-shadow duration-300 hover:shadow-[0_4px_36px_-4px_rgba(79,216,255,0.75)]"
+                  className="reflect-sweep group relative overflow-hidden rounded-xl bg-gradient-to-b from-white to-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-[0_4px_28px_-6px_rgb(var(--accent)/0.5)] transition-shadow duration-300 hover:shadow-[0_4px_36px_-4px_rgb(var(--accent)/0.75)]"
                 >
                   <span className="relative z-10">{t.exploreButton}</span>
                 </Link>

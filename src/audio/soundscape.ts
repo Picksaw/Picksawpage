@@ -123,6 +123,8 @@ export class SoundscapeEngine {
   private melodyWalk = 4; // random-walk index into MELODY_SCALE
 
   private stormLevel = 0; // 0..1 target used by rain mixer
+  // 0 in clear/cloudy daylight themes (no rain or thunder), 1 in the storm
+  private weatherFactor = 1;
   private prefs: SavedPrefs = loadPrefs();
 
   get enabled() {
@@ -264,13 +266,20 @@ export class SoundscapeEngine {
     this.stormLevel = Math.max(0, Math.min(1, level));
     if (!this.ctx || !this.prefs.storm || !this.rainGain) return;
     const t = this.ctx.currentTime;
-    const v = this.prefs.stormVol * (0.55 + this.stormLevel * 0.4);
+    const v = this.prefs.stormVol * (0.55 + this.stormLevel * 0.4) * this.weatherFactor;
     this.rainGain.gain.setTargetAtTime(v, t, 1.2);
+  }
+
+  /** 1 during the thunderstorm, 0 in dry daylight themes. */
+  setWeatherFactor(f: number) {
+    this.weatherFactor = Math.max(0, Math.min(1, f));
+    if (this.ctx) this.setStormLevel(this.stormLevel);
   }
 
   /** Thunder burst synced to a lightning strike. intensity 0..1+ */
   thunder(intensity: number) {
     if (!this.ctx || !this.prefs.storm || !this.noiseBuffers) return;
+    if (this.weatherFactor < 0.05) return; // dry daylight — no thunder
     const ctx = this.ctx;
     const t0 = ctx.currentTime + 0.03 + Math.random() * 0.12; // sound lags flash slightly
     const i = Math.max(0.3, Math.min(1.2, intensity)) * (0.35 + this.prefs.stormVol * 0.65);
@@ -656,7 +665,7 @@ export class SoundscapeEngine {
           /* user gesture already happened via the toggle */
         });
       }
-      const v = this.prefs.stormVol * (0.55 + this.stormLevel * 0.4);
+      const v = this.prefs.stormVol * (0.55 + this.stormLevel * 0.4) * this.weatherFactor;
       this.rainGain?.gain.setTargetAtTime(v, t, 0.8);
       this.stormBus!.gain.setTargetAtTime(1, t, 0.4);
     } else {

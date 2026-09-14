@@ -13,9 +13,18 @@ import { TEMPLATE_IMAGE_MAP } from "../../config/templateImages";
 import { SITE_TEXTS, type Lang } from "../../config/siteTexts";
 import { Html, useGLTF } from "@react-three/drei";
 import GroundFog from "./GroundFog";
+import { getTheme, useThemeId } from "../../lib/themeStore";
+import {
+  THEMES,
+  createLiveTheme,
+  easeTheme,
+  rgbCss,
+  type ThemeParams,
+} from "../../lib/themes";
 import TrustStats from "../TrustStats";
 import ProcessTimeline from "../ProcessTimeline";
 import ContactSection from "../ContactSection";
+import AboutSceneFrames from "../AboutFrames";
 import { PuddleMaterial } from "./PuddleMaterial";
 import {
   useJourneyElectricBorder,
@@ -23,16 +32,20 @@ import {
 } from "./JourneyElectricBorder";
 import {
   HEADLINE_Z,
-  AZADI_Z,
   paintingZ,
   stations,
   focusedIndex,
   cameraZ,
   layerOpacity,
+  homeLayout,
+  aboutLayout,
+  type WalkLayout,
 } from "./path";
+import { WalkLayoutContext, useWalkLayout } from "./walkContext";
 
 // Re-exports — Journey.tsx imports the walk layout from this module.
-export { HEADLINE_Z, paintingZ, stations, focusedIndex, cameraZ, layerOpacity };
+export { HEADLINE_Z, paintingZ, stations, focusedIndex, cameraZ, layerOpacity, homeLayout, aboutLayout };
+export type { WalkLayout };
 
 /**
  * Corridor V2 — the neon city walk.
@@ -55,11 +68,16 @@ const PAINTING_W = 3.1;
 const PAINTING_H = 2.35;
 const FOCUS_DIST = 4.2;
 
-/** Azadi is the finale monument. The GLTF auto-fit leaves it a mere
- *  ~2.8 units tall (smaller than the street buildings!), so the gate
- *  gets its own scale: ~22 tall × ~26 wide — seen from 46 units away
- *  it fills ~63% of the view height, half-lost in the fog haze. */
-const AZADI_SCALE = 8;
+/** Milad is the finale monument — in reality it is the taller, bigger
+ *  tower, so it owns the centre of the road at the end of the walk.
+ *  Its GLTF auto-fit already leaves it ~13.7 units tall (footprint 3.2);
+ *  ×2.0 makes it ~27 tall × ~6.4 wide — seen from 46 units away it
+ *  fills ~55% of the view height, pod and spire both readable, towering
+ *  over every side building. */
+const MILAD_SCALE = 2.0;
+/** Azadi is demoted to a distant side boulevard landmark; ×2 keeps it
+ *  recognisable (~5.7 tall) without competing with Milad. */
+const AZADI_SIDE_SCALE = 2;
 
 // Walk layout math (stations, cameraZ, layerOpacity, …) lives in ./path —
 // shared with JourneyElectricBorder's draw gating without a circular import.
@@ -70,8 +88,9 @@ export function CameraRig({
 }: {
   progressRef: React.RefObject<number>;
 }) {
+  const layout = useWalkLayout();
   const pointer = useRef({ x: 0, y: 0 });
-  const pos = useRef(new THREE.Vector3(0, 0, stations[0]));
+  const pos = useRef(new THREE.Vector3(0, 0, layout.stations[0]));
 
   useEffect(() => {
     const fine = window.matchMedia("(pointer: fine)").matches;
@@ -85,8 +104,8 @@ export function CameraRig({
   }, []);
 
   useFrame(({ camera }, delta) => {
-    const dt = Math.min(delta, 0.05);
-    const targetZ = cameraZ(progressRef.current ?? 0);
+    const dt = Math.min(delta, 0.25);
+    const targetZ = layout.cameraZ(progressRef.current ?? 0);
     const k = 1 - Math.exp(-dt * 5.5);
     pos.current.z += (targetZ - pos.current.z) * k;
     pos.current.x += (pointer.current.x * 0.22 - pos.current.x) * k * 0.6;
@@ -98,8 +117,8 @@ export function CameraRig({
 }
 
 /** Responsive fit: scale content so width×height fit the viewport at the
- *  focus distance — paintings never spill off the sides, phone or PC. */
-function useFitScale(
+ *  focus distance — windows never spill off the sides, phone or PC. */
+export function useFitScale(
   baseW: number,
   baseH: number,
   focusDist: number,
@@ -248,9 +267,11 @@ function Painting({
   const hovered = useRef(false);
   const focusAmt = useRef(0);
   const map = usePaintingTexture(item, lang);
+  const layout = useWalkLayout();
   const fit = useFitScale(PAINTING_W, PAINTING_H, FOCUS_DIST);
-  const z = paintingZ(index);
+  const z = layout.frameZ(index);
   const _scale = useRef(new THREE.Vector3()); // no per-frame allocation
+  const live = useRef<ThemeParams>(createLiveTheme(getTheme()));
   // touch devices should never block vertical scroll — hover is desktop-only
   const isCoarse = useMemo(
     () =>
@@ -260,7 +281,8 @@ function Painting({
   );
 
   useFrame(({ camera }, delta) => {
-    const dt = Math.min(delta, 0.05);
+    const dt = Math.min(delta, 0.25);
+    const tp = easeTheme(live.current, THEMES[getTheme()], dt);
     const op = layerOpacity(camera.position.z, z);
 
     // Fully outside the opacity window → stop drawing these 4 meshes
@@ -269,6 +291,12 @@ function Painting({
     // solo fade — material + glow + frame all obey it
     if (planeMat.current) planeMat.current.opacity = op;
     if (glowMat.current) {
+      glowMat.current.color.setRGB(
+        tp.accent[0] / 255,
+        tp.accent[1] / 255,
+        tp.accent[2] / 255,
+        THREE.SRGBColorSpace,
+      );
       const target = (focused ? 1 : 0) * 0.85 + (hovered.current ? 0.15 : 0);
       focusAmt.current += (target - focusAmt.current) * Math.min(1, dt * 5);
       glowMat.current.opacity = (0.1 + focusAmt.current * 0.38) * op;
@@ -392,6 +420,8 @@ function Painting({
 /** The "Website Templates" layer — big typographic plane in space. */
 function HeadlineLayer({ lang }: { lang: Lang }) {
   const t = SITE_TEXTS[lang];
+  const themeId = useThemeId();
+  const accent = THEMES[themeId].accent;
   const mat = useRef<THREE.MeshBasicMaterial>(null);
   const group = useRef<THREE.Group>(null);
   const fit = useFitScale(5.6, 2.1, FOCUS_DIST, 0.9, 0.62);
@@ -407,7 +437,7 @@ function HeadlineLayer({ lang }: { lang: Lang }) {
     const margin = 40;
     const radius = 60;
     ctx.fillStyle = "rgba(4, 7, 14, 0.45)"; // Deep glass
-    ctx.strokeStyle = "rgba(79, 216, 255, 0.25)"; // Electric border
+    ctx.strokeStyle = rgbCss(accent, 0.25); // theme accent border
     ctx.lineWidth = 4;
     
     // Draw rounded rect
@@ -436,7 +466,7 @@ function HeadlineLayer({ lang }: { lang: Lang }) {
       size -= 6;
       ctx.font = `800 ${size}px '${fa ? "Vazirmatn Variable" : "Sora Variable"}', sans-serif`;
     }
-    ctx.shadowColor = "rgba(79,216,255,0.85)";
+    ctx.shadowColor = rgbCss(accent, 0.85);
     ctx.shadowBlur = 44;
     ctx.fillStyle = "#ffffff";
     ctx.fillText(title, c.width / 2, 250);
@@ -458,7 +488,7 @@ function HeadlineLayer({ lang }: { lang: Lang }) {
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 8;
     return tex;
-  }, [lang, t.heroTitle, t.heroSubtitle]);
+  }, [lang, t.heroTitle, t.heroSubtitle, accent]);
 
   useEffect(() => () => texture.dispose(), [texture]);
 
@@ -486,11 +516,21 @@ function HeadlineLayer({ lang }: { lang: Lang }) {
   );
 }
 
-function HtmlSection({
+/** A framed DOM window standing on the road — the shared shell for the
+ *  home sections (landscape, scrollable) and the About walk (portrait,
+ *  every pane sized to fit the viewport with NO inner scrolling). */
+export function Window3D({
   index,
   focused,
   dir,
   children,
+  width = PAINTING_W,
+  height = PAINTING_H,
+  mobileW = 400,
+  desktopW = 1024,
+  scrollable = true,
+  maxWFrac = 0.94,
+  maxHFrac = 0.8,
 }: {
   index: number;
   focused: boolean;
@@ -498,9 +538,21 @@ function HtmlSection({
    *  stays RTL while the 3D frame geometry remains LTR/centered). */
   dir: "ltr" | "rtl";
   children: React.ReactNode;
+  /** World-space window size. */
+  width?: number;
+  height?: number;
+  /** Pixel resolution the inner UI renders at before scaling. */
+  mobileW?: number;
+  desktopW?: number;
+  /** true: long content scrolls inside the pane; false: the pane is a
+   *  single fixed, viewport-fitted screen (the About frames). */
+  scrollable?: boolean;
+  maxWFrac?: number;
+  maxHFrac?: number;
 }) {
-  const z = paintingZ(index);
-  const fit = useFitScale(PAINTING_W, PAINTING_H, FOCUS_DIST);
+  const layout = useWalkLayout();
+  const z = layout.frameZ(index);
+  const fit = useFitScale(width, height, FOCUS_DIST, maxWFrac, maxHFrac);
   const group = useRef<THREE.Group>(null);
   const _scale = useRef(new THREE.Vector3()); // no per-frame allocation
 
@@ -509,12 +561,13 @@ function HtmlSection({
 
   const frameMat = useRef<THREE.MeshStandardMaterial>(null);
   const glowMat = useRef<THREE.MeshBasicMaterial>(null);
+  const live = useRef<ThemeParams>(createLiveTheme(getTheme()));
 
   const { size, camera } = useThree();
 
   // Pick a base resolution for the UI to render at before scaling.
-  const targetW = size.width < 768 ? 400 : 1024;
-  const targetH = targetW * (PAINTING_H / PAINTING_W);
+  const targetW = size.width < 768 ? mobileW : desktopW;
+  const targetH = targetW * (height / width);
 
   const isCoarse = useMemo(
     () =>
@@ -524,12 +577,21 @@ function HtmlSection({
   );
 
   useFrame((_, delta) => {
-    const dt = Math.min(delta, 0.05);
+    const dt = Math.min(delta, 0.25);
+    const tp = easeTheme(live.current, THEMES[getTheme()], dt);
     const cam = camera as THREE.PerspectiveCamera;
     const op = layerOpacity(cam.position.z, z);
 
     if (frameMat.current) frameMat.current.opacity = op;
-    if (glowMat.current) glowMat.current.opacity = (focused ? 0.3 : 0.1) * op;
+    if (glowMat.current) {
+      glowMat.current.color.setRGB(
+        tp.accent[0] / 255,
+        tp.accent[1] / 255,
+        tp.accent[2] / 255,
+        THREE.SRGBColorSpace,
+      );
+      glowMat.current.opacity = (focused ? 0.3 : 0.1) * op;
+    }
 
     if (group.current) {
       group.current.visible = op > 0.01;
@@ -567,8 +629,8 @@ function HtmlSection({
 
       const currentScale = group.current ? group.current.scale.x : fit;
 
-      const pxH = (PAINTING_H / visible_height) * size.height * currentScale;
-      const pxW = (PAINTING_W / visible_height) * size.height * currentScale;
+      const pxH = (height / visible_height) * size.height * currentScale;
+      const pxW = (width / visible_height) * size.height * currentScale;
 
       const shiftX = group.current
         ? (group.current.position.x /
@@ -601,7 +663,7 @@ function HtmlSection({
   return (
     <group ref={group} position={[0, 0, z]}>
       <mesh position={[0, 0, -0.09]}>
-        <planeGeometry args={[PAINTING_W + 0.55, PAINTING_H + 0.55]} />
+        <planeGeometry args={[width + 0.55, height + 0.55]} />
         <meshBasicMaterial
           ref={glowMat}
           color="#4fd8ff"
@@ -613,7 +675,7 @@ function HtmlSection({
         />
       </mesh>
       <mesh position={[0, 0, -0.05]}>
-        <boxGeometry args={[PAINTING_W + 0.16, PAINTING_H + 0.16, 0.09]} />
+        <boxGeometry args={[width + 0.16, height + 0.16, 0.09]} />
         <meshStandardMaterial
           ref={frameMat}
           color="#11182a"
@@ -628,21 +690,30 @@ function HtmlSection({
         <div
           ref={outerRef}
           dir={dir}
-          className="relative overflow-hidden bg-[#04060d] text-white flex items-start justify-center rounded-sm"
+          className={`relative overflow-hidden bg-[#04060d] text-white flex ${
+            scrollable ? "items-start" : "items-center"
+          } justify-center rounded-sm`}
           style={{
             opacity: 0,
             // fade mask when going further — top and bottom feather on mobile
-            // so content doesn't abruptly cut when covering full screen
-            WebkitMaskImage:
-              "linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)",
-            maskImage:
-              "linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)",
+            // so content doesn't abruptly cut when covering full screen.
+            // Fixed About panes use a tighter feather so no line is clipped.
+            WebkitMaskImage: scrollable
+              ? "linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)"
+              : "linear-gradient(to bottom, transparent 0%, black 6%, black 94%, transparent 100%)",
+            maskImage: scrollable
+              ? "linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)"
+              : "linear-gradient(to bottom, transparent 0%, black 6%, black 94%, transparent 100%)",
           }}
         >
           <div
             ref={innerRef}
             dir={dir}
-            className="absolute top-0 left-0 origin-top-left overflow-y-auto overflow-x-hidden custom-scrollbar"
+            className={
+              scrollable
+                ? "absolute top-0 left-0 origin-top-left overflow-y-auto overflow-x-hidden custom-scrollbar"
+                : "absolute top-0 left-0 origin-top-left overflow-hidden"
+            }
             style={{ width: targetW, height: targetH }}
           >
             {children}
@@ -650,6 +721,25 @@ function HtmlSection({
         </div>
       </Html>
     </group>
+  );
+}
+
+/** Home walk's landscape, scrollable section window. */
+function HtmlSection({
+  index,
+  focused,
+  dir,
+  children,
+}: {
+  index: number;
+  focused: boolean;
+  dir: "ltr" | "rtl";
+  children: React.ReactNode;
+}) {
+  return (
+    <Window3D index={index} focused={focused} dir={dir}>
+      {children}
+    </Window3D>
   );
 }
 
@@ -667,11 +757,89 @@ export function CustomBuilding({ url, position, rotation }: any) {
 
 // ── the city ───────────────────────────────────────────────────────────────
 
+type CityMatKind = "neon" | "glass" | "atlas" | "plain";
+
+interface CityMatRecord {
+  mat: THREE.MeshStandardMaterial;
+  /** untouched diffuse colour, before the storm darkening */
+  baseColor: THREE.Color;
+  /** original emissive colour (black for unlit materials) */
+  baseEmissive: THREE.Color;
+  kind: CityMatKind;
+}
+
 interface WindowMaps {
   map: THREE.Texture;
   emissiveMap: THREE.Texture;
   roughnessMap: THREE.Texture;
   metalnessMap: THREE.Texture;
+}
+
+// scratch colours for applyCityTheme (no per-frame allocation)
+const _shadowC = new THREE.Color();
+const _warmC = new THREE.Color();
+const _warmDimC = new THREE.Color();
+const _whiteC = new THREE.Color(1, 1, 1);
+const _glassStormC = new THREE.Color("#4fd8ff");
+const _atlasStormC = new THREE.Color("#1a4466");
+
+const setSRGB = (c: THREE.Color, rgb: [number, number, number]) =>
+  c.setRGB(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, THREE.SRGBColorSpace);
+
+/**
+ * Retint every city material for an atmosphere theme. The storm night
+ * darkens buildings 50% toward near-black with glowing cyan windows;
+ * dawn/dusk restores the original façades, warms the glass and dims
+ * the window emissive to daylight levels.
+ */
+function applyCityTheme(
+  records: CityMatRecord[],
+  concrete: THREE.MeshStandardMaterial,
+  windowMats: THREE.MeshStandardMaterial[],
+  p: ThemeParams,
+) {
+  setSRGB(_shadowC, p.buildingShadow);
+  setSRGB(_warmC, p.warmGlow);
+  _warmDimC.copy(_warmC).multiplyScalar(0.4);
+  setSRGB(concrete.color, p.concrete as [number, number, number]);
+
+  for (const wm of windowMats) {
+    wm.emissive.copy(_whiteC).lerp(_warmC, p.warmth);
+    wm.emissiveIntensity = 1.4 * p.windowEmissive;
+  }
+
+  for (const rec of records) {
+    const m = rec.mat;
+    m.color.copy(rec.baseColor).lerp(_shadowC, p.buildingDarkMix);
+    if (rec.kind === "neon") {
+      m.emissive.copy(rec.baseEmissive);
+      m.emissiveIntensity = 3.5 * p.windowEmissive;
+    } else if (rec.kind === "glass") {
+      m.emissive.copy(_glassStormC).lerp(_warmC, p.warmth);
+      m.emissiveIntensity = 2.0 * p.windowEmissive;
+    } else if (rec.kind === "atlas") {
+      m.emissive.copy(_atlasStormC).lerp(_warmDimC, p.warmth);
+      m.emissiveIntensity = 3.0 * p.windowEmissive;
+    }
+  }
+}
+
+/** Per-frame driver — eases building/street colours between themes. */
+function CityThemeRig({
+  records,
+  concreteMat,
+  windowMats,
+}: {
+  records: CityMatRecord[];
+  concreteMat: THREE.MeshStandardMaterial;
+  windowMats: THREE.MeshStandardMaterial[];
+}) {
+  const live = useRef<ThemeParams>(createLiveTheme(getTheme()));
+  useFrame((_, delta) => {
+    const p = easeTheme(live.current, THEMES[getTheme()], Math.min(delta, 0.25));
+    applyCityTheme(records, concreteMat, windowMats, p);
+  });
+  return null;
 }
 
 function makeWindowTextures(): WindowMaps[] {
@@ -813,18 +981,18 @@ interface Building {
   rotation: number;
 }
 
-function makeCity(): Building[] {
+function makeCity(finaleZ: number): Building[] {
   const list: Building[] = [];
   let seed = 20260824;
   const rnd = () => {
     seed = (seed * 16807) % 2147483647;
     return seed / 2147483647;
   };
-  
+
   const startZ = 8;
-  // Side buildings stop before the plaza in front of the Azadi gate so
-  // nothing pokes through the finale landmark.
-  const endZ = AZADI_Z + 12;
+  // Side buildings stop before the plaza in front of the finale tower so
+  // nothing pokes through the landmark.
+  const endZ = finaleZ + 12;
   const step = 6.0;
   const nearX = 4.0;
   const rowGap = 4.5;
@@ -847,22 +1015,25 @@ function makeCity(): Building[] {
   }
   
   // ── Landmark placement ───────────────────────────────────────────
-  // Azadi Tower is the LAST building on the site: it stands in the
-  // MIDDLE of the road (x = 0) at the very far end, never inside the
-  // left / right building rows.
-  // Milad Tower is tall, so it lives ONCE among the FAR (background)
-  // buildings at the deepest end of the walk — it must not appear at
-  // the start of the site anymore.
-  const azadiZ = AZADI_Z; // the very last / deepest building, centre road
+  // Milad Tower is the finale monument: the taller, bigger tower in
+  // reality, it stands dead-centre of the road (x = 0) at the far end,
+  // never inside the left / right building rows.
+  // Azadi Tower is demoted to ONE slot among the deepest side buildings
+  // so it still reads as a landmark on the boulevard without competing.
+  const towerZ = finaleZ; // the very last / deepest building, centre road
 
-  // Choose Milad's slot from the DEEPEST side buildings (background).
+  // Choose Azadi's slot from the DEEPEST side buildings (background),
+  // keeping it clear of the centre where Milad stands.
   const sortedByZ = [...slots].sort((a, b) => a.z - b.z); // most negative = farthest
   const farCount = Math.max(1, Math.floor(sortedByZ.length * 0.25));
-  const miladSlot = sortedByZ[Math.floor(rnd() * farCount)];
+  const farSlots = sortedByZ.slice(0, farCount);
+  const outerFar = farSlots.filter((s) => Math.abs(s.x) > 5.5);
+  const azadiPool = outerFar.length > 0 ? outerFar : farSlots;
+  const azadiSlot = azadiPool[Math.floor(rnd() * azadiPool.length)];
 
   slots.forEach((slot) => {
       let typeIndex;
-      if (slot === miladSlot) typeIndex = 1; // Milad — far background silhouette
+      if (slot === azadiSlot) typeIndex = 0; // Azadi — deep side silhouette
       else {
           // The rest are randomly chosen from index 2, 3, and 4
           typeIndex = 2 + Math.floor(rnd() * 3);
@@ -870,11 +1041,11 @@ function makeCity(): Building[] {
       list.push({ ...slot, typeIndex, tex: 0 });
   });
 
-  // Azadi — the final landmark, dead centre of the road at the end.
+  // Milad — the final landmark, dead centre of the road at the end.
   list.push({
       x: 0,
-      z: azadiZ,
-      typeIndex: 0,
+      z: towerZ,
+      typeIndex: 1,
       tex: 0,
       rotation: 0,
   });
@@ -884,16 +1055,32 @@ function makeCity(): Building[] {
 
 function MovingStreetLights() {
   const groupRef = useRef<THREE.Group>(null);
+  const lightRefs = useRef<(THREE.PointLight | null)[]>([]);
+  const live = useRef<ThemeParams>(createLiveTheme(getTheme()));
 
-  useFrame(({ camera }) => {
+  // The storm's multi-colour neon lamps; daylight themes switch them
+  // off entirely (clear day) or warm them on at dusk.
+  const baseColors = useMemo(
+    () => ["#4fd8ff", "#9fe8ff", "#2a6cff", "#ffffff"].map((c) => new THREE.Color(c)),
+    [],
+  );
+  const tmpColor = useMemo(() => new THREE.Color(), []);
+
+  useFrame(({ camera }, delta) => {
     if (groupRef.current) {
       // The lights follow the camera's Z position exactly,
       // meaning we only ever render 4 lights, but it looks like a continuous street!
       groupRef.current.position.z = camera.position.z;
     }
+    const p = easeTheme(live.current, THEMES[getTheme()], Math.min(delta, 0.25));
+    tmpColor.setRGB(p.street[0] / 255, p.street[1] / 255, p.street[2] / 255, THREE.SRGBColorSpace);
+    for (let i = 0; i < lightRefs.current.length; i++) {
+      const light = lightRefs.current[i];
+      if (!light) continue;
+      light.intensity = p.streetI;
+      light.color.copy(baseColors[i]).lerp(tmpColor, p.streetTint);
+    }
   });
-
-  const colors = ["#4fd8ff", "#9fe8ff", "#2a6cff", "#ffffff"];
 
   return (
     <group ref={groupRef}>
@@ -901,13 +1088,15 @@ function MovingStreetLights() {
         // Space them out relative to the camera
         const zOffset = -i * 8;
         const side = i % 2 === 0 ? 1 : -1;
-        const color = colors[i % colors.length];
         return (
           <pointLight
             key={i}
+            ref={(el) => {
+              lightRefs.current[i] = el;
+            }}
             position={[side * 4, -1.2, zOffset]}
             intensity={15}
-            color={color}
+            color={baseColors[i]}
             distance={20}
           />
         );
@@ -917,7 +1106,8 @@ function MovingStreetLights() {
 }
 
 function City() {
-  const buildings = useMemo(() => makeCity(), []);
+  const layout = useWalkLayout();
+  const buildings = useMemo(() => makeCity(layout.finaleZ), [layout.finaleZ]);
 
   const windowTexs = useMemo(() => makeWindowTextures(), []);
 
@@ -929,7 +1119,7 @@ function City() {
   const gltfLowRise = useGLTF(import.meta.env.BASE_URL + "low_rise_wall_to_wall_office_building.glb") as any;
   
 
-  const { concreteMat, windowMats, prototypes } = useMemo(() => {
+  const { concreteMat, windowMats, prototypes, cityMats } = useMemo(() => {
     // A single foundation material shared across all buildings
     const cMat = new THREE.MeshStandardMaterial({
       color: "#050608", // Very dark to blend with fog/abyss
@@ -937,6 +1127,12 @@ function City() {
       metalness: 0.1,
       fog: true,
     });
+
+    // One record per unique GLTF material — the CityThemeRig retints
+    // these every frame (clones share material instances, so a single
+    // record drives every placed copy of a prototype).
+    const cityMats: CityMatRecord[] = [];
+    const seen = new Set<string>();
 
     const wMats = windowTexs.map(
       (tex) =>
@@ -991,43 +1187,45 @@ function City() {
 
       customGroup.add(clonedCustom);
 
-      // Make materials accept fog and boost emissive
+      // Make materials accept fog and register them for theme retinting.
+      // The storm night look (50% darkening, glowing windows) is applied
+      // via applyCityTheme below — identical to the original appearance.
       clonedCustom.traverse((child: any) => {
-        if (child.isMesh && child.material) {
-          // Restore the building's original colors (no heavy darkening)
-          // Just make sure it receives fog and is somewhat reflective
-          if (child.material.color) {
-            child.material.color.lerp(new THREE.Color("#05070a"), 0.5); // Darken by 50%
+        if (!child.isMesh || !child.material) return;
+        const mats = Array.isArray(child.material)
+          ? child.material
+          : [child.material];
+        for (const mat of mats) {
+          if (!mat || !mat.color) continue;
+          mat.fog = true;
+          if (typeof mat.roughness === "number") {
+            mat.roughness = Math.min(mat.roughness || 1.0, 0.6);
           }
-          child.material.fog = true;
-          child.material.roughness = Math.min(
-            child.material.roughness || 1.0,
-            0.6,
-          );
 
-          const matName = (child.material.name || "").toLowerCase();
-
-          if (
-            child.material.emissiveMap ||
-            (child.material.emissive && child.material.emissive.getHex() > 0)
-          ) {
-            // Boost existing neon lights
-            child.material.emissiveIntensity = 3.5;
-          } else if (
-            matName.includes("window") ||
-            matName.includes("glass") ||
-            matName.includes("light")
-          ) {
-            // Force emissive for materials specifically named window/glass/light
-            child.material.emissive = new THREE.Color("#4fd8ff");
-            child.material.emissiveIntensity = 2.0;
-          } else if (child.material.map) {
-            // For Atlas materials or generic walls with painted-on windows:
-            // Clone the diffuse map into the emissive slot and give it a cyan/blue tint!
-            // This forces the bright parts of the texture (windows) to glow like neon lights in the dark.
-            child.material.emissiveMap = child.material.map;
-            child.material.emissive = new THREE.Color("#1a4466"); // Soft cyberpunk ambient glow
-            child.material.emissiveIntensity = 3.0;
+          if (!seen.has(mat.uuid)) {
+            seen.add(mat.uuid);
+            const matName: string = (mat.name || "").toLowerCase();
+            let kind: CityMatKind = "plain";
+            if (mat.emissiveMap || (mat.emissive && mat.emissive.getHex() > 0)) {
+              kind = "neon";
+            } else if (
+              matName.includes("window") ||
+              matName.includes("glass") ||
+              matName.includes("light")
+            ) {
+              kind = "glass";
+            } else if (mat.map) {
+              // painted-on windows on atlas textures get the diffuse map
+              // in the emissive slot (one-time assignment, theme-independent)
+              mat.emissiveMap = mat.map;
+              kind = "atlas";
+            }
+            cityMats.push({
+              mat,
+              baseColor: mat.color.clone(),
+              baseEmissive: mat.emissive ? mat.emissive.clone() : new THREE.Color(0, 0, 0),
+              kind,
+            });
           }
         }
       });
@@ -1043,7 +1241,10 @@ function City() {
       createCustomPrototype(gltfLowRise.scene, false),
     ];
 
-    return { concreteMat: cMat, windowMats: wMats, prototypes: protos };
+    // apply the night-storm look immediately (first frame continues it)
+    applyCityTheme(cityMats, cMat, wMats, THEMES.storm);
+
+    return { concreteMat: cMat, windowMats: wMats, prototypes: protos, cityMats };
   }, [windowTexs, gltfAzadi, gltfMilad, gltfNY, gltfRealistic, gltfLowRise]);
 
   const groupRef = useRef<THREE.Group>(null);
@@ -1068,9 +1269,11 @@ function City() {
       const instance = proto.group.clone();
       instance.position.set(b.x, -1.98, b.z);
       instance.rotation.y = b.rotation;
-      // The Azadi gate stands far beyond every other building, so the
-      // monumental scale can't clip anything — grow it in place.
-      if (b.typeIndex === 0) instance.scale.setScalar(AZADI_SCALE);
+      // Milad (typeIndex 1) is the centre-road finale monument: grow it
+      // to tower over the boulevard. Azadi (typeIndex 0) keeps only a
+      // modest bump so it reads as a distant side landmark.
+      if (b.typeIndex === 1) instance.scale.setScalar(MILAD_SCALE);
+      else if (b.typeIndex === 0) instance.scale.setScalar(AZADI_SIDE_SCALE);
 
       // Add a foundation block under each building so it connects cleanly to the ground
       const foundationGeo = new THREE.BoxGeometry(
@@ -1130,15 +1333,24 @@ function City() {
       {/* 60 FPS Optimization: Use 4 moving lights instead of 25 static lights to prevent shader loop lag */}
       <MovingStreetLights />
 
+      {/* retints façades, glass and foundations when the theme changes */}
+      <CityThemeRig
+        records={cityMats}
+        concreteMat={concreteMat}
+        windowMats={windowMats}
+      />
+
       <primitive object={cityGroup} ref={groupRef} />
     </>
   );
 }
 
-/** Depth rain inside the corridor. */
+/** Depth rain inside the corridor — fades out with daylight themes. */
 function CorridorRain() {
   const ref = useRef<THREE.LineSegments>(null);
-  
+  const matRef = useRef<THREE.LineBasicMaterial>(null);
+  const live = useRef<ThemeParams>(createLiveTheme(getTheme()));
+
   // Reduced count for less visual clutter
   const count = 600;
 
@@ -1171,13 +1383,18 @@ function CorridorRain() {
   useEffect(() => () => geo.dispose(), [geo]);
 
   useFrame((_, delta) => {
-    const dt = Math.min(delta, 0.05);
+    const dt = Math.min(delta, 0.25);
+    const p = easeTheme(live.current, THEMES[getTheme()], Math.min(delta, 0.25));
+    if (matRef.current) {
+      matRef.current.opacity = 0.15 * p.rain;
+    }
+    if (p.rain <= 0.02) return; // dry air — freeze the streaks
     const arr = geo.getAttribute("position").array as Float32Array;
-    
+
     const elapsed = performance.now() / 1000;
     // Smoother, less extreme wind sway
-    const windBase = Math.sin(elapsed * 0.108) * 1.5; 
-    
+    const windBase = Math.sin(elapsed * 0.108) * 1.5;
+
     for (let i = 0; i < count; i++) {
       // Y fall
       arr[i * 6 + 1] -= velocities[i] * dt;
@@ -1209,7 +1426,8 @@ function CorridorRain() {
   return (
     <lineSegments ref={ref} geometry={geo} frustumCulled={false}>
       <lineBasicMaterial
-        color="#a0c2e8" 
+        ref={matRef}
+        color="#a0c2e8"
         transparent
         opacity={0.15} // Subtle opacity so it doesn't wash out the scene
         blending={THREE.AdditiveBlending}
@@ -1229,46 +1447,56 @@ export function CorridorScene({
   focusedIdx,
   lang,
   onOpen,
+  layout = homeLayout,
 }: {
   progressRef: React.RefObject<number>;
   focusedIdx: number;
   lang: string;
   onOpen: (item: TemplateItem) => void;
+  layout?: WalkLayout;
 }) {
+  const isAbout = layout.id === "about";
   // one shared animated texture + hover tracker for every painting's ring
   const border = useJourneyElectricBorder(PAINTING_W, PAINTING_H, focusedIdx);
   return (
-    <>
+    <WalkLayoutContext.Provider value={layout}>
       <CameraRig progressRef={progressRef} />
       <CorridorRain />
       {/* City streams in from the fog as each GLB resolves — the emblem,
-          rain and paintings never wait behind the ~28MB city. */}
+          rain and windows never wait behind the ~28MB city. */}
       <Suspense fallback={null}>
         <City />
       </Suspense>
       <GroundFog />
-      <HeadlineLayer lang={lang as Lang} />
-      {TEMPLATES.map((item, i) => (
-        <Painting
-          key={item.id}
-          item={item}
-          index={i}
-          lang={lang}
-          focused={focusedIdx === i}
-          onOpen={onOpen}
-          borderTexture={border.texture}
-          hoveredIdxRef={border.hoveredIdxRef}
-        />
-      ))}
-      <HtmlSection index={N} focused={focusedIdx === N} dir={lang === "fa" ? "rtl" : "ltr"}>
-        <TrustStats lang={lang as Lang} />
-      </HtmlSection>
-      <HtmlSection index={N + 1} focused={focusedIdx === N + 1} dir={lang === "fa" ? "rtl" : "ltr"}>
-        <ProcessTimeline lang={lang as Lang} />
-      </HtmlSection>
-      <HtmlSection index={N + 2} focused={focusedIdx === N + 2} dir={lang === "fa" ? "rtl" : "ltr"}>
-        <ContactSection lang={lang as Lang} />
-      </HtmlSection>
-    </>
+
+      {isAbout ? (
+        <AboutSceneFrames lang={lang as Lang} focusedIdx={focusedIdx} />
+      ) : (
+        <>
+          <HeadlineLayer lang={lang as Lang} />
+          {TEMPLATES.map((item, i) => (
+            <Painting
+              key={item.id}
+              item={item}
+              index={i}
+              lang={lang}
+              focused={focusedIdx === i}
+              onOpen={onOpen}
+              borderTexture={border.texture}
+              hoveredIdxRef={border.hoveredIdxRef}
+            />
+          ))}
+          <HtmlSection index={N} focused={focusedIdx === N} dir={lang === "fa" ? "rtl" : "ltr"}>
+            <TrustStats lang={lang as Lang} />
+          </HtmlSection>
+          <HtmlSection index={N + 1} focused={focusedIdx === N + 1} dir={lang === "fa" ? "rtl" : "ltr"}>
+            <ProcessTimeline lang={lang as Lang} />
+          </HtmlSection>
+          <HtmlSection index={N + 2} focused={focusedIdx === N + 2} dir={lang === "fa" ? "rtl" : "ltr"}>
+            <ContactSection lang={lang as Lang} />
+          </HtmlSection>
+        </>
+      )}
+    </WalkLayoutContext.Provider>
   );
 }

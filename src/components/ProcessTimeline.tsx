@@ -77,7 +77,7 @@ export default function ProcessTimeline({ lang }: { lang: Lang }) {
               className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white rtl:translate-x-1/2"
               style={{
                 left: dotLeft,
-                boxShadow: "0 0 12px 3px rgba(79,216,255,0.9), 0 0 30px 8px rgba(79,216,255,0.4)",
+                boxShadow: "0 0 12px 3px rgb(var(--accent) / 0.9), 0 0 30px 8px rgb(var(--accent) / 0.4)",
               }}
             />
           </div>
@@ -91,7 +91,7 @@ export default function ProcessTimeline({ lang }: { lang: Lang }) {
               className="absolute start-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white"
               style={{
                 top: dotTopMobile,
-                boxShadow: "0 0 12px 3px rgba(79,216,255,0.9), 0 0 30px 8px rgba(79,216,255,0.4)",
+                boxShadow: "0 0 12px 3px rgb(var(--accent) / 0.9), 0 0 30px 8px rgb(var(--accent) / 0.4)",
               }}
             />
           </div>
@@ -113,9 +113,9 @@ export default function ProcessTimeline({ lang }: { lang: Lang }) {
                         energized
                           ? {
                               boxShadow: [
-                                "0 0 0px rgba(79,216,255,0)",
-                                "0 0 26px rgba(79,216,255,0.45)",
-                                "0 0 12px rgba(79,216,255,0.2)",
+                                "0 0 0px rgb(var(--accent) / 0)",
+                                "0 0 26px rgb(var(--accent) / 0.45)",
+                                "0 0 12px rgb(var(--accent) / 0.2)",
                               ],
                             }
                           : {}
@@ -133,7 +133,7 @@ export default function ProcessTimeline({ lang }: { lang: Lang }) {
                           "h-6 w-6 transition-colors duration-700",
                           energized ? "text-electric" : "text-slate-500"
                         )}
-                        style={energized ? { filter: "drop-shadow(0 0 6px rgba(79,216,255,0.8))" } : undefined}
+                        style={energized ? { filter: "drop-shadow(0 0 6px rgb(var(--accent) / 0.8))" } : undefined}
                       >
                         <path d={stage.glyph} />
                       </svg>

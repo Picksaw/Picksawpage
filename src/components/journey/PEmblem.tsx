@@ -5,6 +5,15 @@ import { makePGeometry } from "../../lib/pGeometry";
 import { onLightning } from "../../lib/stormEvents";
 import { reportFrameCost } from "../../lib/perfProbe";
 import { ElectricPainter } from "../ui/ElectricBorder";
+import { getTheme, subscribeTheme } from "../../lib/themeStore";
+import {
+  THEMES,
+  createLiveTheme,
+  easeTheme,
+  rgbCss,
+  type ThemeParams,
+  type V3,
+} from "../../lib/themes";
 
 /**
  * PEmblem — the journey's opening layer, reimagined as a GHOST CARD.
@@ -82,7 +91,14 @@ function roundedRect(
   ctx.closePath();
 }
 
-function drawCardBase(ctx: CanvasRenderingContext2D) {
+/** weather-driven ink used by the printed card artwork */
+interface CardInk {
+  accent: V3;
+  soft: V3;
+  deep: V3;
+}
+
+function drawCardBase(ctx: CanvasRenderingContext2D, ink: CardInk) {
   const W = TPL_W;
   const H = TPL_H;
   const bg = ctx.createLinearGradient(0, 0, W, H);
@@ -93,7 +109,7 @@ function drawCardBase(ctx: CanvasRenderingContext2D) {
   ctx.fillRect(0, 0, W, H);
 
   // faint blueprint grid
-  ctx.strokeStyle = "rgba(79,216,255,0.05)";
+  ctx.strokeStyle = rgbCss(ink.accent, 0.05);
   ctx.lineWidth = 2;
   for (let x = 0; x <= W; x += 64) {
     ctx.beginPath();
@@ -109,7 +125,7 @@ function drawCardBase(ctx: CanvasRenderingContext2D) {
   }
 
   // corner ticks
-  ctx.strokeStyle = "rgba(159,232,255,0.85)";
+  ctx.strokeStyle = rgbCss(ink.soft, 0.85);
   ctx.lineWidth = 6;
   const t = 64;
   const corners: [number, number][] = [
@@ -128,33 +144,33 @@ function drawCardBase(ctx: CanvasRenderingContext2D) {
   }
 }
 
-function drawCardFront(ctx: CanvasRenderingContext2D) {
+function drawCardFront(ctx: CanvasRenderingContext2D, ink: CardInk) {
   const W = TPL_W;
-  drawCardBase(ctx);
+  drawCardBase(ctx, ink);
 
   // header
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = "#eaffff";
   ctx.font = "800 84px 'Sora Variable', sans-serif";
-  ctx.fillText("AmirEhsan", 72, 148);
-  ctx.fillStyle = "rgba(79,216,255,0.8)";
+  ctx.fillText("Amirehsan", 72, 148);
+  ctx.fillStyle = rgbCss(ink.accent, 0.8);
   ctx.font = "600 30px 'Sora Variable', sans-serif";
   ctx.fillText("W E B   T E M P L A T E   E N G I N E", 74, 196);
 
   // holo badge top-right
-  ctx.strokeStyle = "rgba(159,232,255,0.9)";
+  ctx.strokeStyle = rgbCss(ink.soft, 0.9);
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.arc(W - 96, 118, 52, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.fillStyle = "#bff1ff";
+  ctx.fillStyle = rgbCss(ink.soft);
   ctx.font = "800 56px 'Sora Variable', sans-serif";
   ctx.textAlign = "center";
   ctx.fillText("P", W - 96, 137);
 
   // divider
-  ctx.strokeStyle = "rgba(79,216,255,0.35)";
+  ctx.strokeStyle = rgbCss(ink.accent, 0.35);
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.moveTo(72, 232);
@@ -190,7 +206,7 @@ function drawCardFront(ctx: CanvasRenderingContext2D) {
     ctx.fillStyle = "rgba(148,180,210,0.75)";
     ctx.fillText(label, 72, sy);
     ctx.textAlign = "right";
-    ctx.fillStyle = "#4fd8ff";
+    ctx.fillStyle = rgbCss(ink.accent);
     ctx.fillText(val, W - 72, sy);
     ctx.textAlign = "left";
     sy += 52;
@@ -211,13 +227,13 @@ function drawCardFront(ctx: CanvasRenderingContext2D) {
   ctx.fillText("THE P", W - 72, 1336);
 }
 
-function drawCardBack(ctx: CanvasRenderingContext2D) {
+function drawCardBack(ctx: CanvasRenderingContext2D, ink: CardInk) {
   const W = TPL_W;
   const H = TPL_H;
-  drawCardBase(ctx);
+  drawCardBase(ctx, ink);
 
   // diagonal pattern
-  ctx.strokeStyle = "rgba(79,216,255,0.06)";
+  ctx.strokeStyle = rgbCss(ink.accent, 0.06);
   ctx.lineWidth = 2;
   for (let x = -H; x < W + H; x += 48) {
     ctx.beginPath();
@@ -230,8 +246,8 @@ function drawCardBack(ctx: CanvasRenderingContext2D) {
 
   // the P monogram
   ctx.textAlign = "center";
-  ctx.fillStyle = "#dff4ff";
-  ctx.shadowColor = "rgba(79,216,255,0.8)";
+  ctx.fillStyle = rgbCss(ink.soft);
+  ctx.shadowColor = rgbCss(ink.accent, 0.8);
   ctx.shadowBlur = 46;
   ctx.font = "800 420px 'Sora Variable', sans-serif";
   
@@ -242,25 +258,21 @@ function drawCardBack(ctx: CanvasRenderingContext2D) {
   ctx.fillText("AMIREHSAN — GHOST CARD", W / 2, 1388);
 }
 
-function makeRampTexture(): THREE.Texture {
-  const c = document.createElement("canvas");
-  c.width = 256;
-  c.height = 1;
-  const ctx = c.getContext("2d")!;
+/** Foil tone ramp, baked from the weather's holo palette. The dark
+ *  stops are scaled-down versions of holoDeep so night keeps its navy
+ *  body while dawn/dusk foil goes bronze / burnt orange / wine. */
+function paintRamp(ctx: CanvasRenderingContext2D, ink: CardInk) {
+  const scale = (c: V3, f: number): V3 => [c[0] * f, c[1] * f, c[2] * f];
   const g = ctx.createLinearGradient(0, 0, 256, 0);
-  g.addColorStop(0, "#0a1430");
-  g.addColorStop(0.22, "#0e3f6e");
-  g.addColorStop(0.45, "#4fd8ff");
-  g.addColorStop(0.6, "#c9f4ff");
-  g.addColorStop(0.72, "#4fd8ff");
-  g.addColorStop(0.9, "#123a5e");
-  g.addColorStop(1, "#0a1430");
+  g.addColorStop(0, rgbCss(scale(ink.deep, 0.16)));
+  g.addColorStop(0.22, rgbCss(scale(ink.deep, 0.62)));
+  g.addColorStop(0.45, rgbCss(ink.accent));
+  g.addColorStop(0.6, rgbCss(ink.soft));
+  g.addColorStop(0.72, rgbCss(ink.accent));
+  g.addColorStop(0.9, rgbCss(scale(ink.deep, 0.5)));
+  g.addColorStop(1, rgbCss(scale(ink.deep, 0.16)));
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 256, 1);
-  const tex = new THREE.CanvasTexture(c);
-  tex.magFilter = THREE.LinearFilter;
-  tex.minFilter = THREE.LinearFilter;
-  return tex;
 }
 
 /** iridescent swirl pattern — drives the foil tone lookup across the card */
@@ -364,9 +376,11 @@ function makeRadialSprite(): THREE.Texture {
   c.width = c.height = 128;
   const cx = c.getContext("2d")!;
   const g = cx.createRadialGradient(64, 64, 0, 64, 64, 64);
-  g.addColorStop(0, "rgba(230, 248, 255, 1)");
-  g.addColorStop(0.25, "rgba(159, 232, 255, 0.75)");
-  g.addColorStop(1, "rgba(79, 216, 255, 0)");
+  // Neutral white — the aura material tints it with the theme accent
+  // (a pre-cyan sprite would be crushed to black under a warm multiply).
+  g.addColorStop(0, "rgba(255, 255, 255, 1)");
+  g.addColorStop(0.3, "rgba(255, 255, 255, 0.7)");
+  g.addColorStop(1, "rgba(255, 255, 255, 0)");
   cx.fillStyle = g;
   cx.fillRect(0, 0, 128, 128);
   const tex = new THREE.CanvasTexture(c);
@@ -405,6 +419,7 @@ uniform vec4 uWindow;
 uniform float uTime;
 uniform float uFade;
 uniform bool uIsBack;
+uniform vec3 uAccent;
 
 varying vec2 vUv;
 varying vec3 vNormal;
@@ -454,7 +469,7 @@ void main() {
     vec3 g = sampleGhost(wuv);
     vec3 bloom = blurGhost(wuv, 1.8) + blurGhost(wuv, 5.0) * 0.6;
     vec3 col = g + bloom * 0.9;
-    col += f * vec3(0.3, 0.7, 0.95) * 0.55;
+    col += f * uAccent * 0.55;
     float scan = sin(vUv.y * 620.0) * 0.5 + 0.5;
     col *= 0.9 + scan * 0.1;
     gl_FragColor = vec4(col, 1.0);
@@ -498,6 +513,9 @@ void main() {
 const GHOST_FRAG = /* glsl */ `
 uniform float uTime;
 uniform vec2 uResolution;
+uniform vec3 uDeep;
+uniform vec3 uBright;
+uniform vec3 uBg;
 
 varying vec3 vNormal;
 varying vec3 vWorld;
@@ -533,7 +551,7 @@ float fbm(vec2 x) {
 }
 
 void main() {
-  vec3 bg = vec3(0.012, 0.022, 0.045);
+  vec3 bg = uBg;
   vec2 screenUv = gl_FragCoord.xy / uResolution.xy;
   vec2 p = screenUv * 9.0;
   float smoke = fbm(p + vec2(uTime * 0.22, -uTime * 0.14));
@@ -543,8 +561,8 @@ void main() {
   float fres = pow(1.0 - max(dot(n, eye), 0.0), 2.4);
 
   float tone = smoke * 0.8 + fres * 1.0;
-  vec3 deep = vec3(0.02, 0.32, 0.5);
-  vec3 bright = vec3(0.55, 0.88, 1.0);
+  vec3 deep = uDeep;
+  vec3 bright = uBright;
   vec3 col = mix(deep, bright, clamp(tone, 0.0, 1.1));
   float alpha = smoothstep(0.3, 0.55, tone);
   col = mix(bg, col, alpha);
@@ -684,6 +702,8 @@ export default function PEmblem() {
   const ringFlash = useRef(0);
   const nextStrike = useRef(1.4);
   const clock = useRef(0);
+  // atmosphere accent (the holographic aura retints at dawn/dusk)
+  const liveTheme = useRef<ThemeParams>(createLiveTheme(getTheme()));
   const formation = useRef(0);
   // Perf gating — the card is off-screen for ~85% of the walk; none of
   // its heavy work (RTT pass, border canvas, texture uploads, strikes)
@@ -691,6 +711,10 @@ export default function PEmblem() {
   const cardFadeRef = useRef(0);
   const ghostFrame = useRef(0);
   const borderFrame = useRef(0);
+  // printed artwork (faces + foil ramp) is baked; while an atmosphere
+  // crossfade runs it is re-baked at ~11 fps, then once more at rest.
+  const artDirtyUntil = useRef(0);
+  const lastArtAt = useRef(0);
 
   const pointer = useRef({ x: 0, y: 0 });
   const eased = useRef({ x: 0, y: 0 });
@@ -710,6 +734,9 @@ export default function PEmblem() {
       uniforms: {
         uTime: { value: 0 },
         uResolution: { value: new THREE.Vector2(RTT_SIZE, RTT_SIZE) },
+        uDeep: { value: new THREE.Vector3(0.02, 0.32, 0.5) },
+        uBright: { value: new THREE.Vector3(0.55, 0.88, 1) },
+        uBg: { value: new THREE.Vector3(0.012, 0.022, 0.045) },
       },
     });
     const pMesh = new THREE.Mesh(makePGeometry(1.95 / 96), mat);
@@ -742,11 +769,10 @@ export default function PEmblem() {
     backCanvas.height = TPL_H;
     const backCtx = backCanvas.getContext("2d")!;
 
-    const draw = () => {
-      drawCardFront(frontCtx);
-      drawCardBack(backCtx);
-    };
-    draw();
+    const rampCanvas = document.createElement("canvas");
+    rampCanvas.width = 256;
+    rampCanvas.height = 1;
+    const rampCtx = rampCanvas.getContext("2d")!;
 
     const frontTex = new THREE.CanvasTexture(frontCanvas);
     frontTex.colorSpace = THREE.SRGBColorSpace;
@@ -755,13 +781,34 @@ export default function PEmblem() {
     backTex.colorSpace = THREE.SRGBColorSpace;
     backTex.anisotropy = 8;
 
-    const rampTex = makeRampTexture();
+    const rampTex = new THREE.CanvasTexture(rampCanvas);
+    rampTex.magFilter = THREE.LinearFilter;
+    rampTex.minFilter = THREE.LinearFilter;
     const holoTex = makeHoloTexture();
     const noiseTex = makeNoiseTexture();
     const sparkleTex = makeSparkleTexture();
 
+    // Repaint every ink-driven surface for an atmosphere (card faces +
+    // foil ramp). Called once at mount in the saved theme and then
+    // throttled while a theme crossfade is in flight.
+    const inkOf = (p: ThemeParams): CardInk => ({
+      accent: p.accent,
+      soft: p.accentSoft,
+      deep: p.holoDeep,
+    });
+    const repaint = (p: ThemeParams) => {
+      const ink = inkOf(p);
+      drawCardFront(frontCtx, ink);
+      drawCardBack(backCtx, ink);
+      paintRamp(rampCtx, ink);
+      frontTex.needsUpdate = true;
+      backTex.needsUpdate = true;
+      rampTex.needsUpdate = true;
+    };
+    repaint(THEMES[getTheme()]);
+
     return {
-      draw,
+      repaint,
       frontCanvas,
       backCanvas,
       frontTex,
@@ -785,6 +832,7 @@ export default function PEmblem() {
       uTime: { value: 0 },
       uFade: { value: 0 },
       uIsBack: { value: false },
+      uAccent: { value: new THREE.Vector3(0.3, 0.85, 1) },
     }),
     [assets, ghost],
   );
@@ -800,6 +848,7 @@ export default function PEmblem() {
       uTime: { value: 0 },
       uFade: { value: 0 },
       uIsBack: { value: true },
+      uAccent: { value: new THREE.Vector3(0.3, 0.85, 1) },
     }),
     [assets, ghost],
   );
@@ -848,9 +897,14 @@ export default function PEmblem() {
     };
     window.addEventListener("pointermove", onMove, { passive: true });
     const offBolt = onLightning(() => strike(true));
+    // keep the baked artwork re-baking through a weather crossfade
+    const offTheme = subscribeTheme(() => {
+      artDirtyUntil.current = performance.now() + 2800;
+    });
     return () => {
       window.removeEventListener("pointermove", onMove);
       offBolt();
+      offTheme();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -859,9 +913,7 @@ export default function PEmblem() {
     let alive = true;
     document.fonts?.ready.then(() => {
       if (!alive) return;
-      assets.draw();
-      assets.frontTex.needsUpdate = true;
-      assets.backTex.needsUpdate = true;
+      assets.repaint(THEMES[getTheme()]);
     });
     return () => {
       alive = false;
@@ -947,7 +999,10 @@ export default function PEmblem() {
   };
 
   useFrame((state, delta) => {
-    const dt = Math.min(delta, 0.05);
+    // Real-time clock (anti-jump ceiling only): the card's spin-in
+    // formation and strike cadence must track wall time on slow software
+    // renderers where a 50 ms cap would run the intro at 1/5 speed.
+    const dt = Math.min(delta, 0.25);
     clock.current += dt;
     const cam = state.camera as THREE.PerspectiveCamera;
 
@@ -1061,10 +1116,75 @@ export default function PEmblem() {
       backMat.current.uniforms.uFade.value = fade;
     }
 
-    // ── aura behind the card ──
+    // ── atmosphere: the whole card retints with the weather ──
+    // hologram smoke colors, the RTT void + orb, the foil fresnel on
+    // both faces and the aura all follow the eased live theme.
+    const tp = easeTheme(liveTheme.current, THEMES[getTheme()], Math.min(delta, 0.25));
+    const ghostU = ghost.mat.uniforms;
+    (ghostU.uDeep.value as THREE.Vector3).set(
+      tp.holoDeep[0] / 255,
+      tp.holoDeep[1] / 255,
+      tp.holoDeep[2] / 255,
+    );
+    (ghostU.uBright.value as THREE.Vector3).set(
+      tp.holoBright[0] / 255,
+      tp.holoBright[1] / 255,
+      tp.holoBright[2] / 255,
+    );
+    // void behind the smoke = a near-black tint of the deep holo tone
+    // (pageBg is a CSS scrim colour and too blue for the ghost window)
+    const voidR = Math.max(0, tp.holoDeep[0] * 0.13) / 255;
+    const voidG = Math.max(0, tp.holoDeep[1] * 0.13) / 255;
+    const voidB = Math.max(0, tp.holoDeep[2] * 0.13) / 255;
+    (ghostU.uBg.value as THREE.Vector3).set(voidR, voidG, voidB);
+    (ghost.scene.background as THREE.Color).setRGB(
+      voidR,
+      voidG,
+      voidB,
+      THREE.SRGBColorSpace,
+    );
+    (ghost.orb.material as THREE.MeshBasicMaterial).color.setRGB(
+      tp.holoBright[0] / 255,
+      tp.holoBright[1] / 255,
+      tp.holoBright[2] / 255,
+      THREE.SRGBColorSpace,
+    );
+    const setFaceAccent = (m: THREE.ShaderMaterial | null) => {
+      if (!m) return;
+      (m.uniforms.uAccent.value as THREE.Vector3).set(
+        tp.accent[0] / 255,
+        tp.accent[1] / 255,
+        tp.accent[2] / 255,
+      );
+    };
+    setFaceAccent(frontMat.current);
+    setFaceAccent(backMat.current);
+
     if (auraMat.current) {
+      auraMat.current.color.setRGB(
+        tp.accent[0] / 255,
+        tp.accent[1] / 255,
+        tp.accent[2] / 255,
+        THREE.SRGBColorSpace,
+      );
       auraMat.current.opacity =
         (0.14 + c * 0.22 + flash * 0.4) * fEase * cardFade;
+    }
+    // the (off-screen-ready) border painter ink follows too
+    (border.painter as unknown as { opts: { color: string } }).opts.color =
+      rgbCss(tp.accent);
+
+    // re-bake the printed artwork + foil ramp during a crossfade
+    if (artDirtyUntil.current) {
+      const nowMs = performance.now();
+      const throttled =
+        cardFade > 0.02 && nowMs - lastArtAt.current > 90;
+      const finalize = nowMs >= artDirtyUntil.current;
+      if (throttled || finalize) {
+        assets.repaint(finalize ? THEMES[getTheme()] : tp);
+        lastArtAt.current = nowMs;
+        if (finalize) artDirtyUntil.current = 0;
+      }
     }
 
     // ── the lightning border — flares on strikes ──
@@ -1107,8 +1227,14 @@ export default function PEmblem() {
       }
     }
 
-    // ── own strike cadence — quickens as the card charges ──
-    if (formation.current >= 1 && clock.current >= nextStrike.current && cardFade > 0.02) {
+    // ── own strike cadence — quickens as the card charges.
+    // The card only crackles in storm weather; dawn/dusk stay calm.
+    if (
+      formation.current >= 1 &&
+      clock.current >= nextStrike.current &&
+      cardFade > 0.02 &&
+      getTheme() === "storm"
+    ) {
       strike(false);
       if (Math.random() < 0.3) {
         window.setTimeout(() => strike(false), 90 + Math.random() * 120);

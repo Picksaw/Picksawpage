@@ -9,6 +9,8 @@ import {
 } from "react";
 import { soundscape } from "./soundscape";
 import { onLightning, onStormLevel } from "../lib/stormEvents";
+import { getTheme, subscribeTheme } from "../lib/themeStore";
+import { THEMES } from "../lib/themes";
 
 interface SoundApi {
   stormOn: boolean;
@@ -33,9 +35,15 @@ export function SoundProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const offBolt = onLightning((intensity) => soundscape.thunder(intensity));
     const offLevel = onStormLevel((level) => soundscape.setStormLevel(level));
+    // dry daylight themes silence the rain/thunder channel
+    const applyWeather = () =>
+      soundscape.setWeatherFactor(THEMES[getTheme()].rain);
+    applyWeather();
+    const offTheme = subscribeTheme(applyWeather);
     return () => {
       offBolt();
       offLevel();
+      offTheme();
     };
   }, []);
 

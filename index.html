@@ -1,19 +1,188 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
     <!-- viewport-fit=cover: draw under the notch/home-bar so the storm
          canvas is edge-to-edge; fixed chrome pads itself with safe-area -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="Picksaw — videos, music, and visuals uploaded in the storm." />
-    <meta name="theme-color" content="#020617" />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
+
+    <!-- ═══════════════ PRIMARY SEO ═══════════════ -->
+    <title>Picksaw by Amirehsan Ashoori — Cinematic Websites, 3D Worlds, AI Art &amp; Music</title>
+    <meta
+      name="description"
+      content="PICKSAW is the multidisciplinary creative identity of Amirehsan Ashoori (امیراحسان عاشوری) — cinematic website templates and interactive 3D websites, Unreal Engine environments, AI art and video, music, sound design, creative coding and visual branding. Bilingual Persian (فارسی) + English. Verda, Lumina, Clarity, Pulse, Aurora, Lumen templates and the Stormblade game."
+    />
+    <meta
+      name="keywords"
+      content="Picksaw, PICKSAW, Amirehsan Ashoori, Amir Ehsan Ashoori, امیراحسان عاشوری, creative developer Iran, multidisciplinary artist, cinematic website, interactive 3D website, WebGL, React Three Fiber, website templates, Unreal Engine, 3D environment, AI art, AI video, music production, rap, sound design, creative coding, visual branding, digital storytelling, قالب وب‌سایت, قالب سایت, طراحی سایت سه‌بعدی, Verda, Lumina, Clarity, Pulse, Aurora, Lumen, Stormblade"
+    />
+    <meta name="author" content="Amirehsan Ashoori" />
+    <meta name="creator" content="Amirehsan Ashoori — PICKSAW" />
+    <meta name="publisher" content="Picksaw" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#05070f" />
+    <meta name="geo.region" content="IR" />
+    <meta name="language" content="English" />
+    <link rel="canonical" href="https://picksaw.ir/" />
+    <!-- Search-engine verification: when Google Search Console / Bing
+         Webmaster Tools give you a token, paste it here, e.g.
+    <meta name="google-site-verification" content="TOKEN" />
+    <meta name="msvalidate.01" content="TOKEN" />
+    -->
+
+    <!-- ═══════════════ OPEN GRAPH ═══════════════ -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Picksaw" />
+    <meta property="og:url" content="https://picksaw.ir/" />
+    <meta property="og:title" content="PICKSAW by Amirehsan Ashoori — Cinematic Web, 3D, AI Art & Music" />
+    <meta
+      property="og:description"
+      content="PICKSAW is the multidisciplinary creative identity of Amirehsan Ashoori (امیراحسان عاشوری): cinematic websites, 3D worlds and Unreal Engine scenes, AI art & video, music and sound design, creative coding and visual branding."
+    />
+    <meta property="og:image" content="https://picksaw.ir/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Picksaw — cinematic website templates by Amirehsan Ashoori" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="fa_IR" />
+
+    <!-- ═══════════════ TWITTER / X CARD ═══════════════ -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="PICKSAW by Amirehsan Ashoori — Cinematic Web, 3D, AI Art & Music" />
+    <meta
+      name="twitter:description"
+      content="The multidisciplinary creative world of Amirehsan Ashoori: cinematic websites & templates, Unreal Engine 3D, AI art/video, music, creative coding and branding. Persian + English."
+    />
+    <meta name="twitter:image" content="https://picksaw.ir/og-image.png" />
+    <meta name="twitter:image:alt" content="Picksaw brand mark and wordmark on a dark storm-gradient card" />
+
+    <!-- ═══════════════ ICONS / PWA ═══════════════ -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- ═══════════════ STRUCTURED DATA (no-JS crawlers) ═══════════════
+         Explicitly links the Person (Amirehsan Ashoori) to the brand
+         (Picksaw) so Google and AI assistants associate the two. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": ["Organization", "ProfessionalService"],
+          "@id": "https://picksaw.ir/#organization",
+          "name": "Picksaw",
+          "alternateName": ["PICKSAW", "Picksaw Studio", "Picksaw Templates", "پیکساو"],
+          "url": "https://picksaw.ir/",
+          "logo": { "@type": "ImageObject", "url": "https://picksaw.ir/icon-512.png", "width": 512, "height": 512 },
+          "image": "https://picksaw.ir/og-image.png",
+          "description": "PICKSAW is the creative identity of Amirehsan Ashoori — a multidisciplinary studio uniting technology, design, art, music and storytelling through cinematic websites and templates, interactive 3D worlds (Three.js and Unreal Engine), AI art and video, music and sound design, creative coding and visual branding. Bilingual Persian + English, based in Iran.",
+          "slogan": "Where technology, design, art, music and storytelling meet.",
+          "founder": { "@id": "https://picksaw.ir/#amir" },
+          "knowsLanguage": ["en", "fa"],
+          "address": { "@type": "PostalAddress", "addressCountry": "IR" },
+          "areaServed": "Worldwide",
+          "knowsAbout": ["Web design", "Front-end development", "UI/UX design", "3D environment creation", "Unreal Engine", "Creative coding", "AI art", "AI video", "Digital illustration", "Motion design", "Music production", "Rap and lyric writing", "Sound design", "Visual branding", "Concept development", "Digital storytelling"],
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "telephone": "+989380215823",
+            "contactType": "customer service",
+            "url": "https://wa.me/989380215823",
+            "availableLanguage": ["English", "Persian"],
+            "areaServed": "Worldwide"
+          },
+          "sameAs": ["https://www.instagram.com/picksawm/", "https://wa.me/989380215823"]
+        },
+        {
+          "@type": "Person",
+          "@id": "https://picksaw.ir/#amir",
+          "name": "Amirehsan Ashoori",
+          "alternateName": ["امیراحسان عاشوری", "Amir Ehsan Ashoori", "AmirEhsan Ashoori", "Amir Ehsan Ashouri"],
+          "url": "https://picksaw.ir/",
+          "jobTitle": "Founder, Creative Developer, Designer & Multidisciplinary Artist",
+          "description": "Amirehsan Ashoori (امیراحسان عاشوری) is the creator behind PICKSAW — a multidisciplinary creative identity that brings together technology, design, art, music and storytelling. Working from Iran, he builds across every medium an idea needs: modern websites and premium cinematic templates, 3D art and Unreal Engine environments, AI art and video, music production, rap and sound design, creative coding and visual branding. His style blends cyberpunk futurism, Persian art and culture, cinematic lighting, architecture, minimalism and symbolic storytelling in memorable, emotionally atmospheric experiences.",
+          "nationality": { "@type": "Country", "name": "Iran" },
+          "knowsLanguage": ["English", "Persian"],
+          "knowsAbout": ["Web design", "Front-end development", "UI/UX design", "3D environment creation", "Unreal Engine", "Creative coding", "AI art", "AI video", "Digital illustration", "Motion design", "Music production", "Rap and lyric writing", "Sound design", "Visual branding", "Concept development", "Digital storytelling", "WebGL and Three.js", "React", "GLSL shaders", "Procedural generation", "Real-time rendering"],
+          "founderOf": { "@id": "https://picksaw.ir/#organization" },
+          "owns": { "@id": "https://picksaw.ir/#organization" },
+          "worksFor": { "@id": "https://picksaw.ir/#organization" },
+          "sameAs": ["https://www.instagram.com/picksawm/", "https://wa.me/989380215823"]
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://picksaw.ir/#website",
+          "url": "https://picksaw.ir/",
+          "name": "Picksaw",
+          "description": "PICKSAW — the multidisciplinary creative identity of Amirehsan Ashoori: cinematic website templates, interactive 3D experiences, AI art, music and visual storytelling.",
+          "inLanguage": [
+            { "@type": "Language", "name": "English", "alternateName": "en" },
+            { "@type": "Language", "name": "Persian", "alternateName": "fa" }
+          ],
+          "publisher": { "@id": "https://picksaw.ir/#organization" },
+          "author": { "@id": "https://picksaw.ir/#amir" }
+        },
+        {
+          "@type": "WebPage",
+          "@id": "https://picksaw.ir/#webpage",
+          "url": "https://picksaw.ir/",
+          "name": "Picksaw — Cinematic Website Templates & Interactive 3D Websites by Amirehsan Ashoori",
+          "isPartOf": { "@id": "https://picksaw.ir/#website" },
+          "about": [{ "@id": "https://picksaw.ir/#organization" }, { "@id": "https://picksaw.ir/#amir" }],
+          "inLanguage": "en"
+        },
+        {
+          "@type": "ItemList",
+          "name": "Picksaw website templates",
+          "numberOfItems": 6,
+          "itemListElement": [
+            { "@type": "ListItem", "position": 1, "item": { "@type": "Product", "name": "Verda — Picksaw website template", "url": "https://verda.picksaw.ir/", "brand": { "@id": "https://picksaw.ir/#organization" }, "creator": { "@id": "https://picksaw.ir/#amir" } } },
+            { "@type": "ListItem", "position": 2, "item": { "@type": "Product", "name": "Lumina — Picksaw website template", "url": "https://lumina.picksaw.ir/", "brand": { "@id": "https://picksaw.ir/#organization" }, "creator": { "@id": "https://picksaw.ir/#amir" } } },
+            { "@type": "ListItem", "position": 3, "item": { "@type": "Product", "name": "Clarity — Picksaw website template", "url": "https://clarity.picksaw.ir/", "brand": { "@id": "https://picksaw.ir/#organization" }, "creator": { "@id": "https://picksaw.ir/#amir" } } },
+            { "@type": "ListItem", "position": 4, "item": { "@type": "Product", "name": "Pulse — Picksaw website template", "url": "https://pulse.picksaw.ir/", "brand": { "@id": "https://picksaw.ir/#organization" }, "creator": { "@id": "https://picksaw.ir/#amir" } } },
+            { "@type": "ListItem", "position": 5, "item": { "@type": "Product", "name": "Aurora — Picksaw website template", "url": "https://aurora.picksaw.ir/", "brand": { "@id": "https://picksaw.ir/#organization" }, "creator": { "@id": "https://picksaw.ir/#amir" } } },
+            { "@type": "ListItem", "position": 6, "item": { "@type": "Product", "name": "Lumen — Picksaw website template", "url": "https://lumen.picksaw.ir/", "brand": { "@id": "https://picksaw.ir/#organization" }, "creator": { "@id": "https://picksaw.ir/#amir" } } }
+          ]
+        },
+        {
+          "@type": "VideoGame",
+          "@id": "https://stormblade.picksaw.ir/#game",
+          "name": "Stormblade",
+          "url": "https://stormblade.picksaw.ir/",
+          "author": { "@id": "https://picksaw.ir/#amir" },
+          "publisher": { "@id": "https://picksaw.ir/#organization" },
+          "genre": "Action",
+          "playMode": "SinglePlayer",
+          "applicationCategory": "Game"
+        }
+      ]
+    }
+    </script>
+
+    <!-- ═══════════════ DISCOVERY ═══════════════ -->
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+    <link rel="me" href="https://www.instagram.com/picksawm/" />
+    <meta name="ai-content-declaration" content="PICKSAW is created and owned by Amirehsan Ashoori (امیراحسان عاشوری), a multidisciplinary creator based in Iran working across web design and development, 3D art and Unreal Engine, AI art and video, music and sound, creative coding and visual branding." />
+    <meta property="profile:first_name" content="Amirehsan" />
+    <meta property="profile:last_name" content="Ashoori" />
+
     <!-- Perf: no remote fonts — Sora + Vazirmatn ship as local
-         @fontsource variable fonts; Inter was a dead external request. -->
-    <title>Picksaw</title>
+         @fontsource variable fonts. -->
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="max-width:640px;margin:64px auto;padding:0 24px;font-family:system-ui,sans-serif;color:#eaf6ff;background:#05070f">
+        <h1>PICKSAW — Amirehsan Ashoori</h1>
+        <p>PICKSAW is the creative identity of <strong>Amirehsan Ashoori</strong> (امیراحسان عاشوری), a multidisciplinary creator working across technology, design, art, music and storytelling: cinematic websites and premium templates, 3D art and Unreal Engine environments, AI art and video, music and sound design, creative coding and visual branding.</p>
+        <p>Cinematic website templates (Verda, Lumina, Clarity, Pulse, Aurora, Lumen), an interactive 3D portfolio and the Stormblade game — bilingual Persian and English.</p>
+        <p>Contact: <a href="https://www.instagram.com/picksawm/" style="color:#4fd8ff">Instagram @picksawm</a> · <a href="https://wa.me/989380215823" style="color:#4fd8ff">WhatsApp +98 938 021 5823</a></p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

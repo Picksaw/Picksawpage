@@ -1,0 +1,19 @@
+{
+  "name": "PICKSAW — Amirehsan Ashoori · Cinematic Web, 3D, AI Art & Music",
+  "short_name": "Picksaw",
+  "description": "PICKSAW is the multidisciplinary creative identity of Amirehsan Ashoori (امیراحسان عاشوری): cinematic website templates, interactive 3D and Unreal Engine scenes, AI art & video, music and sound design, creative coding and visual branding. Bilingual Persian + English.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "lang": "en",
+  "dir": "ltr",
+  "display": "standalone",
+  "background_color": "#05070f",
+  "theme_color": "#05070f",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

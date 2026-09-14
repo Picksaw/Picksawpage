@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Lang } from "../config/siteTexts";
 import { summarize, useAssetProgress, type AssetKey } from "../lib/assetProgress";
+import { getTheme } from "../lib/themeStore";
 
 /**
  * Loader — premium intro, now with DETAILED real loading.
@@ -182,9 +183,9 @@ export default function Loader({
           className="fixed inset-0 z-[100] flex items-center justify-center bg-[#04060c]"
           exit={{ opacity: 0, transition: { duration: 0.55, ease: "easeInOut" } }}
         >
-          {/* rain */}
+          {/* rain — storm atmosphere only */}
           <div className="absolute inset-0 overflow-hidden">
-            {phase >= 1 &&
+            {phase >= 1 && getTheme() === "storm" &&
               rainLines.map((r, i) => (
                 <span
                   key={i}
@@ -209,18 +210,18 @@ export default function Loader({
               height="120"
               viewBox="0 0 120 120"
               fill="none"
-              className={phase >= 3 ? "drop-shadow-[0_0_28px_rgba(159,232,255,0.9)]" : ""}
+              className={phase >= 3 ? "drop-shadow-[0_0_28px_rgb(var(--accent-soft)/0.9)]" : ""}
               style={{
                 filter:
                   phase >= 2
-                    ? "drop-shadow(0 0 14px rgba(79,216,255,0.55))"
-                    : "drop-shadow(0 0 0 rgba(79,216,255,0))",
+                    ? "drop-shadow(0 0 14px rgb(var(--accent) / 0.55))"
+                    : "drop-shadow(0 0 0 rgb(var(--accent) / 0))",
                 transition: "filter 0.4s ease",
               }}
             >
               <path
                 d="M38 96V26h26c11 0 19 8 19 18s-8 18-19 18H38"
-                stroke="#4fd8ff"
+                stroke="rgb(var(--accent))"
                 strokeWidth="5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -230,7 +231,7 @@ export default function Loader({
               />
               {/* spark dot travelling the stroke */}
               {phase === 2 && (
-                <circle r="4" fill="#eafcff">
+                <circle r="4" fill="rgb(var(--accent-soft))">
                   <animateMotion dur="0.8s" fill="freeze" path="M38 96V26h26c11 0 19 8 19 18s-8 18-19 18H38" />
                 </circle>
               )}
@@ -291,8 +292,8 @@ export default function Loader({
             )}
           </div>
 
-          {/* lightning strike */}
-          {phase >= 3 && (
+          {/* lightning strike — storm atmosphere only */}
+          {phase >= 3 && getTheme() === "storm" && (
             <>
               <motion.div
                 className="absolute inset-0 bg-[radial-gradient(60%_50%_at_50%_20%,rgba(200,230,255,0.5),transparent)]"
@@ -310,7 +311,7 @@ export default function Loader({
                   initial={{ pathLength: 0, opacity: 1 }}
                   animate={{ pathLength: 1, opacity: 0 }}
                   transition={{ duration: 0.45, ease: "easeOut" }}
-                  style={{ filter: "drop-shadow(0 0 8px rgba(159,232,255,1))" }}
+                  style={{ filter: "drop-shadow(0 0 8px rgb(var(--accent-soft) / 1))" }}
                 />
               </svg>
             </>

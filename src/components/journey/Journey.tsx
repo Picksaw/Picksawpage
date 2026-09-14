@@ -10,6 +10,7 @@ import {
 import { SITE_TEXTS, type Lang } from "../../config/siteTexts";
 import { TEMPLATES, type TemplateItem } from "../../config/templatesConfig";
 import PEmblem from "./PEmblem";
+import ThemeRig from "./ThemeRig";
 import AssetPrimer from "./AssetPrimer";
 import {
   CorridorScene,
@@ -24,6 +25,7 @@ import MagneticButton from "../ui/MagneticButton";
 import { useSound } from "../../audio/SoundProvider";
 import { getLenis } from "../../lib/lenis";
 import { registerPerfGl } from "../../lib/perfProbe";
+import { useThemeId } from "../../lib/themeStore";
 
 /**
  * Journey — Picksaw's 3D layers.
@@ -52,6 +54,8 @@ export default function Journey({
   introDone?: boolean;
 }) {
   const t = SITE_TEXTS[lang];
+  const themeId = useThemeId();
+  const scrollHint = themeId === "storm" ? t.scrollHint : t.scrollHintDay;
   const { blip } = useSound();
   const spacerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef(0);
@@ -209,11 +213,8 @@ export default function Journey({
             onIncline={() => setDpr((d) => Math.min(DPR_MAX, +(d + 0.1).toFixed(2)))}
             onFallback={() => setDpr(DPR_MIN)}
           />
-          <fog attach="fog" args={["#06080f", 12, 66]} />
-          <ambientLight intensity={0.5} />
-          <directionalLight position={[-3, 5, 4]} intensity={1.4} color="#eaf6ff" />
-          <pointLight position={[2.6, -0.6, 3.4]} intensity={22} color="#4fd8ff" />
-          <pointLight position={[-3, -2.4, -2]} intensity={9} color="#2a6cff" />
+          {/* fog + lighting retime with the selected atmosphere theme */}
+          <ThemeRig />
 
           <PEmblem />
           <CorridorScene
@@ -273,7 +274,7 @@ export default function Journey({
             className="pointer-events-none fixed inset-x-0 safe-bottom-lg z-10 flex flex-col items-center gap-2"
           >
             <span className="text-[10px] font-medium uppercase tracking-[0.24em] text-slate-400">
-              {t.scrollHint}
+              {scrollHint}
             </span>
             <span className="flex h-10 w-6 items-start justify-center rounded-full border border-white/15 p-1.5">
               <span className="h-2 w-1 animate-scroll-dot rounded-full bg-electric/80" />
