@@ -39,6 +39,7 @@ import {
   layerOpacity,
   homeLayout,
   aboutLayout,
+  FINALE_STAND,
   type WalkLayout,
 } from "./path";
 import { WalkLayoutContext, useWalkLayout } from "./walkContext";
@@ -75,9 +76,48 @@ const FOCUS_DIST = 4.2;
  *  fills ~55% of the view height, pod and spire both readable, towering
  *  over every side building. */
 const MILAD_SCALE = 2.0;
-/** Azadi is demoted to a distant side boulevard landmark; ×2 keeps it
- *  recognisable (~5.7 tall) without competing with Milad. */
-const AZADI_SIDE_SCALE = 2;
+/** Azadi is the *background* monument: it takes one slot in the deepest
+ *  side row, so it sits on the skyline behind the boulevard instead of
+ *  competing with Milad. Its GLTF is squat for a tower (the real one is
+ *  45 m tall × ~63 m wide), so the grid auto-fit hands us a 3.2 × 2.4
+ *  shell — shorter than the 5.95-tall skyline blocks! ×3 lifts it to
+ *  ~7.1: clear of every roofline on the boulevard, while Milad (~27)
+ *  still owns three times the height and the centre of the frame. */
+const AZADI_BACK_SCALE = 3.0;
+/** Azadi's grown footprint (~9.6 × 8.2) would interpenetrate the 3.2-wide
+ *  blocks on the 6-unit grid, so every slot closer than this to the tower
+ *  is dropped — it ends up standing in a small plaza, like the real one. */
+const AZADI_CLEARANCE = 7;
+/** How many neighbours we are willing to delete — for the plaza *and* for
+ *  the sightline that keeps the crown visible from the finale station. */
+const AZADI_MAX_CLEARING = 8;
+/** How far in front of the monument we clear buildings, in z units. Any
+ *  further and the cut would read as a trench through the block rather
+ *  than the open square a monument actually sits in. */
+const AZADI_VISTA_DEPTH = 20;
+/** Where the vista is aimed FROM: the finale station plus a stretch of
+ *  approach, i.e. where the boulevard opens up and the skyline is read.
+ *  Aiming from there rather than from the stop itself keeps the sightline
+ *  almost parallel to the rows, so the clearing stays local to the tower
+ *  and the monument is still in the shot while you walk up to it. */
+const AZADI_VISTA_STAND = FINALE_STAND + 16;
+/** Off-axis budget at the finale station, as a fraction of the distance
+ *  ahead (≈ tan of the angle). A portrait phone frames ~±14°, desktop
+ *  ~±31°; 0.42 (23°) keeps the tower's inner half on screen on phones
+ *  (a portrait frame simply cannot hold both monuments at the end of a
+ *  boulevard) and the whole silhouette anywhere wider. */
+const AZADI_MAX_OFFAXIS = 0.42;
+/** Fitted shell of azadi_tower.glb after City's grid auto-fit (before
+ *  AZADI_BACK_SCALE): 3.2 wide × 2.37 tall × 2.74 deep. Hard-coded here
+ *  because makeCity runs before the GLTFs are measured; the numbers are
+ *  stable as long as the asset is, and a stale one only shifts which slot
+ *  wins the sightline contest. */
+const AZADI_FIT_H = 2.37;
+/** Street level of every building (City drops them to y = -1.98). */
+const GROUND_Y = -1.98;
+/** Roof height of the tallest street block (the skyline GLB), so the
+ *  sightline test is conservative — it assumes the worst neighbour. */
+const STREET_TOP = 6.0;
 
 // Walk layout math (stations, cameraZ, layerOpacity, …) lives in ./path —
 // shared with JourneyElectricBorder's draw gating without a circular import.
@@ -1011,6 +1051,13 @@ function makeWindowTextures(): WindowMaps[] {
   return out;
 }
 
+/** A free side-building position on the boulevard grid. */
+interface Slot {
+  x: number;
+  z: number;
+  rotation: number;
+}
+
 interface Building {
   x: number;
   z: number;
@@ -1035,8 +1082,9 @@ function makeCity(finaleZ: number): Building[] {
   const nearX = 4.0;
   const rowGap = 4.5;
   
-  // We want to collect all valid (x, z) slots first so we can assign Azadi and Milad to exactly ONE of them.
-  const slots: {x: number, z: number, rotation: number}[] = [];
+  // Collect every free side slot first: the two monuments each take
+  // exactly ONE of them, so nothing is ever placed twice.
+  const slots: Slot[] = [];
   
   for (let z = startZ; z > endZ; z -= step) {
     for (const side of [-1, 1]) {
@@ -1056,36 +1104,93 @@ function makeCity(finaleZ: number): Building[] {
   // Milad Tower is the finale monument: the taller, bigger tower in
   // reality, it stands dead-centre of the road (x = 0) at the far end,
   // never inside the left / right building rows.
-  // Azadi Tower is demoted to ONE slot among the deepest side buildings
-  // so it still reads as a landmark on the boulevard without competing.
+  // Azadi Tower is the background monument: ONE slot in the deepest side
+  // row, in a plaza of its own, with its crown kept in the finale shot.
   const towerZ = finaleZ; // the very last / deepest building, centre road
 
-  // Choose Azadi's slot from the DEEPEST side buildings (background),
-  // keeping it clear of the centre where Milad stands.
-  const sortedByZ = [...slots].sort((a, b) => a.z - b.z); // most negative = farthest
-  const farCount = Math.max(1, Math.floor(sortedByZ.length * 0.25));
-  const farSlots = sortedByZ.slice(0, farCount);
-  const outerFar = farSlots.filter((s) => Math.abs(s.x) > 5.5);
-  const azadiPool = outerFar.length > 0 ? outerFar : farSlots;
-  const azadiSlot = azadiPool[Math.floor(rnd() * azadiPool.length)];
+  // Sorted deepest first — the back buildings.
+  const sortedByZ = [...slots].sort((a, b) => a.z - b.z);
+  // The finale station parks FINALE_STAND short of Milad; that is where
+  // the skyline is framed, so Azadi has to work from there: inside the
+  // phone's half-frame, and not swallowed by the rows that stand in front.
+  const viewZ = finaleZ + FINALE_STAND;
+  const vistaZ = finaleZ + AZADI_VISTA_STAND;
+  // Where the monument's crown sits, so the sightline can be aimed at it.
+  const crownY = GROUND_Y + AZADI_BACK_SCALE * AZADI_FIT_H;
 
-  slots.forEach((slot) => {
-      let typeIndex;
-      if (slot === azadiSlot) typeIndex = 0; // Azadi — deep side silhouette
-      else {
-          // The rest are randomly chosen from index 2, 3, and 4
-          typeIndex = 2 + Math.floor(rnd() * 3);
-      }
-      list.push({ ...slot, typeIndex, tex: 0 });
+  /** Does putting the tower on slot `s` mean slot `o` has to go? Two
+   *  reasons: its grown footprint would interpenetrate the neighbour, or
+   *  the neighbour stands inside the camera → crown sightline of the
+   *  finale shot, hiding a monument that can't out-top it. */
+  const needsToGo = (s: Slot, o: Slot) => {
+    if (s === o) return false;
+    if (Math.hypot(o.x - s.x, o.z - s.z) < AZADI_CLEARANCE) return true; // plaza
+    const t = (o.z - vistaZ) / (s.z - vistaZ); // 0 at the viewer, 1 at the crown
+    if (t <= 0.05 || t >= 0.95) return false; // behind us, or beside the tower
+    if (o.z - s.z > AZADI_VISTA_DEPTH) return false; // only clear near it
+    // 2.4 ≈ a neighbour's half-footprint plus margin; aiming a unit under
+    // the crown means anything that clips the silhouette — not just its
+    // very tip — counts as a blocker.
+    return Math.abs(s.x * t - o.x) < 2.4 && crownY * t < STREET_TOP + 1;
+  };
+  /** How much surgery a slot asks for — plaza + sightline. */
+  const clearing = (s: Slot) =>
+    slots.reduce((n, o) => n + (needsToGo(s, o) ? 1 : 0), 0);
+
+  let azadiSlot: Slot | null = null;
+  let azadiScore = Infinity;
+  for (const s of sortedByZ) {
+    const off = Math.abs(s.x);
+    const ahead = viewZ - s.z; // how far down the boulevard it stands
+    if (off < 6.2) continue; // must stand beside the boulevard, not in it
+    if (ahead < 16) continue; // must be back-buildings depth, not mid-street
+    const offaxis = off / ahead;
+    if (offaxis > AZADI_MAX_OFFAXIS) continue; // must stay in the phone frame
+    const cut = clearing(s); // neighbours this slot would consume
+    if (cut > AZADI_MAX_CLEARING) continue; // don't gut a whole block
+    // shallowest angle wins, cheap clearing breaks the tie — deep slots
+    // score well on both, which is what puts Azadi in the back row
+    const score = offaxis + cut * 0.03;
+    if (score < azadiScore) {
+      azadiScore = score;
+      azadiSlot = s;
+    }
+  }
+
+  // Nothing fit the strict brief (a shorter boulevard, e.g. the About
+  // walk): fall back to the deepest outer slot so Azadi still lands in
+  // the back row, and only clear its footprint, not the whole vista.
+  const anchor = azadiSlot
+    ? azadiSlot
+    : sortedByZ.find((s) => Math.abs(s.x) > 5.5) ?? sortedByZ[0] ?? null;
+  const strict = azadiSlot !== null;
+
+  // Now clear the way: plaza + vista when the slot was picked under the
+  // full brief, plaza only in the fallback — there the sightline cannot be
+  // honoured anyway, and a trench through the block would look worse.
+  const placed = anchor
+    ? slots.filter((s) =>
+        strict
+          ? !needsToGo(anchor, s)
+          : s === anchor ||
+            Math.hypot(s.x - anchor.x, s.z - anchor.z) >= AZADI_CLEARANCE,
+      )
+    : slots;
+
+  placed.forEach((slot) => {
+    // Azadi takes its one slot; everything else is a random street block
+    // (prototype indices 2, 3, 4).
+    const typeIndex = slot === anchor ? 0 : 2 + Math.floor(rnd() * 3);
+    list.push({ ...slot, typeIndex, tex: 0 });
   });
 
   // Milad — the final landmark, dead centre of the road at the end.
   list.push({
-      x: 0,
-      z: towerZ,
-      typeIndex: 1,
-      tex: 0,
-      rotation: 0,
+    x: 0,
+    z: towerZ,
+    typeIndex: 1,
+    tex: 0,
+    rotation: 0,
   });
 
   return list;
@@ -1305,13 +1410,13 @@ function City() {
     for (const b of buildings) {
       const proto = prototypes[b.typeIndex];
       const instance = proto.group.clone();
-      instance.position.set(b.x, -1.98, b.z);
+      instance.position.set(b.x, GROUND_Y, b.z);
       instance.rotation.y = b.rotation;
       // Milad (typeIndex 1) is the centre-road finale monument: grow it
-      // to tower over the boulevard. Azadi (typeIndex 0) keeps only a
-      // modest bump so it reads as a distant side landmark.
+      // to tower over the boulevard. Azadi (typeIndex 0) only rises far
+      // enough to clear the rooftops of its back-row neighbours.
       if (b.typeIndex === 1) instance.scale.setScalar(MILAD_SCALE);
-      else if (b.typeIndex === 0) instance.scale.setScalar(AZADI_SIDE_SCALE);
+      else if (b.typeIndex === 0) instance.scale.setScalar(AZADI_BACK_SCALE);
 
       // Add a foundation block under each building so it connects cleanly to the ground
       const foundationGeo = new THREE.BoxGeometry(

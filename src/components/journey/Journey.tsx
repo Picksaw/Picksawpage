@@ -150,7 +150,8 @@ export default function Journey({
 
       {/* scroll length for the walk: P → headline → 6 paintings →
           the long finale boulevard that carries the camera past the
-          last painting toward the distant Azadi Tower */}
+          last painting toward the distant Milad Tower, Azadi standing
+          back-row on the side */}
       <div
         ref={spacerRef}
         id="templates"

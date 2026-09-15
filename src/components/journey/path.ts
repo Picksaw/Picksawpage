@@ -65,10 +65,10 @@ function makeCameraZ(stations: number[]) {
 
 /** Milad Tower — the finale landmark standing in the middle of the road,
  *  past the last window. Shared with Corridor's city builder.
- *  ~12 building rows beyond the gallery — "10 buildings away". */
+ *  ~12 building rows beyond the gallery — "10 buildings away".
+ *  (Azadi Tower is NOT here: it is a back-row side building — see
+ *  makeCity in Corridor.) */
 export const FINALE_Z = paintingZ(TOTAL_STATIONS - 1) - 72; // = -160
-/** Back-compat alias (older code named the constant after Azadi). */
-export const AZADI_Z = FINALE_Z;
 
 const homeStations: number[] = [
   4.6, // the P + ring
