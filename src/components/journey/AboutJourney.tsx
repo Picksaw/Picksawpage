@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useMotionValueEvent, useScroll } from "motion/
 import { type Lang } from "../../config/siteTexts";
 import ThemeRig from "./ThemeRig";
 import AssetPrimer from "./AssetPrimer";
+import GhostCard from "./GhostCard";
 import { CorridorScene } from "./Corridor";
 import { aboutLayout, layerOpacity } from "./path";
 import { getLenis } from "../../lib/lenis";
@@ -28,7 +29,8 @@ export default function AboutJourney({ lang }: { lang: Lang }) {
   const spacerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef(0);
 
-  const [focusedIdx, setFocusedIdx] = useState(0);
+  // -1 while the A ghost card is framed; 0..5 for the panes
+  const [focusedIdx, setFocusedIdx] = useState(-1);
   const [throughFade, setThroughFade] = useState(0);
 
   const { scrollYProgress } = useScroll({
@@ -60,7 +62,8 @@ export default function AboutJourney({ lang }: { lang: Lang }) {
   const scrollToFrame = useCallback((i: number) => {
     const el = spacerRef.current;
     const lenis = getLenis();
-    const frac = i / (aboutLayout.stations.length - 1);
+    // station 0 is the A card, so pane i stands at station i + 1
+    const frac = (i + 1) / (aboutLayout.stations.length - 1);
     if (el && lenis) {
       lenis.scrollTo(el.offsetTop + el.offsetHeight * frac, { duration: 1.6 });
     } else if (el) {
@@ -116,6 +119,8 @@ export default function AboutJourney({ lang }: { lang: Lang }) {
             onFallback={() => setDpr(DPR_MIN)}
           />
           <ThemeRig />
+          {/* the walk opens on its own ghost card, like the home walk */}
+          <GhostCard variant="a" />
           <CorridorScene
             progressRef={progressRef}
             focusedIdx={focusedIdx}
@@ -155,9 +160,9 @@ export default function AboutJourney({ lang }: { lang: Lang }) {
         }}
       />
 
-      {/* scroll invitation on the first pane */}
+      {/* scroll invitation — on the A card, before the panes begin */}
       <AnimatePresence>
-        {focusedIdx === 0 && (
+        {focusedIdx === -1 && (
           <motion.div
             key="about-hint"
             initial={{ opacity: 0 }}

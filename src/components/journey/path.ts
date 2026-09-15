@@ -47,6 +47,11 @@ export interface WalkLayout {
  *  gate is a distant hazy giant at the end of a long boulevard. */
 export const FINALE_STAND = 46;
 
+/** Where a walk's first station stands: the ghost card lives at the world
+ *  origin, and this is the distance it is framed from (its own fit math
+ *  uses the same number). Both walks open on it. */
+export const CARD_STATION_Z = 4.6;
+
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
@@ -71,7 +76,7 @@ function makeCameraZ(stations: number[]) {
 export const FINALE_Z = paintingZ(TOTAL_STATIONS - 1) - 72; // = -160
 
 const homeStations: number[] = [
-  4.6, // the P + ring
+  CARD_STATION_Z, // the P ghost card + ring
   HEADLINE_Z + FOCUS_DIST, // the headline layer
   ...Array.from({ length: TOTAL_STATIONS }, (_, i) => paintingZ(i) + FOCUS_DIST),
   FINALE_Z + FINALE_STAND, // the finale: face the tower
@@ -106,6 +111,7 @@ export const aboutFrameZ = (i: number) => -16 - i * 8;
 export const ABOUT_FINALE_Z = aboutFrameZ(ABOUT_FRAMES - 1) - 68; // = -124
 
 const aboutStations: number[] = [
+  CARD_STATION_Z, // the A ghost card, then one station per pane
   ...Array.from({ length: ABOUT_FRAMES }, (_, i) => aboutFrameZ(i) + FOCUS_DIST),
   ABOUT_FINALE_Z + FINALE_STAND,
 ];
@@ -116,11 +122,13 @@ export const aboutLayout: WalkLayout = {
   frameZ: aboutFrameZ,
   stations: aboutStations,
   finaleZ: ABOUT_FINALE_Z,
-  spacerVh: 80 + ABOUT_FRAMES * 92 + 250,
+  spacerVh: 100 + 80 + ABOUT_FRAMES * 92 + 250,
 
+  /** Pane index for the dots + focus glow: -1 while the A card is framed. */
   focusedIndex(progress: number): number {
     const u = progress * (aboutStations.length - 1);
-    return Math.max(0, Math.min(ABOUT_FRAMES - 1, Math.round(u)));
+    if (u < 0.5) return -1; // on the card: no pane is lit yet
+    return Math.max(0, Math.min(ABOUT_FRAMES - 1, Math.round(u) - 1));
   },
 
   cameraZ: makeCameraZ(aboutStations),

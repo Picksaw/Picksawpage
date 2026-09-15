@@ -9,7 +9,7 @@ import {
 } from "motion/react";
 import { SITE_TEXTS, type Lang } from "../../config/siteTexts";
 import { TEMPLATES, type TemplateItem } from "../../config/templatesConfig";
-import PEmblem from "./PEmblem";
+import GhostCard from "./GhostCard";
 import ThemeRig from "./ThemeRig";
 import AssetPrimer from "./AssetPrimer";
 import {
@@ -217,7 +217,7 @@ export default function Journey({
           {/* fog + lighting retime with the selected atmosphere theme */}
           <ThemeRig />
 
-          <PEmblem />
+          <GhostCard variant="p" />
           <CorridorScene
             progressRef={progressRef}
             focusedIdx={focusedIdx}

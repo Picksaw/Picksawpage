@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { makePGeometry } from "../../lib/pGeometry";
+import { makeAGeometry, makePGeometry } from "../../lib/pGeometry";
+import { CARD_STATION_Z } from "./path";
 import { onLightning } from "../../lib/stormEvents";
 import { reportFrameCost } from "../../lib/perfProbe";
 import { ElectricPainter } from "../ui/ElectricBorder";
@@ -16,21 +17,25 @@ import {
 } from "../../lib/themes";
 
 /**
- * PEmblem — the journey's opening layer, reimagined as a GHOST CARD.
+ * GhostCard — a walk's opening layer: a holographic trading card whose
+ * green-screen window composites a render-to-texture of a ghost letterform.
  *
  * Port of the CodePen "Ghost Card" by pizza3
- * (https://codepen.io/pizza3/pen/pobevYW): a holographic trading card
- * whose green-screen window composites a render-to-texture of a ghost
- * model (here: the site's P) — fbm smoke shader, fresnel rim, foil
- * gradient and sparkles, re-themed to the electric cyan palette.
+ * (https://codepen.io/pizza3/pen/pobevYW): fbm smoke shader, fresnel rim,
+ * foil gradient and sparkles, re-themed to the electric cyan palette.
  *
- * Wrapped in the site's animated lightning border (the same
- * ElectricPainter that drives the DOM cards and corridor frames),
- * and still wired to the storm: ribbon bolts strike the card's edges
- * and make the border flare.
+ * One machine, two letters: the home walk haunts with the site's P, the
+ * About walk with the founder's A. Glyph geometry, printed copy and where
+ * the spirit-orb drifts all live in CARD_VARIANTS.
+ *
+ * Both stand at the world origin, framed from CARD_STATION_Z, so any walk
+ * gets one just by starting its station list there. Drag to turn it.
+ *
+ * The card's own lightning border + strike ribbons are currently switched
+ * off at the mesh level (see the JSX); the border painter still ticks, so
+ * the ring can come back with one flag. Storm bolts still strike it, and it
+ * retints with every atmosphere.
  */
-
-const STATION_DIST = 4.6;
 const IS_MOBILE =
   typeof window !== "undefined" &&
   window.matchMedia("(pointer: coarse)").matches;
@@ -64,10 +69,60 @@ const WINDOW_UV = new THREE.Vector4(
   (WINDOW.y1 - WINDOW.y0) / TPL_H,
 );
 
+/* ── variants: what differs between the two cards ─────────────────────── */
+
+interface GhostCardVariant {
+  /** the letter that haunts the window, and how it is built */
+  glyph: string;
+  build: (scale: number) => THREE.BufferGeometry;
+  /** printed copy on the card faces */
+  kicker: string;
+  ghostClass: string;
+  specs: [string, string][];
+  serial: string;
+  backLabel: string;
+  /** orb drift, in ghost-local units: the P's circles its bowl, the A's
+   *  swings through its open counter */
+  orb: { cx: number; cy: number; rx: number; ry: number; z: number };
+}
+
+export type GhostCardVariantId = keyof typeof CARD_VARIANTS;
+
+const CARD_VARIANTS = {
+  p: {
+    glyph: "P",
+    build: makePGeometry,
+    kicker: "W E B   T E M P L A T E   E N G I N E",
+    ghostClass: "GHOST CLASS",
+    specs: [
+      ["LIGHTNING BORDER", "ACTIVE"],
+      ["HOLOGRAPHIC FOIL", "SCANNED"],
+      ["RENDER LOOP", "60 FPS"],
+    ],
+    serial: "AMIREHSAN — CARD Nº 001",
+    backLabel: "AMIREHSAN — GHOST CARD",
+    orb: { cx: -0.18, cy: 0.62, rx: 0.52, ry: 0.22, z: 0.34 },
+  },
+  a: {
+    glyph: "A",
+    build: makeAGeometry,
+    kicker: "A B O U T   —   S I X   P A N E S",
+    ghostClass: "FOUNDER CLASS",
+    specs: [
+      ["ABOUT WALK", "6 PANES"],
+      ["HOLOGRAPHIC FOIL", "SCANNED"],
+      ["DRAG TO TURN", "ENABLED"],
+    ],
+    serial: "AMIREHSAN — CARD Nº 002",
+    backLabel: "AMIREHSAN — ABOUT CARD",
+    orb: { cx: 0, cy: 0.2, rx: 0.3, ry: 0.15, z: 0.34 },
+  },
+} satisfies Record<string, GhostCardVariant>;
+
 /** Responsive emblem scale — fits BOTH width and height on any screen. */
 function emblemFit(cam: THREE.PerspectiveCamera): number {
   const visH =
-    2 * STATION_DIST * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    2 * CARD_STATION_Z * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
   const visW = visH * cam.aspect;
   return Math.min(1, (visW * 0.85) / CARD_SPAN_W, (visH * 0.7) / CARD_SPAN_H);
 }
@@ -144,7 +199,11 @@ function drawCardBase(ctx: CanvasRenderingContext2D, ink: CardInk) {
   }
 }
 
-function drawCardFront(ctx: CanvasRenderingContext2D, ink: CardInk) {
+function drawCardFront(
+  ctx: CanvasRenderingContext2D,
+  ink: CardInk,
+  v: GhostCardVariant,
+) {
   const W = TPL_W;
   drawCardBase(ctx, ink);
 
@@ -156,7 +215,15 @@ function drawCardFront(ctx: CanvasRenderingContext2D, ink: CardInk) {
   ctx.fillText("Amirehsan", 72, 148);
   ctx.fillStyle = rgbCss(ink.accent, 0.8);
   ctx.font = "600 30px 'Sora Variable', sans-serif";
-  ctx.fillText("W E B   T E M P L A T E   E N G I N E", 74, 196);
+  // letter-spaced kickers vary in length between variants — shrink to fit
+  // the card rather than run under the badge
+  let ks = 30;
+  ctx.font = `600 ${ks}px 'Sora Variable', sans-serif`;
+  while (ctx.measureText(v.kicker).width > W - 210 && ks > 20) {
+    ks -= 2;
+    ctx.font = `600 ${ks}px 'Sora Variable', sans-serif`;
+  }
+  ctx.fillText(v.kicker, 74, 196);
 
   // holo badge top-right
   ctx.strokeStyle = rgbCss(ink.soft, 0.9);
@@ -167,7 +234,7 @@ function drawCardFront(ctx: CanvasRenderingContext2D, ink: CardInk) {
   ctx.fillStyle = rgbCss(ink.soft);
   ctx.font = "800 56px 'Sora Variable', sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("P", W - 96, 137);
+  ctx.fillText(v.glyph, W - 96, 137);
 
   // divider
   ctx.strokeStyle = rgbCss(ink.accent, 0.35);
@@ -193,13 +260,9 @@ function drawCardFront(ctx: CanvasRenderingContext2D, ink: CardInk) {
   ctx.textAlign = "left";
   ctx.fillStyle = "rgba(234,255,255,0.92)";
   ctx.font = "800 44px 'Sora Variable', sans-serif";
-  ctx.fillText("GHOST CLASS", 72, 1072);
+  ctx.fillText(v.ghostClass, 72, 1072);
 
-  const specs = [
-    ["LIGHTNING BORDER", "ACTIVE"],
-    ["HOLOGRAPHIC FOIL", "SCANNED"],
-    ["RENDER LOOP", "60 FPS"],
-  ];
+  const specs = v.specs;
   ctx.font = "600 28px 'Sora Variable', sans-serif";
   let sy = 1132;
   for (const [label, val] of specs) {
@@ -222,12 +285,16 @@ function drawCardFront(ctx: CanvasRenderingContext2D, ink: CardInk) {
     bx += barW + 4 + Math.random() * 10;
   }
   ctx.font = "600 24px 'Sora Variable', sans-serif";
-  ctx.fillText("AMIREHSAN — CARD Nº 001", 72, 1336);
+  ctx.fillText(v.serial, 72, 1336);
   ctx.textAlign = "right";
-  ctx.fillText("THE P", W - 72, 1336);
+  ctx.fillText(`THE ${v.glyph}`, W - 72, 1336);
 }
 
-function drawCardBack(ctx: CanvasRenderingContext2D, ink: CardInk) {
+function drawCardBack(
+  ctx: CanvasRenderingContext2D,
+  ink: CardInk,
+  v: GhostCardVariant,
+) {
   const W = TPL_W;
   const H = TPL_H;
   drawCardBase(ctx, ink);
@@ -244,7 +311,7 @@ function drawCardBack(ctx: CanvasRenderingContext2D, ink: CardInk) {
 
   // No green window on the back!
 
-  // the P monogram
+  // the glyph monogram (kept quiet: only the label prints)
   ctx.textAlign = "center";
   ctx.fillStyle = rgbCss(ink.soft);
   ctx.shadowColor = rgbCss(ink.accent, 0.8);
@@ -255,7 +322,7 @@ function drawCardBack(ctx: CanvasRenderingContext2D, ink: CardInk) {
 
   ctx.font = "600 26px 'Sora Variable', sans-serif";
   ctx.fillStyle = "rgba(148,180,210,0.8)";
-  ctx.fillText("AMIREHSAN — GHOST CARD", W / 2, 1388);
+  ctx.fillText(v.backLabel, W / 2, 1388);
 }
 
 /** Foil tone ramp, baked from the weather's holo palette. The dark
@@ -633,8 +700,13 @@ interface ArcSlot {
 
 /* ── the emblem ───────────────────────────────────────────────────────── */
 
-export default function PEmblem() {
+export default function GhostCard({
+  variant = "p",
+}: {
+  variant?: GhostCardVariantId;
+} = {}) {
   const { camera, gl } = useThree();
+  const v = CARD_VARIANTS[variant];
 
   const group = useRef<THREE.Group>(null);
   const cardGroup = useRef<THREE.Group>(null);
@@ -739,13 +811,13 @@ export default function PEmblem() {
         uBg: { value: new THREE.Vector3(0.012, 0.022, 0.045) },
       },
     });
-    const pMesh = new THREE.Mesh(makePGeometry(1.95 / 96), mat);
+    const pMesh = new THREE.Mesh(v.build(1.95 / 96), mat);
 
     const orb = new THREE.Mesh(
       new THREE.SphereGeometry(0.105, 16, 16),
       new THREE.MeshBasicMaterial({ color: "#dff7ff", toneMapped: false }),
     );
-    orb.position.set(-0.5, 0.62, 0.36);
+    orb.position.set(v.orb.cx - v.orb.rx * 0.6, v.orb.cy, v.orb.z + 0.02);
 
     scene.add(pMesh, orb);
 
@@ -756,7 +828,9 @@ export default function PEmblem() {
     });
 
     return { scene, cam, pMesh, orb, rt, mat };
-  }, []);
+    // the variant is a module constant, so this runs once per card
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v]);
 
   /* ── card art + uniforms ── */
   const assets = useMemo(() => {
@@ -798,8 +872,8 @@ export default function PEmblem() {
     });
     const repaint = (p: ThemeParams) => {
       const ink = inkOf(p);
-      drawCardFront(frontCtx, ink);
-      drawCardBack(backCtx, ink);
+      drawCardFront(frontCtx, ink, v);
+      drawCardBack(backCtx, ink, v);
       paintRamp(rampCtx, ink);
       frontTex.needsUpdate = true;
       backTex.needsUpdate = true;
@@ -818,7 +892,8 @@ export default function PEmblem() {
       noiseTex,
       sparkleTex,
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v]);
 
   const frontUniforms = useMemo(
     () => ({
@@ -1033,9 +1108,9 @@ export default function PEmblem() {
       ghost.pMesh.rotation.x = -eased.current.y * 0.2 + Math.cos(clock.current * 0.28) * 0.1;
       ghost.pMesh.position.y = Math.sin(clock.current * 0.7) * 0.06;
       ghost.orb.position.set(
-        Math.cos(clock.current * 1.3) * 0.52 - 0.18,
-        Math.sin(clock.current * 1.7) * 0.22 + 0.62,
-        0.34
+        Math.cos(clock.current * 1.3) * v.orb.rx + v.orb.cx,
+        Math.sin(clock.current * 1.7) * v.orb.ry + v.orb.cy,
+        v.orb.z
       );
       ghost.orb.scale.setScalar(1 + 0.18 * Math.sin(clock.current * 2.6));
 
