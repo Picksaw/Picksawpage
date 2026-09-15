@@ -5,6 +5,8 @@ import { reportFrameCost } from "../../lib/perfProbe";
 import { ElectricPainter } from "../ui/ElectricBorder";
 import { TEMPLATES } from "../../config/templatesConfig";
 import { layerOpacity, paintingZ } from "./path";
+import { getTheme } from "../../lib/themeStore";
+import { THEMES } from "../../lib/themes";
 
 /**
  * JourneyElectricBorder — the electric lightning ring for the 3D
@@ -45,6 +47,9 @@ export function useJourneyElectricBorder(
     []
   );
   const frame = useRef(0);
+  // eased accent colour for the ring (storm cyan → dawn gold / dusk ember)
+  const ringColor = useRef(new THREE.Color(79 / 255, 216 / 255, 255 / 255));
+  const ringTarget = useRef(new THREE.Color());
 
   const assets = useMemo(() => {
     const painter = new ElectricPainter({
@@ -82,9 +87,16 @@ export function useJourneyElectricBorder(
     assets.painter.setActive(
       hoveredIdxRef.current >= 0 && hoveredIdxRef.current === focusedRef.current
     );
+    // ease the ring toward the atmosphere accent colour
+    const accent = THEMES[getTheme()].accent;
+    ringTarget.current.setRGB(accent[0] / 255, accent[1] / 255, accent[2] / 255);
+    ringColor.current.lerp(ringTarget.current, Math.min(1, delta * 4));
+    const c = ringColor.current;
+    (assets.painter as unknown as { opts: { color: string } }).opts.color =
+      `rgb(${Math.round(c.r * 255)}, ${Math.round(c.g * 255)}, ${Math.round(c.b * 255)})`;
     const t0 = performance.now();
     // O(1) clock advance every frame — cheap; the heavy draw is gated.
-    assets.painter.advance(Math.min(delta, 0.05) * 1000);
+    assets.painter.advance(Math.min(delta, 0.25) * 1000);
     // The ring is shared: it's visible on whichever painting is inside
     // its opacity window — INCLUDING one we're passing (the focused
     // index only flips at station midpoints). Windows are 10.4 wide vs

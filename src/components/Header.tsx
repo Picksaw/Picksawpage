@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import type { Lang } from "../config/siteTexts";
 import { SITE_TEXTS } from "../config/siteTexts";
 import Logo3D from "./Logo3D";
+import ThemeSwitcher from "./ThemeSwitcher";
 import { scrollToTarget } from "../lib/lenis";
 import { cn } from "../utils/cn";
 
@@ -25,6 +26,7 @@ export default function Header({
   onToggleLang,
 }: HeaderProps) {
   const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
@@ -34,10 +36,14 @@ export default function Header({
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // close the mobile menu whenever the route changes
+  useEffect(() => setMenuOpen(false), [location.pathname]);
+
   const t = SITE_TEXTS[lang];
 
   const navLinks = [
     { to: "/", label: t.navHome },
+    { to: "/about", label: t.navAbout },
     { to: "/feed", label: t.navFeed },
   ];
 
@@ -65,7 +71,7 @@ export default function Header({
             <motion.span whileHover={{ scale: 1.06 }} transition={{ type: "spring", stiffness: 300, damping: 18 }}>
               <Logo3D
                 size={scrolled ? 34 : 42}
-                className="drop-shadow-[0_0_12px_rgba(79,216,255,0.35)] transition-all duration-500"
+                className="drop-shadow-[0_0_12px_rgb(var(--accent)/0.35)] transition-all duration-500"
               />
             </motion.span>
             <span
@@ -114,8 +120,29 @@ export default function Header({
             )}
           </div>
 
+          {/* Mobile menu trigger (the inline nav is desktop-only) */}
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            className="glass flex h-10 w-10 items-center justify-center rounded-xl text-slate-200 transition-all hover:text-white md:hidden"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-nav"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              {menuOpen ? (
+                <path d="M6 6l12 12M18 6L6 18" />
+              ) : (
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              )}
+            </svg>
+          </button>
+
           {/* Actions */}
           <div className="flex items-center gap-2">
+            {/* Atmosphere switcher — storm / sunrise / sunset */}
+            <ThemeSwitcher lang={lang} />
+
             {/* Language toggle */}
             <button
               type="button"
@@ -185,7 +212,7 @@ export default function Header({
 
                 <Link
                   to="/feed"
-                  className="reflect-sweep group relative overflow-hidden rounded-xl bg-gradient-to-b from-white to-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-[0_4px_28px_-6px_rgba(79,216,255,0.5)] transition-shadow duration-300 hover:shadow-[0_4px_36px_-4px_rgba(79,216,255,0.75)]"
+                  className="reflect-sweep group relative overflow-hidden rounded-xl bg-gradient-to-b from-white to-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-[0_4px_28px_-6px_rgb(var(--accent)/0.5)] transition-shadow duration-300 hover:shadow-[0_4px_36px_-4px_rgb(var(--accent)/0.75)]"
                 >
                   <span className="relative z-10">{t.exploreButton}</span>
                 </Link>
@@ -193,6 +220,57 @@ export default function Header({
             )}
           </div>
         </nav>
+
+        {/* Mobile dropdown nav */}
+        <AnimatePresence>
+          {menuOpen && (
+            <motion.div
+              id="mobile-nav"
+              initial={{ opacity: 0, y: -10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.98 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="glass-strong bolt-lit mt-2 overflow-hidden rounded-2xl p-2 shadow-2xl shadow-black/50 md:hidden"
+            >
+              {navLinks.map((l) => {
+                const active = location.pathname === l.to;
+                return (
+                  <Link
+                    key={l.to}
+                    to={l.to}
+                    onClick={() => setMenuOpen(false)}
+                    className={cn(
+                      "flex items-center justify-between rounded-xl px-4 py-3 text-sm font-medium transition-colors",
+                      active
+                        ? "bg-white/10 text-white"
+                        : "text-slate-300 hover:bg-white/5 hover:text-white"
+                    )}
+                  >
+                    {l.label}
+                    <svg className="h-4 w-4 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </Link>
+                );
+              })}
+              {location.pathname === "/" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    scrollToTarget("#templates");
+                  }}
+                  className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-start text-sm font-medium text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+                >
+                  {t.templatesTitle}
+                  <svg className="h-4 w-4 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 5v14M6 13l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </header>
   );

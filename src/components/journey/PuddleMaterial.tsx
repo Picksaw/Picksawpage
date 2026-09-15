@@ -1,9 +1,11 @@
 import { useTexture } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 
-import { useLayoutEffect, useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import CSM from "three-custom-shader-material";
+import { getTheme } from "../../lib/themeStore";
+import { THEMES, createLiveTheme, easeTheme, type ThemeParams } from "../../lib/themes";
 
 export function PuddleMaterial() {
   const maps = useTexture({
@@ -39,6 +41,10 @@ void main() {
       `
 			uniform float uTime;
       uniform float uRainFactor;
+      uniform float uRoadBright;
+      uniform vec3 uRoadTint;
+      uniform vec3 uLineColor;
+      uniform float uLineMix;
 
 			varying vec3 vPosition;
 			varying vec2 vUv;
@@ -185,12 +191,13 @@ void main() {
         float edgeStripeR = (1.0 - step(stripeW, abs(vWorldPosition.x - 2.6)));
         float roadLines = clamp(centerStripe + edgeStripeL + edgeStripeR, 0.0, 1.0);
 
-        // Darken the color to fit the scene better
-        csm_DiffuseColor.rgb *= 0.6; // Brighter
-        csm_DiffuseColor.rgb += vec3(0.01, 0.04, 0.07); // Base ambient blue
-        
+        // Atmosphere grade — the storm darkens the wet asphalt and adds
+        // a blue ambient; daylight themes restore the dry texture.
+        csm_DiffuseColor.rgb *= uRoadBright;
+        csm_DiffuseColor.rgb += uRoadTint;
+
         // Apply road lines
-        csm_DiffuseColor.rgb = mix(csm_DiffuseColor.rgb, vec3(0.05, 0.5, 0.8), roadLines * 0.7);
+        csm_DiffuseColor.rgb = mix(csm_DiffuseColor.rgb, uLineColor, roadLines * uLineMix);
         csm_Roughness = mix(csm_Roughness, 0.35, roadLines); // road lines are less reflective
 
   
@@ -202,10 +209,17 @@ void main() {
   const uniforms = useMemo(
     () => ({
       uTime: { value: 0 },
-      uRainFactor: { value: 1.0 }, // Rain is always at 1.0 since it's raining in this scene
+      uRainFactor: { value: 1.0 }, // eased toward the selected theme
+      uRoadBright: { value: 0.6 },
+      uRoadTint: { value: new THREE.Vector3(0.01, 0.04, 0.07) },
+      uLineColor: { value: new THREE.Vector3(0.05, 0.5, 0.8) },
+      uLineMix: { value: 0.7 },
     }),
     [],
   );
+
+  // live atmosphere — dries the asphalt and repaints it per theme
+  const live = useRef<ThemeParams>(createLiveTheme(getTheme()));
 
   const patchMap = useMemo(
     () => ({
@@ -221,6 +235,20 @@ void main() {
 
   useFrame((_, dt) => {
     uniforms.uTime.value += dt;
+    const p = easeTheme(live.current, THEMES[getTheme()], Math.min(dt, 0.25));
+    uniforms.uRainFactor.value = p.roadRain;
+    uniforms.uRoadBright.value = p.roadBright;
+    (uniforms.uRoadTint.value as THREE.Vector3).set(
+      p.roadTint[0] / 255,
+      p.roadTint[1] / 255,
+      p.roadTint[2] / 255,
+    );
+    (uniforms.uLineColor.value as THREE.Vector3).set(
+      p.roadLine[0] / 255,
+      p.roadLine[1] / 255,
+      p.roadLine[2] / 255,
+    );
+    uniforms.uLineMix.value = p.roadLineMix;
   });
 
   return (

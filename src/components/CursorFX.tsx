@@ -71,7 +71,7 @@ export default function CursorFX() {
             left: sx,
             top: sy,
             background:
-              "radial-gradient(circle, rgba(79,216,255,0.07) 0%, rgba(79,216,255,0.025) 35%, transparent 65%)",
+              "radial-gradient(circle, rgb(var(--accent)/0.07) 0%, rgb(var(--accent)/0.025) 35%, transparent 65%)",
           }}
         />
       )}

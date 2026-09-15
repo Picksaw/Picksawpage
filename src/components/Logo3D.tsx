@@ -6,6 +6,8 @@ import { makePGeometry } from "../lib/pGeometry";
 import { hasWebGL } from "../lib/webgl";
 import { getStorm, setDevMode } from "../lib/stormStore";
 import { registerPerfGl } from "../lib/perfProbe";
+import { getTheme } from "../lib/themeStore";
+import { THEMES, createLiveTheme, easeTheme, type ThemeParams } from "../lib/themes";
 
 /**
  * Logo3D — the Picksaw "P" as a floating metallic object.
@@ -21,8 +23,20 @@ import { registerPerfGl } from "../lib/perfProbe";
 
 function PShape({ boltRef, geometry }: { boltRef: React.RefObject<number>; geometry: THREE.BufferGeometry }) {
   const group = useRef<THREE.Group>(null);
+  const bodyMat = useRef<THREE.MeshStandardMaterial>(null);
   const spark = useRef<THREE.MeshStandardMaterial>(null);
   const flashLight = useRef<THREE.PointLight>(null);
+  const accentLight = useRef<THREE.PointLight>(null);
+  const keyLight = useRef<THREE.DirectionalLight>(null);
+  const backLight = useRef<THREE.PointLight>(null);
+  const live = useRef<ThemeParams>(createLiveTheme(getTheme()));
+  const accentC = useRef(new THREE.Color());
+  const softC = useRef(new THREE.Color());
+  const keyC = useRef(new THREE.Color());
+  const deepC = useRef(new THREE.Color());
+  const bodyC = useRef(new THREE.Color());
+  // storm's cold steel — the body metal warms toward the atmosphere tint
+  const STEEL: [number, number, number] = [217, 230, 245];
 
   // pointer target (normalized -1..1), eased in useFrame
   const target = useRef({ x: 0, y: 0 });
@@ -51,6 +65,50 @@ function PShape({ boltRef, geometry }: { boltRef: React.RefObject<number>; geome
     // idle float + slight stance
     g.position.y = Math.sin(t * 0.9) * 0.05;
 
+    // Atmosphere retint — body metal, all three lights and the spark
+    // follow the weather (cold steel/cyan by night, warm golds at dawn,
+    // burnt orange/rose at dusk). The lightning flash stays cyan.
+    const tp = easeTheme(live.current, THEMES[getTheme()], Math.min(delta, 0.25));
+    accentC.current.setRGB(
+      tp.accent[0] / 255,
+      tp.accent[1] / 255,
+      tp.accent[2] / 255,
+      THREE.SRGBColorSpace,
+    );
+    softC.current.setRGB(
+      tp.holoBright[0] / 255,
+      tp.holoBright[1] / 255,
+      tp.holoBright[2] / 255,
+      THREE.SRGBColorSpace,
+    );
+    keyC.current.setRGB(
+      tp.sunLight[0] / 255,
+      tp.sunLight[1] / 255,
+      tp.sunLight[2] / 255,
+      THREE.SRGBColorSpace,
+    );
+    deepC.current.setRGB(
+      tp.holoDeep[0] / 255,
+      tp.holoDeep[1] / 255,
+      tp.holoDeep[2] / 255,
+      THREE.SRGBColorSpace,
+    );
+    // pearl-tinted steel: 45% of the way from cool silver to holoBright
+    bodyC.current.setRGB(
+      (STEEL[0] + (tp.holoBright[0] - STEEL[0]) * 0.45) / 255,
+      (STEEL[1] + (tp.holoBright[1] - STEEL[1]) * 0.45) / 255,
+      (STEEL[2] + (tp.holoBright[2] - STEEL[2]) * 0.45) / 255,
+      THREE.SRGBColorSpace,
+    );
+    if (bodyMat.current) bodyMat.current.color.copy(bodyC.current);
+    if (spark.current) {
+      spark.current.emissive.copy(accentC.current);
+      spark.current.color.copy(softC.current);
+    }
+    if (accentLight.current) accentLight.current.color.copy(accentC.current);
+    if (keyLight.current) keyLight.current.color.copy(keyC.current);
+    if (backLight.current) backLight.current.color.copy(deepC.current);
+
     // lightning decay → spark + light flare
     boltRef.current = Math.max(0, boltRef.current - delta * 2.4);
     const b = boltRef.current;
@@ -65,8 +123,13 @@ function PShape({ boltRef, geometry }: { boltRef: React.RefObject<number>; geome
 
   return (
     <group ref={group}>
+      {/* key + back lights live here so they can retint per weather */}
+      <ambientLight intensity={0.35} />
+      <directionalLight ref={keyLight} position={[-3, 4, 3]} intensity={1.5} color="#eaf6ff" />
+      <pointLight ref={backLight} position={[-2, -2, -2]} intensity={10} color="#2a6cff" />
+
       <mesh geometry={geometry}>
-        <meshStandardMaterial color="#d9e6f5" metalness={0.92} roughness={0.24} />
+        <meshStandardMaterial ref={bodyMat} color="#d9e6f5" metalness={0.92} roughness={0.24} />
       </mesh>
 
       {/* spark core floating in the bowl's counter */}
@@ -83,21 +146,32 @@ function PShape({ boltRef, geometry }: { boltRef: React.RefObject<number>; geome
 
       {/* lightning flash light */}
       <pointLight ref={flashLight} position={[1.4, 0.6, 1.8]} intensity={6} color="#9fe8ff" distance={9} />
+
+      {/* atmosphere accent rim light (theme-driven) */}
+      <pointLight ref={accentLight} position={[3, -1, 2]} intensity={18} color="#4fd8ff" />
     </group>
   );
 }
 
-/** Fallback P glyph when WebGL is unavailable — the brand never breaks. */
+/** Fallback P glyph when WebGL is unavailable — the brand never breaks.
+ *  Stroke uses the accent CSS var so it retints with the atmosphere. */
 function LogoFallback({ size }: { size: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      fill="none"
+      aria-hidden
+      style={{ color: "rgb(var(--accent))" }}
+    >
       <path
         d="M20 54V12h14c8 0 13 5.5 13 13s-5 13-13 13H20"
-        stroke="#4fd8ff"
+        stroke="currentColor"
         strokeWidth="6"
         strokeLinecap="round"
         strokeLinejoin="round"
-        style={{ filter: "drop-shadow(0 0 8px rgba(79,216,255,0.6))" }}
+        style={{ filter: "drop-shadow(0 0 8px rgb(var(--accent) / 0.6))" }}
       />
     </svg>
   );
@@ -184,10 +258,6 @@ export default function Logo3D({ size = 64, className, fill = false }: Logo3DPro
         style={{ background: "transparent" }}
         onCreated={(state) => registerPerfGl("logo", state.gl)}
       >
-        <ambientLight intensity={0.35} />
-        <directionalLight position={[-3, 4, 3]} intensity={1.5} color="#eaf6ff" />
-        <pointLight position={[3, -1, 2]} intensity={18} color="#4fd8ff" />
-        <pointLight position={[-2, -2, -2]} intensity={10} color="#2a6cff" />
         <PShape boltRef={boltRef} geometry={geometry} />
       </Canvas>
     </div>

@@ -123,7 +123,8 @@ export default function FloatingDock({ lang }: { lang: Lang }) {
       id: "phone",
       label: t.phoneLabel,
       href: `tel:${PHONE_INTERNATIONAL}`,
-      ringClass: "hover:shadow-[0_0_28px_-4px_rgba(79,216,255,0.55)] hover:border-electric/50",
+      ringClass:
+        "hover:shadow-[0_0_28px_-4px_rgb(var(--accent)/0.55)] hover:border-electric/50",
       icon: (p) => (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...p}>
           <path
@@ -142,7 +143,7 @@ export default function FloatingDock({ lang }: { lang: Lang }) {
         blip("toggle");
       },
       active: stormOn,
-      ringClass: "hover:shadow-[0_0_28px_-4px_rgba(159,232,255,0.5)] hover:border-electric/50",
+      ringClass: "hover:shadow-[0_0_28px_-4px_rgb(var(--accent-soft)/0.5)] hover:border-electric/50",
       icon: (p) => (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...p}>
           <path d="M17.5 8a4.5 4.5 0 0 0-8.7-1.6A3.8 3.8 0 0 0 6 14h11a3 3 0 0 0 .5-6Z" strokeLinejoin="round" />
@@ -158,7 +159,7 @@ export default function FloatingDock({ lang }: { lang: Lang }) {
         blip("toggle");
       },
       active: lofiOn,
-      ringClass: "hover:shadow-[0_0_28px_-4px_rgba(159,232,255,0.5)] hover:border-electric/50",
+      ringClass: "hover:shadow-[0_0_28px_-4px_rgb(var(--accent-soft)/0.5)] hover:border-electric/50",
       icon: (p) => (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...p}>
           <path d="M9 18V6l10-2v11" strokeLinecap="round" strokeLinejoin="round" />
@@ -286,7 +287,7 @@ export default function FloatingDock({ lang }: { lang: Lang }) {
         className="glass-strong bolt-lit relative flex h-14 w-14 items-center justify-center rounded-full"
         style={{
           boxShadow: flash
-            ? `0 0 ${18 + flash * 42}px rgba(159,232,255,${0.25 + flash * 0.6}), inset 0 0 ${10 + flash * 20}px rgba(159,232,255,${flash * 0.35})`
+            ? `0 0 ${18 + flash * 42}px rgb(var(--accent-soft) / ${0.25 + flash * 0.6}), inset 0 0 ${10 + flash * 20}px rgb(var(--accent-soft) / ${flash * 0.35})`
             : undefined,
         }}
       >
@@ -312,8 +313,8 @@ export default function FloatingDock({ lang }: { lang: Lang }) {
           className="h-6 w-6 text-electric transition-all duration-200"
           style={{
             filter: flash
-              ? `drop-shadow(0 0 ${6 + flash * 14}px rgba(159,232,255,${0.4 + flash * 0.6}))`
-              : "drop-shadow(0 0 4px rgba(79,216,255,0.4))",
+              ? `drop-shadow(0 0 ${6 + flash * 14}px rgb(var(--accent-soft) / ${0.4 + flash * 0.6}))`
+              : "drop-shadow(0 0 4px rgb(var(--accent) / 0.4))",
             transform: flash ? "scale(1.15)" : "scale(1)",
           }}
           fill="currentColor"

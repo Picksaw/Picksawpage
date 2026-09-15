@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  @font-face {
+    font-family: "SoraVar";
+    src: url("file:///home/user/Picksawpage/node_modules/@fontsource-variable/sora/files/sora-latin-wght-normal.woff2") format("woff2-variations");
+    font-weight: 100 800;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 1300px; font-family: "SoraVar", Arial, sans-serif; }
+  .stage { position: relative; overflow: hidden; background: #05070f; }
+
+  /* ── OG card 1200×630 ── */
+  #og { width: 1200px; height: 630px; padding: 72px 80px; color: #eaf6ff;
+        display: flex; flex-direction: column; justify-content: center; }
+  #og::before { content: ""; position: absolute; inset: 0;
+    background:
+      radial-gradient(720px 480px at 86% 12%, rgba(79,216,255,0.20), transparent 62%),
+      radial-gradient(620px 520px at 8% 96%, rgba(42,108,255,0.16), transparent 60%),
+      linear-gradient(160deg, #0a1024 0%, #05070f 60%, #03040a 100%); }
+  #og::after { content: ""; position: absolute; inset: 0; opacity: .5;
+    background-image:
+      linear-gradient(rgba(79,216,255,.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,216,255,.05) 1px, transparent 1px);
+    background-size: 46px 46px; }
+  #og > * { position: relative; }
+  .toprow { display: flex; align-items: flex-start; justify-content: space-between; }
+  .mark { width: 132px; height: 132px; margin-bottom: 34px; }
+  .bolt { width: 56px; height: 56px; margin-top: 10px;
+          filter: drop-shadow(0 0 22px rgba(79,216,255,.8)); }
+  .word { font-size: 118px; font-weight: 800; letter-spacing: -3px; line-height: 1; }
+  .word .cy { background: linear-gradient(92deg,#9fe8ff,#4fd8ff 55%,#2a8fd0);
+             -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .tag { margin-top: 26px; font-size: 30px; font-weight: 400; color: #9fb6d4; letter-spacing: .2px;
+         max-width: 980px; line-height: 1.45; }
+  .tag b { color: #d7eaff; font-weight: 600; }
+  .founder { margin-top: 46px; font-size: 24px; color: #6f86a8; letter-spacing: .3px; }
+  .founder b { color: #9fe8ff; font-weight: 600; }
+
+  /* ── app/icon tiles ── */
+  .tile { position: absolute; width: 512px; height: 512px; left: 0; top: 650px;
+          border-radius: 112px; overflow: hidden;
+          background: radial-gradient(380px 380px at 78% 18%, #10324c, #05070f 72%); }
+  .tile svg { position: absolute; inset: 0; margin: auto; width: 300px; height: 300px; }
+  #i192 { width: 192px; height: 192px; left: 560px; top: 650px; border-radius: 42px; }
+  #i192 svg { width: 112px; height: 112px; }
+  #i180 { width: 180px; height: 180px; left: 560px; top: 880px; border-radius: 40px; }
+  #i180 svg { width: 106px; height: 106px; }
+</style>
+</head>
+<body>
+  <div id="og" class="stage">
+    <div class="toprow">
+      <svg class="mark" viewBox="0 0 64 64">
+        <defs>
+          <linearGradient id="pg" x1="0" y1="0" x2="0.7" y2="1">
+            <stop offset="0" stop-color="#c9f4ff"/><stop offset="0.55" stop-color="#4fd8ff"/><stop offset="1" stop-color="#2a8fd0"/>
+          </linearGradient>
+        </defs>
+        <path d="M20 54V12h14c8 0 13 5.5 13 13s-5 13-13 13H20" fill="none" stroke="url(#pg)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="44.5" cy="17.5" r="2.4" fill="#9fe8ff"/>
+      </svg>
+      <svg class="bolt" viewBox="0 0 24 24" fill="#4fd8ff"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+    </div>
+    <div class="word">Pick<span class="cy">saw</span></div>
+    <div class="tag"><b>Technology, design, art, music &amp; storytelling</b><br/>Cinematic websites &amp; templates · 3D · AI art · sound &nbsp;·&nbsp; Persian + English</div>
+    <div class="founder">By <b>Amirehsan Ashoori</b> — picksaw.ir</div>
+  </div>
+
+  <div class="tile stage" id="i512">
+    <svg viewBox="0 0 64 64">
+      <defs>
+        <linearGradient id="pt" x1="0" y1="0" x2="0.7" y2="1">
+          <stop offset="0" stop-color="#c9f4ff"/><stop offset="0.55" stop-color="#4fd8ff"/><stop offset="1" stop-color="#2a8fd0"/>
+        </linearGradient>
+      </defs>
+      <path d="M20 54V12h14c8 0 13 5.5 13 13s-5 13-13 13H20" fill="none" stroke="url(#pt)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="44.5" cy="17.5" r="2.4" fill="#9fe8ff"/>
+    </svg>
+  </div>
+  <div class="tile stage" id="i192">
+    <svg viewBox="0 0 64 64">
+      <path d="M20 54V12h14c8 0 13 5.5 13 13s-5 13-13 13H20" fill="none" stroke="#4fd8ff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <div class="tile stage" id="i180">
+    <svg viewBox="0 0 64 64">
+      <path d="M20 54V12h14c8 0 13 5.5 13 13s-5 13-13 13H20" fill="none" stroke="#4fd8ff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+</body>
+</html>

@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import Lenis from "lenis";
 import StormBackground from "./components/StormBackground";
 import Header from "./components/Header";
 import HomePage from "./pages/HomePage";
 import FeedPage from "./pages/FeedPage";
+import AboutPage from "./pages/AboutPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import AdminPanel from "./components/AdminPanel";
 import PostModal from "./components/PostModal";
@@ -14,8 +15,9 @@ import CursorFX from "./components/CursorFX";
 import Loader from "./components/Loader";
 import DevPanel from "./components/DevPanel";
 import { SoundProvider } from "./audio/SoundProvider";
-import { setLenis } from "./lib/lenis";
+import { setLenis, getLenis } from "./lib/lenis";
 import { getStorm, setDevMode, setStormOverride, subscribeStorm } from "./lib/stormStore";
+import { useThemeId } from "./lib/themeStore";
 import { useAdmin } from "./hooks/useAdmin";
 import { useLanguage } from "./hooks/useLanguage";
 import {
@@ -28,6 +30,8 @@ import {
 import { type Post } from "./types";
 import { SITE_TEXTS } from "./config/siteTexts";
 import { AnimatePresence, motion } from "motion/react";
+import Seo from "./components/Seo";
+import { AboutStaticText } from "./components/AboutSection";
 
 // ============================================================
 // GAME LINK
@@ -36,9 +40,23 @@ import { AnimatePresence, motion } from "motion/react";
 // ============================================================
 export const GAME_LINK = "https://stormblade.picksaw.ir";
 
+/** Reset scroll to the top whenever the route changes — without this,
+ *  leaving a deeply scrolled journey (e.g. /about frame 5) for Home
+ *  drops the visitor halfway down the new walk. */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const lenis = getLenis();
+    if (lenis) lenis.scrollTo(0, { immediate: true });
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 export default function App() {
   const { lang, toggle } = useLanguage();
   const { isAdmin, login, logout } = useAdmin();
+  const themeId = useThemeId();
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -182,9 +200,15 @@ export default function App() {
 
   return (
     <SoundProvider>
+      <ScrollToTop />
+      <Seo lang={lang} />
       <div className="relative min-h-screen overflow-x-hidden bg-storm-950 text-slate-100 antialiased">
         {/* the storm never stops */}
         <StormBackground />
+
+        {/* daylight legibility scrim — opacity is driven by data-theme
+            (fully transparent during the storm night) */}
+        <div aria-hidden className="theme-scrim pointer-events-none fixed inset-0 z-[1]" />
 
         {/* film grain */}
         <div aria-hidden className="grain pointer-events-none fixed inset-0 z-[80] opacity-[0.05]" />
@@ -214,6 +238,7 @@ export default function App() {
           <main>
             <Routes>
               <Route path="/" element={<HomePage lang={lang} introDone={introDone} />} />
+              <Route path="/about" element={<AboutPage lang={lang} />} />
               <Route
                 path="/feed"
                 element={
@@ -231,6 +256,10 @@ export default function App() {
             </Routes>
           </main>
 
+          {/* Crawlable + screen-reader About bio (the visible version
+              rides the 3D journey's About station) */}
+          <AboutStaticText />
+
           {/* Footer */}
           <footer className="relative border-t border-white/8 py-12">
             <div
@@ -242,10 +271,12 @@ export default function App() {
                 <p className="logo-wordmark text-sm font-bold text-white">
                   Pick<span className="text-electric">saw</span>
                 </p>
-                <p className="text-xs text-slate-600">
-                  {t.footerText.replace("{year}", String(new Date().getFullYear()))}
+                <p className="text-center text-xs text-slate-600">
+                  {t.footerCredit.replace("{year}", String(new Date().getFullYear()))}
                 </p>
-                <p className="text-xs text-slate-700">{t.footerTagline}</p>
+                <p className="text-xs text-slate-700">
+                  {themeId === "storm" ? t.footerTagline : t.footerTaglineDay}
+                </p>
               </div>
             </div>
           </footer>

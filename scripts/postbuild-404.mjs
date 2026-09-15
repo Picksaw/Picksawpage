@@ -30,8 +30,10 @@ const html = `<!doctype html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="description" content="404 — this page got lost in the storm." />
-<meta name="theme-color" content="#020617" />
+<meta name="robots" content="noindex" />
+<meta name="description" content="404 — this page got lost in the storm. Picksaw: the multidisciplinary creative identity of Amirehsan Ashoori — cinematic web, 3D, AI art, music and branding." />
+<meta name="author" content="Amirehsan Ashoori" />
+<meta name="theme-color" content="#05070f" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
 <title>404 — Picksaw</title>
 <style>

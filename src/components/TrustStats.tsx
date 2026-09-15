@@ -54,7 +54,7 @@ export default function TrustStats({ lang }: { lang: Lang }) {
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         className="h-9 w-9 text-electric"
-                        style={{ filter: "drop-shadow(0 0 10px rgba(79,216,255,0.6))" }}
+                        style={{ filter: "drop-shadow(0 0 10px rgb(var(--accent) / 0.6))" }}
                       >
                         <path d={s.glyph} />
                       </svg>

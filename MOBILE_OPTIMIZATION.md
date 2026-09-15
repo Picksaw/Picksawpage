@@ -39,8 +39,9 @@ Re-run after replacing models/textures: `node scripts/compress-assets.mjs`
 - **Idle the 3D loop when covered**: `frameloop="demand"` while the opaque
   intro loader or the live-preview modal is up (the last presented frame
   stays on screen). Loading was the most thermal moment of the visit.
-- **P-emblem draw-call gate**: the ghost card group goes `visible=false`
-  once the camera dives past it (transparent planes still burn fill-rate).
+- **Ghost-card draw-call gate**: each walk's card (the home P, the About A)
+  goes `visible=false` on its group once the camera dives past it —
+  transparent planes still burn fill-rate for the rest of the scroll.
 - **Storm canvas mobile DPR**: flat 1.0 (was up to 1.125) — it sits behind
   the WebGL canvas, its rain is soft-focus anyway.
 

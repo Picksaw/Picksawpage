@@ -21,7 +21,7 @@ export default function FeedPage({ lang, posts, isAdmin, onPostClick, onDeletePo
       {/* Hero for feed & game */}
       <section className="relative flex min-h-[50svh] flex-col items-center justify-center px-4 py-28 text-center sm:px-6">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-400/8 blur-[120px] animate-pulse-slow" />
+          <div className="absolute left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-electric/10 blur-[120px] animate-pulse-slow" />
         </div>
 
         <Reveal>
