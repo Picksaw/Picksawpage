@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+@theme {
+  --color-plum: #332635;
+  --color-plum-dark: #241A27;
+  --color-plum-light: #48364B;
+  --color-mauve: #9B7B8D;
+  --color-mauve-light: #B89EA9;
+  --color-ivory: #ECE2D8;
+  --color-ivory-surface: #E3D6D0;
+  --color-ivory-card: #E7D8DD;
+  --color-linen: #ECE2D8;
+  --color-linen-surface: #E3D6D0;
+  --color-rose-wash: #E7D8DD;
+  --color-mauve-wash: #DED5DD;
+  --color-rose: #D8B6BE;
+  --color-rose-soft: #E7D8DD;
+  --color-charcoal: #242126;
+  --color-warm-gray: #777176;
+  --color-warm-gray-light: #A39E9E;
+
+  --font-vazir: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-cinzel: 'Cinzel', Georgia, serif;
+  --font-outfit: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+}
+
+:root {
+  --brand-plum: #332635;
+  --brand-mauve: #9B7B8D;
+  --brand-ivory: #ECE2D8;
+  --surface-canvas: #ECE2D8;
+  --surface-muted: #E3D6D0;
+  --surface-elevated: #E7D8DD;
+  --surface-accent: #DED5DD;
+  --brand-rose: #D8B6BE;
+  --brand-charcoal: #242126;
+  --brand-warm-gray: #777176;
+}
+
+html {
+  scroll-behavior: auto;
+  font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #ECE2D8;
+  color: #242126;
+  direction: rtl;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background-color: #ECE2D8;
+  color: #242126;
+  min-height: 100dvh;
+  font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.8;
+  letter-spacing: -0.015em;
+}
+
+/* Custom Text Selection */
+::selection {
+  background-color: #332635;
+  color: #F7F3EE;
+}
+
+/* Lenis Recommended CSS */
+html.lenis, html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
+
+/* Refined Subtle Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #ECE2D8;
+}
+::-webkit-scrollbar-thumb {
+  background: #9B7B8D;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #332635;
+}
+
+/* Modal and Window specific scrollbar */
+.window-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.window-scroll::-webkit-scrollbar-track {
+  background: rgba(51, 38, 53, 0.05);
+  border-radius: 9999px;
+}
+.window-scroll::-webkit-scrollbar-thumb {
+  background: rgba(155, 123, 141, 0.4);
+  border-radius: 9999px;
+}
+.window-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(51, 38, 53, 0.8);
+}
+
+/* Focus styles for keyboard accessibility */
+:focus-visible {
+  outline: 2px solid #9B7B8D;
+  outline-offset: 3px;
+}
+
+/* Persian typography enhancements */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Vazirmatn', sans-serif;
+  font-feature-settings: "kern" 1, "ss01" 1;
+  letter-spacing: -0.02em;
+}
+
+p, span, a, button, li, input, textarea {
+  font-family: 'Vazirmatn', sans-serif;
+  font-feature-settings: "kern" 1;
+}
+
+/* Restrained media queries for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
