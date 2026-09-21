@@ -12,7 +12,7 @@
 export const SITE_IMAGES = {
   // Brand & Hero
   hero: {
-    main: '/images/hero-smile-clinic.jpg',
+    main: './images/hero-smile-clinic.jpg',
     alt: 'پرتره لبخند طبیعی و کلینیک دندانپزشکی لومینا دنتال',
   },
 
@@ -41,15 +41,15 @@ export const SITE_IMAGES = {
   // Specialists Portraits
   specialists: {
     doctorElena: {
-      src: '/images/doctor-elena.jpg',
+      src: './images/doctor-elena.jpg',
       alt: 'دکتر النا مرادی - متخصص دندانپزشکی زیبایی',
     },
     doctorDanial: {
-      src: '/images/doctor-danial.jpg',
+      src: './images/doctor-danial.jpg',
       alt: 'دکتر دانیال کریمی - متخصص ایمپلنتولوژی و جراحی',
     },
     doctorSofia: {
-      src: '/images/doctor-sofia.jpg',
+      src: './images/doctor-sofia.jpg',
       alt: 'دکتر سوفیا نادری - متخصص ارتودنسی و ارتوپدی فک',
     },
   },

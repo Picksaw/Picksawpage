@@ -20,11 +20,11 @@ export interface ImageAsset {
 
 export const IMAGE_CONFIG = {
   // Brand & Favicon / Logo
-  LOGO_MARK: "/images/logo-mark.svg",
+  LOGO_MARK: "./images/logo-mark.svg",
 
   // 01 - Hero Section Main Cinematic Banner
   HERO_MAIN_IMAGE: {
-    src: "/images/hero-clinic.jpg",
+    src: "./images/hero-clinic.jpg",
     fallbackSrc: "https://images.pexels.com/photos/10521230/pexels-photo-10521230.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=900&w=1800",
     alt: "فضای درونی مدرن و آرامش‌بخش کلینیک پزشکی و زیبایی پالس",
     caption: "پالس؛ کلینیک تخصصی پوست، مو و زیبایی",
@@ -32,7 +32,7 @@ export const IMAGE_CONFIG = {
 
   // 02 - Featured Architectural Image Band
   FEATURED_BAND_IMAGE: {
-    src: "/images/featured-clinic.jpg",
+    src: "./images/featured-clinic.jpg",
     fallbackSrc: "https://images.pexels.com/photos/7750096/pexels-photo-7750096.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=900&w=1800",
     alt: "محیط آرامش‌بخش و طراحی فضایی استاندارد کلینیک پالس",
     caption: "فضایی برای تمرکز، مراقبت و آرامش",
@@ -40,7 +40,7 @@ export const IMAGE_CONFIG = {
 
   // 03 - Doctor Profile Portrait
   DOCTOR_PORTRAIT: {
-    src: "/images/doctor-portrait.jpg",
+    src: "./images/doctor-portrait.jpg",
     fallbackSrc: "https://images.pexels.com/photos/32115905/pexels-photo-32115905.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=800",
     alt: "دکتر سارا مهرآرا — متخصص پوست، مو، زیبایی و لیزر",
     caption: "دکتر سارا مهرآرا — پزشک معالج کلینیک پالس",
@@ -50,7 +50,7 @@ export const IMAGE_CONFIG = {
   GALLERY_IMAGES: [
     {
       id: "gal-01",
-      src: "/images/gallery-01.jpg",
+      src: "./images/gallery-01.jpg",
       fallbackSrc: "https://images.pexels.com/photos/4586740/pexels-photo-4586740.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=800&w=1000",
       alt: "اتاق مشاوره و ارزیابی تشخیصی بالینی",
       caption: "اتاق مشاوره و ارزیابی تشخیصی بالینی",
@@ -59,7 +59,7 @@ export const IMAGE_CONFIG = {
     },
     {
       id: "gal-02",
-      src: "/images/gallery-02.jpg",
+      src: "./images/gallery-02.jpg",
       fallbackSrc: "https://images.pexels.com/photos/7195804/pexels-photo-7195804.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=800&w=1300",
       alt: "تجهیزات مدرن و محیط استریل مراقبت پوستی",
       caption: "فضای آرامش‌بخش درمان و مراقبت پوستی",
@@ -68,7 +68,7 @@ export const IMAGE_CONFIG = {
     },
     {
       id: "gal-03",
-      src: "/images/gallery-03.jpg",
+      src: "./images/gallery-03.jpg",
       fallbackSrc: "https://images.pexels.com/photos/6899536/pexels-photo-6899536.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=800&w=900",
       alt: "سالن انتظار اختصاصی و حریم مراجعه‌کنندگان",
       caption: "سالن انتظار اختصاصی و آرام کلینیک",
@@ -77,7 +77,7 @@ export const IMAGE_CONFIG = {
     },
     {
       id: "gal-04",
-      src: "/images/gallery-04.jpg",
+      src: "./images/gallery-04.jpg",
       fallbackSrc: "https://images.pexels.com/photos/4586727/pexels-photo-4586727.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=800&w=1100",
       alt: "پروتکل‌های پیشرفته لیزر و احیای بافت",
       caption: "کابین تخصصی لیزردرمانی و رفع ضایعات",
@@ -86,7 +86,7 @@ export const IMAGE_CONFIG = {
     },
     {
       id: "gal-05",
-      src: "/images/gallery-05.jpg",
+      src: "./images/gallery-05.jpg",
       fallbackSrc: "https://images.pexels.com/photos/3985361/pexels-photo-3985361.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=800&w=950",
       alt: "سوئیت اختصاصی تزریقات و مراقبت‌های زیبایی",
       caption: "سوئیت تزریقات دقیق و متقارن",
@@ -95,7 +95,7 @@ export const IMAGE_CONFIG = {
     },
     {
       id: "gal-06",
-      src: "/images/gallery-06.jpg",
+      src: "./images/gallery-06.jpg",
       fallbackSrc: "https://images.pexels.com/photos/20382216/pexels-photo-20382216.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=800&w=1200",
       alt: "پذیرش صمیمانه با معماری مدرن و منظم",
       caption: "کانتر پذیرش و هماهنگی نوبت‌ها",
@@ -108,7 +108,7 @@ export const IMAGE_CONFIG = {
   INSTAGRAM_HIGHLIGHTS: [
     {
       id: "ig-01",
-      src: "/images/instagram-01.jpg",
+      src: "./images/instagram-01.jpg",
       fallbackSrc: "https://images.pexels.com/photos/4586732/pexels-photo-4586732.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=600&w=600",
       alt: "مشاوره تشخیصی؛ نخستین گام در شخصی‌سازی روند درمان",
       caption: "مشاوره تشخیصی؛ نخستین گام در شخصی‌سازی روند درمان",
@@ -144,27 +144,27 @@ export const IMAGE_CONFIG = {
   SERVICES_IMAGES: [
     {
       serviceId: "srv-01",
-      src: "/images/gallery-01.jpg",
+      src: "./images/gallery-01.jpg",
       alt: "آنالیز ساختار پوست و مراقبت‌های بالینی",
     },
     {
       serviceId: "srv-02",
-      src: "/images/gallery-05.jpg",
+      src: "./images/gallery-05.jpg",
       alt: "جوان‌سازی و تحریک کلاژن‌سازی",
     },
     {
       serviceId: "srv-03",
-      src: "/images/gallery-04.jpg",
+      src: "./images/gallery-04.jpg",
       alt: "لیزردرمانی تخصصی و رفع لک",
     },
     {
       serviceId: "srv-04",
-      src: "/images/gallery-02.jpg",
+      src: "./images/gallery-02.jpg",
       alt: "فرم‌دهی و زاویه‌سازی طبیعی چهره",
     },
     {
       serviceId: "srv-05",
-      src: "/images/gallery-03.jpg",
+      src: "./images/gallery-03.jpg",
       alt: "ترمیم و تقویت تخصصی فولیکول مو",
     },
   ],

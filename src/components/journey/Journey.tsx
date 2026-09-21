@@ -354,7 +354,8 @@ export default function Journey({
                     try {
                       return new URL(focusedItem.url).hostname;
                     } catch {
-                      return focusedItem.url;
+                      // local integrated route ("/verda/") — public address
+                      return `picksaw.ir/${focusedItem.url.replace(/^\/|\/$/g, "")}`;
                     }
                   })()}
                 </div>
