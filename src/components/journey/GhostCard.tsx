@@ -39,13 +39,14 @@ import {
 const IS_MOBILE =
   typeof window !== "undefined" &&
   window.matchMedia("(pointer: coarse)").matches;
-// Perf: the ghost RTT is a 512² render-to-texture with an fbm fragment
-// shader — the priciest single GPU op in the emblem. The window it fills
-// is ~1/4 of a card that is ~2.4 world units wide, so 384 (desktop) /
-// 256 (mobile) is indistinguishable once the fake-bloom blur runs.
-const RTT_SIZE = IS_MOBILE ? 256 : 384;
+// Perf: the ghost RTT is a render-to-texture with an fbm fragment
+// shader — the priciest single GPU op in the emblem, already gated to
+// 30 Hz on mobile. 256² visibly blurred on dpr-3 phone screens (the
+// card nearly fills them), so both form factors render it at 384²; the
+// frame gate, not the resolution, carries the perf budget.
+const RTT_SIZE = 384;
 // Perf: fbm octaves — the smoke drifts at 0.2 u/s; 3 octaves on mobile
-// cannot be told apart from 5 at 256px.
+// cannot be told apart from 5 after the fake-bloom blur runs.
 const FBM_OCTAVES = IS_MOBILE ? 3 : 5;
 const ARC_POINTS = 18;
 const BRANCH_POINTS = 8;
@@ -947,9 +948,11 @@ export default function GhostCard({
       frequency: 10,
       baseFlatness: 0,
     });
-    // Perf: the ring is a ~2px additive glow. Mobile draws it at 0.6×
-    // resolution — 4× fewer canvas pixels and 4× smaller texture upload.
-    const borderScale = IS_MOBILE ? 0.6 : 1;
+    // Sharpness: the ring is drawn every 2nd frame on mobile (the real
+    // perf lever — half the redraws + uploads). Drawing it at 0.6×
+    // resolution too made the bolts smear on hi-dpi phones, so the
+    // painter runs at full resolution on every device.
+    const borderScale = 1;
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(2, Math.round(painter.canvasWidth * borderScale));
     canvas.height = Math.max(2, Math.round(painter.canvasHeight * borderScale));

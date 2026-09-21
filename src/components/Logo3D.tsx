@@ -249,7 +249,8 @@ export default function Logo3D({ size = 64, className, fill = false }: Logo3DPro
       aria-label="Picksaw logo"
     >
       <Canvas
-        dpr={[1, 1.5]}
+        // retina-sharp edges at negligible cost for a 34-42px canvas
+        dpr={[1, 2]}
         frameloop={reduced ? "demand" : visible ? "always" : "never"}
         camera={{ position: [0, 0, 4.6], fov: 38 }}
         // Perf: a 34-42px canvas doesn't need MSAA; it was the only

@@ -351,7 +351,10 @@ export default function StormBackground() {
     }
 
     const resize = () => {
-      dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.0 : 2);
+      // Mobile: 1.5× (was a flat 1.0, which smeared the bolts on dpr 2–3
+      // phones). The adaptive renderEveryN guard below still throttles
+      // the framerate on weak devices — sharpness no longer pays for it.
+      dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
       w = window.innerWidth;
       h = window.innerHeight;
       canvas.width = Math.max(1, Math.round(w * dpr));
