@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Alexandria", "Vazirmatn", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Alexandria", "Vazirmatn", sans-serif;
+  --font-editorial: "Plus Jakarta Sans", "Alexandria", "Vazirmatn", sans-serif;
+  --font-number: "Plus Jakarta Sans", "Alexandria", monospace;
+
+  --color-pulse-navy: #0B1F2A;
+  --color-pulse-deep: #16394A;
+  --color-pulse-ice: #DDECF0;
+  --color-pulse-warm: #F7F6F2;
+  --color-pulse-coral: #E88B7B;
+  --color-pulse-gray: #7B858A;
+  --color-pulse-light-blue: #EEF5F7;
+  --color-pulse-border: rgba(11, 31, 42, 0.12);
+  --color-pulse-border-light: rgba(11, 31, 42, 0.06);
+}
+
+/* Base styles & refined Persian architectural typography */
+html {
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "ss02", "cv01";
+  scroll-behavior: auto;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #F7F6F2;
+  color: #0B1F2A;
+  overflow-x: hidden;
+  line-height: 1.8;
+  letter-spacing: normal;
+}
+
+/* Typography elements */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+/* Custom numbers styling with LTR enforcement for phones & codes */
+.font-number {
+  font-family: "Plus Jakarta Sans", "Alexandria", system-ui, sans-serif;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: 0.02em;
+}
+
+[dir="ltr"] {
+  direction: ltr !important;
+  text-align: left;
+}
+
+/* Editorial line decorations */
+.architectural-line {
+  background-color: rgba(11, 31, 42, 0.12);
+}
+
+.architectural-line-coral {
+  background-color: #E88B7B;
+}
+
+/* Custom site scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F7F6F2;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #16394A;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #0B1F2A;
+}
+
+/* Custom isolated scrollbar inside modal details window */
+.custom-modal-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #16394A #DDECF0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.custom-modal-scrollbar::-webkit-scrollbar {
+  width: 7px;
+}
+
+.custom-modal-scrollbar::-webkit-scrollbar-track {
+  background: #DDECF0;
+  border-radius: 2px;
+}
+
+.custom-modal-scrollbar::-webkit-scrollbar-thumb {
+  background: #16394A;
+  border-radius: 4px;
+}
+
+.custom-modal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #0B1F2A;
+}
+
+/* Lenis smooth scroll */
+html.lenis, html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
+
+/* Accessible focus outlines */
+:focus-visible {
+  outline: 2px solid #E88B7B;
+  outline-offset: 3px;
+}
+
+/* Animation helpers for modal */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes zoomIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.animate-in {
+  animation-duration: 200ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-fill-mode: forwards;
+}
+
+.fade-in {
+  animation-name: fadeIn;
+}
+
+.zoom-in-95 {
+  animation-name: zoomIn;
+}
