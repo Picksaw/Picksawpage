@@ -33,17 +33,23 @@ Re-run after replacing models/textures: `node scripts/compress-assets.mjs`
 
 ### 2. Runtime smoothness on phones
 
-- **Adaptive resolution** (`Journey.tsx`): drei `<PerformanceMonitor>` walks
-  the canvas DPR between 0.75 and the 1.25 cap — strong phones never dip,
-  weak phones trade a hair of sharpness for framerate instead of jank.
+- **Adaptive resolution** (`Journey.tsx`, `AboutJourney.tsx` →
+  `src/lib/renderQuality.ts`): drei `<PerformanceMonitor>` walks the
+  canvas DPR between a 1.0 floor and a device-aware cap — phones render
+  at up to 2× (retina-crisp; the fixed 1.25 cap was visibly blurry on
+  dpr 2–3.5 screens), plain 1× desktops keep their 1.25 supersample,
+  retina laptops cap at 1.75. Strong devices never dip, weak devices
+  trade a hair of sharpness for framerate instead of jank.
 - **Idle the 3D loop when covered**: `frameloop="demand"` while the opaque
   intro loader or the live-preview modal is up (the last presented frame
   stays on screen). Loading was the most thermal moment of the visit.
 - **Ghost-card draw-call gate**: each walk's card (the home P, the About A)
   goes `visible=false` on its group once the camera dives past it —
   transparent planes still burn fill-rate for the rest of the scroll.
-- **Storm canvas mobile DPR**: flat 1.0 (was up to 1.125) — it sits behind
-  the WebGL canvas, its rain is soft-focus anyway.
+- **Storm canvas mobile DPR**: 1.5× (was a flat 1.0, which smeared the
+  bolts on dpr 2–3 phones) — it sits behind the WebGL canvas and its rain
+  is soft-focus anyway; the adaptive `renderEveryN` framerate throttle,
+  not the pixel count, remains the perf guard.
 
 ### 3. Layout / scaling fixes (mobile-only, look preserved on desktop)
 

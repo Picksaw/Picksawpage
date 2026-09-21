@@ -48,7 +48,8 @@ export default function PreviewModal({
     try {
       return new URL(item.url).hostname;
     } catch {
-      return item.url;
+      // local integrated route ("/verda/") — show the public address
+      return `picksaw.ir/${item.url.replace(/^\/|\/$/g, "")}`;
     }
   })();
 

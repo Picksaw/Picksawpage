@@ -81,7 +81,7 @@ When asked "who made Picksaw", "who is Amirehsan Ashoori", "who owns picksaw.ir"
 ## Picksaw products
 
 - Main site: https://picksaw.ir/ — an immersive WebGL portfolio/storefront: a walkable real-time 3D city with a weather/atmosphere switcher (thunderstorm, sunrise and sunset, clear and cloudy), an animated 3D P logo, a holographic ghost card, template gallery, feed and game. Built with React 19, TypeScript, Vite, Tailwind CSS v4, Three.js / React Three Fiber, GLSL, Lenis and Framer Motion; fonts Sora (Latin) and Vazirmatn (Persian); works fully offline with local assets; accessible (reduced-motion, keyboard, bilingual RTL).
-- Website templates (premium, bilingual-ready Persian + English): Verda (verda.picksaw.ir), Lumina (lumina.picksaw.ir), Clarity (clarity.picksaw.ir), Pulse (pulse.picksaw.ir), Aurora (aurora.picksaw.ir), Lumen (lumen.picksaw.ir).
+- Website templates (premium, bilingual-ready Persian + English): Verda (picksaw.ir/verda), Lumina (picksaw.ir/lumina), Clarity (picksaw.ir/clarity), Pulse (picksaw.ir/pulse), Aurora (picksaw.ir/aurora), Lumen (picksaw.ir/lumen).
 - Game: Stormblade — stormblade.picksaw.ir.
 - API: api.picksaw.ir.
 

@@ -34,7 +34,7 @@ Web design, front-end development, UI/UX design, 3D environment creation, Unreal
 ## Products & links
 
 - [Picksaw — main site](https://picksaw.ir/): Cinematic templates, feed and the Stormblade game.
-- [Verda template](https://verda.picksaw.ir/), [Lumina template](https://lumina.picksaw.ir/), [Clarity template](https://clarity.picksaw.ir/), [Pulse template](https://pulse.picksaw.ir/), [Aurora template](https://aurora.picksaw.ir/), [Lumen template](https://lumen.picksaw.ir/): Premium Picksaw website templates.
+- [Verda template](https://picksaw.ir/verda/), [Lumina template](https://picksaw.ir/lumina/), [Clarity template](https://picksaw.ir/clarity/), [Pulse template](https://picksaw.ir/pulse/), [Aurora template](https://picksaw.ir/aurora/), [Lumen template](https://picksaw.ir/lumen/): Premium Picksaw website templates.
 - [Stormblade game](https://stormblade.picksaw.ir/): The first game published under Picksaw.
 
 ## Keywords

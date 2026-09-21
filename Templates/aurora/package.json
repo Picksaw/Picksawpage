@@ -1,0 +1,32 @@
+{
+  "name": "aurora-aesthetic-clinic",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PICKSAW TEMPLATE #1 — AURORA: Flagship Luxury Aesthetic Clinic Landing Page",
+  "main": "index.html",
+  "scripts": {
+    "dev": "npx -y serve . -p 3000",
+    "start": "npx -y serve . -p 3000",
+    "build": "node -e \"console.log('✨ Build ready. All assets from media.js and content.js are bundled and ready for deployment.')\"",
+    "preview": "npx -y serve . -p 5000"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Picksaw/aurora.git"
+  },
+  "keywords": [
+    "picksaw",
+    "aurora",
+    "luxury-aesthetic-clinic",
+    "persian-rtl",
+    "lenis-smooth-scroll",
+    "gsap",
+    "silk-motion"
+  ],
+  "author": "Picksaw Studio (پیکسا)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Picksaw/aurora/issues"
+  },
+  "homepage": "https://github.com/Picksaw/aurora#readme"
+}

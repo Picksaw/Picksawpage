@@ -10,6 +10,7 @@ import { CorridorScene } from "./Corridor";
 import { aboutLayout, layerOpacity } from "./path";
 import { getLenis } from "../../lib/lenis";
 import { registerPerfGl } from "../../lib/perfProbe";
+import { JOURNEY_DPR_MIN, journeyDprMax } from "../../lib/renderQuality";
 import { useThemeId } from "../../lib/themeStore";
 import { SITE_TEXTS } from "../../config/siteTexts";
 
@@ -71,12 +72,15 @@ export default function AboutJourney({ lang }: { lang: Lang }) {
     }
   }, []);
 
+  // Perf: same adaptive pixel budget as the home walk, with the DPR cap
+  // tracking the device (see renderQuality.ts) — sharp on retina screens,
+  // stepped down automatically when the framerate can't hold.
   const isMobile =
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: coarse)").matches;
 
-  const DPR_MAX = 1.25;
-  const DPR_MIN = 0.75;
+  const DPR_MAX = journeyDprMax(isMobile);
+  const DPR_MIN = JOURNEY_DPR_MIN;
   const [dpr, setDpr] = useState(DPR_MAX);
 
   return (

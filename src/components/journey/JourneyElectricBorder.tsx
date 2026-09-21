@@ -18,8 +18,9 @@ import { THEMES } from "../../lib/themes";
  * Perf: the ring is only VISIBLE on the solo (focused) painting, so we
  * re-render + re-upload the texture only while that painting is on
  * screen (previously: full canvas redraw + GPU upload every single
- * frame of the whole walk). Mobile draws it at lower texture
- * resolution and updates at 30 Hz — a 2px-wide glow.
+ * frame of the whole walk). Mobile still updates at 30 Hz — the frame
+ * gate is the perf lever; its texture resolution now stays high enough
+ * that the bolts look like light, not smears, on hi-dpi screens.
  */
 
 /** Canvas overscan around each painting — must match the painter's
@@ -28,7 +29,7 @@ export const BORDER_OVERSCAN = 0.09;
 
 /** Texture resolution: px per world unit for the painting cards. */
 const PX_PER_UNIT_DESKTOP = 213;
-const PX_PER_UNIT_MOBILE = 130;
+const PX_PER_UNIT_MOBILE = 192;
 
 export function useJourneyElectricBorder(
   cardW: number,

@@ -17,7 +17,7 @@ export const TEMPLATES: TemplateItem[] = [
     name: { en: "Verda", fa: "وِردا" },
     title: { en: "Verda", fa: "وِردا" },
     description: { en: "", fa: "" },
-    url: "https://verda.picksaw.ir/",
+    url: "/verda/",
     imageKey: "verda",
   },
   {
@@ -25,7 +25,7 @@ export const TEMPLATES: TemplateItem[] = [
     name: { en: "Lumina", fa: "لومینا" },
     title: { en: "Lumina", fa: "لومینا" },
     description: { en: "", fa: "" },
-    url: "https://lumina.picksaw.ir/",
+    url: "/lumina/",
     imageKey: "lumina",
   },
   {
@@ -33,7 +33,7 @@ export const TEMPLATES: TemplateItem[] = [
     name: { en: "Clarity", fa: "کلاریتی" },
     title: { en: "Clarity", fa: "کلاریتی" },
     description: { en: "", fa: "" },
-    url: "https://clarity.picksaw.ir/",
+    url: "/clarity/",
     imageKey: "clarity",
   },
   {
@@ -41,7 +41,7 @@ export const TEMPLATES: TemplateItem[] = [
     name: { en: "Pulse", fa: "پالس" },
     title: { en: "Pulse", fa: "پالس" },
     description: { en: "", fa: "" },
-    url: "https://pulse.picksaw.ir/",
+    url: "/pulse/",
     imageKey: "pulse",
   },
 {
@@ -49,7 +49,7 @@ export const TEMPLATES: TemplateItem[] = [
   name: { en: "Aurora", fa: "آورورا" },
   title: { en: "Aurora", fa: "آورورا" },
   description: { en: "", fa: "" },
-  url: "https://aurora.picksaw.ir/",  // <-- CHANGE THIS TO YOUR LINK
+  url: "/aurora/",
   imageKey: "aurora",
 },
 {
@@ -57,7 +57,7 @@ export const TEMPLATES: TemplateItem[] = [
   name: { en: "Lumen", fa: "لومن" },
   title: { en: "Lumen", fa: "لومن" },
   description: { en: "", fa: "" },
-  url: "https://lumen.picksaw.ir/",  // <-- CHANGE THIS TO YOUR LINK
+  url: "/lumen/",
   imageKey: "lumen",
 },
 ];

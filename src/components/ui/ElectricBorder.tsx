@@ -348,9 +348,10 @@ class ElectricBorderEngine {
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
 
-    // Perf: bolts are ~2px-wide glows — no device benefits from 2× here.
-    const coarse = window.matchMedia("(pointer: coarse)").matches;
-    this.dpr = Math.min(window.devicePixelRatio || 1, coarse ? 1.25 : 1.5);
+    // Sharpness: the ~2px bolt glows visibly smear when the canvas is
+    // upscaled on hi-dpi screens (phones are dpr 2–3.5), so render at
+    // the device ratio capped at 2 — still ≤ the native cost on dpr 3+.
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
 
     this.painter = new ElectricPainter({
       width: rect.width / (1 + 2 * this.opts.overscan),

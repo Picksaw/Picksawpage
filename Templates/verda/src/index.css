@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-primary: #F5F3EA;
+    --sage-mist: #E9EFE0;
+    --sage-mist-light: #F1F5E9;
+    --sage-green: #9CAF88;
+    --sage-light: #B7C7A7;
+    --sage-dark: #7A8E65;
+    --deep-olive: #344236;
+    --soft-yellow: #E9D98A;
+    --muted-beige: #D9D0BC;
+    --text-primary: #252923;
+    --text-secondary: #70756D;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    font-family: 'Vazirmatn', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-feature-settings: 'ss01' on, 'cv01' on;
+  }
+
+  html.lenis, html.lenis-smooth {
+    height: auto;
+  }
+
+  .lenis.lenis-smooth [data-lenis-prevent] {
+    overscroll-behavior: contain;
+  }
+
+  .lenis.lenis-stopped {
+    overflow: hidden;
+  }
+
+  .lenis.lenis-scrolling iframe {
+    pointer-events: none;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    letter-spacing: -0.01em;
+    line-height: 1.8;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    line-height: 1.35;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F5F3EA;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D9D0BC;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9CAF88;
+}
+
+/* Persian & Editorial Typography */
+.font-vazir {
+  font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.font-editorial {
+  font-family: 'Plus Jakarta Sans', 'Vazirmatn', sans-serif;
+}
+
+.font-serif-en {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+/* Modal and Details Window animations */
+@keyframes modalBackdropFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalContentSlideUp {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-backdrop-animate {
+  animation: modalBackdropFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.modal-content-animate {
+  animation: modalContentSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

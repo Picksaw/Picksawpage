@@ -25,6 +25,7 @@ import MagneticButton from "../ui/MagneticButton";
 import { useSound } from "../../audio/SoundProvider";
 import { getLenis } from "../../lib/lenis";
 import { registerPerfGl } from "../../lib/perfProbe";
+import { JOURNEY_DPR_MIN, journeyDprMax } from "../../lib/renderQuality";
 import { useThemeId } from "../../lib/themeStore";
 
 /**
@@ -127,19 +128,21 @@ export default function Journey({
 
   const focusedItem = focusedIdx >= 0 ? TEMPLATES[focusedIdx] : null;
 
-  // Perf: pixel budget. Mobile GPUs are fill-rate bound — the storm 2D
-  // canvas + this canvas both fill the screen. 1.25× + no MSAA on mobile
-  // (the scene is fog-soft; AA barely matters) vs 1.5× + MSAA on desktop.
+  // Perf: pixel budget with a sharpness floor. Mobile GPUs are fill-rate
+  // bound — the storm 2D canvas + this canvas both fill the screen — so
+  // no MSAA on mobile (the scene is fog-soft; AA barely matters). The DPR
+  // cap itself tracks the device (see renderQuality.ts): phones render at
+  // up to 2× so the city is retina-crisp instead of upscaled and blurry.
   const isMobile =
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: coarse)").matches;
 
-  // Adaptive resolution: start at the full 1.25× cap; if the device
-  // can't hold the framerate, PerformanceMonitor steps the backing store
-  // down (0.25 steps, floor 0.75 — a subtle soften, never a look change)
-  // and back up again when there's headroom. Strong phones never dip.
-  const DPR_MAX = 1.25;
-  const DPR_MIN = 0.75;
+  // Adaptive resolution: start at the device-appropriate cap; if the
+  // device can't hold the framerate, PerformanceMonitor steps the backing
+  // store down (0.25 steps, floor 1.0 — a soften, never pixelation) and
+  // back up again when there's headroom. Strong devices never dip.
+  const DPR_MAX = journeyDprMax(isMobile);
+  const DPR_MIN = JOURNEY_DPR_MIN;
   const [dpr, setDpr] = useState(DPR_MAX);
 
   return (
@@ -175,7 +178,7 @@ export default function Journey({
         }}
       >
         <Canvas
-          dpr={dpr} // capped everywhere — 4K desktops are fill-rate bound
+          dpr={dpr} // device-aware cap (≤2×) + adaptive decline — sharp AND fill-rate safe
           // While the live-preview modal or the intro loader covers the
           // screen there is nothing to animate — render on demand only
           // (the last presented frame stays up). Phones stop burning GPU
@@ -351,7 +354,8 @@ export default function Journey({
                     try {
                       return new URL(focusedItem.url).hostname;
                     } catch {
-                      return focusedItem.url;
+                      // local integrated route ("/verda/") — public address
+                      return `picksaw.ir/${focusedItem.url.replace(/^\/|\/$/g, "")}`;
                     }
                   })()}
                 </div>
