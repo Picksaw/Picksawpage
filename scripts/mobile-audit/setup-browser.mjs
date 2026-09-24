@@ -23,10 +23,19 @@ const untar = (br, out) => {
   execSync(`tar -xf /tmp/x.tar -C ${out}`);
 };
 
-untar(`${P}/chromium.br`, "/tmp/");
 untar(`${P}/al2023.tar.br`, "/tmp/al2023");
 untar(`${P}/fonts.tar.br`, "/tmp/fonts");
-untar(`${P}/swiftshader.tar.br`, "/tmp/");
+untar(`${P}/swiftshader.tar.br`, "/tmp/`);
+
+// chromium.br: raw brotli'd ELF in @sparticuz/chromium ≥ 120 (older
+// releases shipped a tar). Detect the format instead of assuming.
+const chromium = zlib.brotliDecompressSync(readFileSync(`${P}/chromium.br`));
+if (chromium[0] === 0x7f && chromium[1] === 0x45) {
+  writeFileSync("/tmp/chromium", chromium);
+} else {
+  writeFileSync("/tmp/x.tar", chromium);
+  execSync("tar -xf /tmp/x.tar -C /tmp/");
+}
 
 execSync("chmod +x /tmp/chromium");
 console.log("ok:", execSync("LD_LIBRARY_PATH=/tmp/al2023/lib /tmp/chromium --version").toString().trim());

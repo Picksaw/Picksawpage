@@ -203,8 +203,8 @@ export default function App() {
       <ScrollToTop />
       <Seo lang={lang} />
       <div className="relative min-h-screen overflow-x-hidden bg-storm-950 text-slate-100 antialiased">
-        {/* the storm never stops */}
-        <StormBackground />
+        {/* the storm never stops (except behind the opaque intro loader) */}
+        <StormBackground covered={!introDone} />
 
         {/* daylight legibility scrim — opacity is driven by data-theme
             (fully transparent during the storm night) */}
@@ -238,7 +238,7 @@ export default function App() {
           <main>
             <Routes>
               <Route path="/" element={<HomePage lang={lang} introDone={introDone} />} />
-              <Route path="/about" element={<AboutPage lang={lang} />} />
+              <Route path="/about" element={<AboutPage lang={lang} introDone={introDone} />} />
               <Route
                 path="/feed"
                 element={

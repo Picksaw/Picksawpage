@@ -1,6 +1,5 @@
 import { useCallback, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { PerformanceMonitor } from "@react-three/drei";
 import {
   AnimatePresence,
   motion,
@@ -25,7 +24,7 @@ import MagneticButton from "../ui/MagneticButton";
 import { useSound } from "../../audio/SoundProvider";
 import { getLenis } from "../../lib/lenis";
 import { registerPerfGl } from "../../lib/perfProbe";
-import { JOURNEY_DPR_MIN, journeyDprMax } from "../../lib/renderQuality";
+import { useJourneyDpr } from "../../lib/renderQuality";
 import { useThemeId } from "../../lib/themeStore";
 
 /**
@@ -137,13 +136,12 @@ export default function Journey({
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: coarse)").matches;
 
-  // Adaptive resolution: start at the device-appropriate cap; if the
-  // device can't hold the framerate, PerformanceMonitor steps the backing
-  // store down (0.25 steps, floor 1.0 — a soften, never pixelation) and
-  // back up again when there's headroom. Strong devices never dip.
-  const DPR_MAX = journeyDprMax(isMobile);
-  const DPR_MIN = JOURNEY_DPR_MIN;
-  const [dpr, setDpr] = useState(DPR_MAX);
+  // Adaptive resolution (see useJourneyDpr): starts at the sharp
+  // device-aware cap; if the page can't hold ~60 fps it steps the
+  // backing store down within ~2–4 s (floor 1.0 — native CSS res,
+  // never pixelated) and climbs back only after ~3 s of proven
+  // headroom. Strong devices never leave the sharp cap.
+  const dpr = useJourneyDpr(introDone);
 
   return (
     <>
@@ -209,14 +207,6 @@ export default function Journey({
             document.body.style.cursor = "";
           }}
         >
-          <PerformanceMonitor
-            ms={500}
-            iterations={6}
-            flipflops={4}
-            onDecline={() => setDpr((d) => Math.max(DPR_MIN, +(d - 0.25).toFixed(2)))}
-            onIncline={() => setDpr((d) => Math.min(DPR_MAX, +(d + 0.1).toFixed(2)))}
-            onFallback={() => setDpr(DPR_MIN)}
-          />
           {/* fog + lighting retime with the selected atmosphere theme */}
           <ThemeRig />
 
