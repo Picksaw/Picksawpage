@@ -12,10 +12,17 @@ import { hasWebGL, prefersReducedMotion } from "../lib/webgl";
  * Milad Tower finale. Without WebGL (or with reduced motion): the
  * classic, fully readable About section.
  */
-export default function AboutPage({ lang }: { lang: Lang }) {
+export default function AboutPage({
+  lang,
+  introDone = true,
+}: {
+  lang: Lang;
+  /** the opaque intro loader covers the canvas — idle the loop while up */
+  introDone?: boolean;
+}) {
   const journey = useMemo(() => hasWebGL() && !prefersReducedMotion(), []);
 
-  if (journey) return <AboutJourney lang={lang} />;
+  if (journey) return <AboutJourney lang={lang} introDone={introDone} />;
 
   return (
     <div className="relative pt-28 sm:pt-32">

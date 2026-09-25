@@ -1273,7 +1273,13 @@ export default function GhostCard({
       border.painter.setActive(flash > 0.2 || c > 0.65);
       // O(1) clock tick every frame so the crackle never jumps.
       border.painter.advance(dt * 1000);
-      if (!IS_MOBILE || borderFrame.current++ % 2 === 0) {
+      // Repaint + GPU upload at 30 Hz on EVERY device: advance() keeps
+      // the animation clock continuous, so this is a pure sample-rate
+      // gate. The painter is one of the priciest per-frame JS jobs on
+      // desktop (several ms of 2D bolts + a texture upload); halving
+      // its rate is invisible behind the fake-bloom glow and is the
+      // same budget phones have been running since the mobile pass.
+      if (borderFrame.current++ % 2 === 0) {
         const bt0 = performance.now();
         border.painter.render(border.ctx);
         border.texture.needsUpdate = true;

@@ -1,6 +1,5 @@
 import { useCallback, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { PerformanceMonitor } from "@react-three/drei";
 import { AnimatePresence, motion, useMotionValueEvent, useScroll } from "motion/react";
 import { type Lang } from "../../config/siteTexts";
 import ThemeRig from "./ThemeRig";
@@ -10,7 +9,7 @@ import { CorridorScene } from "./Corridor";
 import { aboutLayout, layerOpacity } from "./path";
 import { getLenis } from "../../lib/lenis";
 import { registerPerfGl } from "../../lib/perfProbe";
-import { JOURNEY_DPR_MIN, journeyDprMax } from "../../lib/renderQuality";
+import { useJourneyDpr } from "../../lib/renderQuality";
 import { useThemeId } from "../../lib/themeStore";
 import { SITE_TEXTS } from "../../config/siteTexts";
 
@@ -23,7 +22,14 @@ import { SITE_TEXTS } from "../../config/siteTexts";
  * walks the visitor from window to window down the boulevard toward the
  * Milad Tower finale.
  */
-export default function AboutJourney({ lang }: { lang: Lang }) {
+export default function AboutJourney({
+  lang,
+  introDone = true,
+}: {
+  lang: Lang;
+  /** the opaque intro loader covers the canvas — idle the loop while up */
+  introDone?: boolean;
+}) {
   const t = SITE_TEXTS[lang];
   const themeId = useThemeId();
   const scrollHint = themeId === "storm" ? t.scrollHint : t.scrollHintDay;
@@ -74,14 +80,11 @@ export default function AboutJourney({ lang }: { lang: Lang }) {
 
   // Perf: same adaptive pixel budget as the home walk, with the DPR cap
   // tracking the device (see renderQuality.ts) — sharp on retina screens,
-  // stepped down automatically when the framerate can't hold.
+  // stepped down within seconds when the framerate can't hold.
   const isMobile =
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: coarse)").matches;
-
-  const DPR_MAX = journeyDprMax(isMobile);
-  const DPR_MIN = JOURNEY_DPR_MIN;
-  const [dpr, setDpr] = useState(DPR_MAX);
+  const dpr = useJourneyDpr(introDone);
 
   return (
     <>
@@ -98,7 +101,10 @@ export default function AboutJourney({ lang }: { lang: Lang }) {
       <div className="fixed inset-0 z-[2]" dir="ltr" style={{ touchAction: "pan-y" }}>
         <Canvas
           dpr={dpr}
-          frameloop="always"
+          // While the opaque intro loader covers the screen there is
+          // nothing to animate — render on demand only (same as the
+          // home walk): the loader used to burn GPU behind itself.
+          frameloop={introDone ? "always" : "demand"}
           camera={{
             position: [0, 0, aboutLayout.stations[0]],
             fov: window.innerWidth / window.innerHeight < 0.8 ? 58 : 42,
@@ -114,14 +120,6 @@ export default function AboutJourney({ lang }: { lang: Lang }) {
           style={{ background: "transparent", touchAction: "pan-y" }}
           onCreated={(state) => registerPerfGl("about", state.gl)}
         >
-          <PerformanceMonitor
-            ms={500}
-            iterations={6}
-            flipflops={4}
-            onDecline={() => setDpr((d) => Math.max(DPR_MIN, +(d - 0.25).toFixed(2)))}
-            onIncline={() => setDpr((d) => Math.min(DPR_MAX, +(d + 0.1).toFixed(2)))}
-            onFallback={() => setDpr(DPR_MIN)}
-          />
           <ThemeRig />
           {/* the walk opens on its own ghost card, like the home walk */}
           <GhostCard variant="a" />

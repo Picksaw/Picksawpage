@@ -34,7 +34,9 @@ Re-run after replacing models/textures: `node scripts/compress-assets.mjs`
 ### 2. Runtime smoothness on phones
 
 - **Adaptive resolution** (`Journey.tsx`, `AboutJourney.tsx` →
-  `src/lib/renderQuality.ts`): drei `<PerformanceMonitor>` walks the
+  `src/lib/renderQuality.ts`): *(superseded 2026-09-24 — the drei
+  `<PerformanceMonitor>` below was replaced by `useJourneyDpr`, see
+  "60 fps recovery pass" at the end of this file)* the monitor walked the
   canvas DPR between a 1.0 floor and a device-aware cap — phones render
   at up to 2× (retina-crisp; the fixed 1.25 cap was visibly blurry on
   dpr 2–3.5 screens), plain 1× desktops keep their 1.25 supersample,
@@ -96,3 +98,76 @@ all ~13.3 MB of journey assets land in ~76 s (was 34 MB ≈ 3× that),
 no horizontal overflow on any viewport, no element collisions, city
 renders (≈594 k triangles, ~127 draw calls), per-frame JS cost ≈ 0.8 ms
 (storm) + ~2 ms (emblem border) on a throttled CPU.
+
+---
+
+## 60 fps recovery pass — 2026-09-24
+
+Context: the blur fix (commit `e3a18de`) correctly raised the render
+caps so phones/retina screens stop looking soft — but every canvas now
+*starts* at its sharp ceiling, and the old drei `<PerformanceMonitor>`
+reacted far too slowly when a device can't hold 60 fps there. It only
+sampled inside the WebGL loop, needed six 500 ms windows before each
+0.25 step, and on a PC grinding at ~6 fps that meant **15–90 s of
+slideshow before the first decline** — plus, after `flipflops` flips it
+stops sampling entirely, stranding whatever scale it happened to be on.
+Reports came in of ~6 fps on desktop right after the blur fix.
+
+### What changed
+
+1. **New adaptive controller — `useJourneyDpr` (`src/lib/renderQuality.ts`)**
+   - samples the *page* rAF frame rate (journey + storm + DOM +
+     compositing = what the visitor actually sees) instead of WebGL-loop
+     ticks;
+   - hysteresis band instead of flip-flops:
+     - fps < 46 sustained ~1 s → −0.25 (a single ≥1.2 s bad window
+       counts as two — a dead page proves itself immediately);
+     - fps ≥ 57 sustained ~3 s → +0.10 (never past the sharp cap);
+     - 46–57 fps → hold — no oscillation, no buffer realloc thrash;
+   - worst case to the 1.0 floor ≈ 3 s (was 15–90 s), and it never
+     stops sampling (no fallback death); tab switches and the intro
+     loader can't fake a bad window;
+   - strong devices sit at the sharp cap permanently — behavior on
+     hardware that holds 60 is identical to the blur fix;
+   - replaces `<PerformanceMonitor>` in `Journey.tsx` + `AboutJourney.tsx`.
+
+2. **Storm rain-rate is now frame-time aware (`StormBackground.tsx`)** —
+   the old throttle only watched its own JS paint cost, so it never shed
+   rain while the WebGL journey or compositing was the thing missing
+   vsync. It now also watches the real frame delta: sustained >26 ms →
+   paint every 2nd/3rd frame (background rain rate only — never
+   resolution); back to every frame after sustained <17.2 ms. The check
+   is time-based (900 ms), so it still fires promptly on pages that are
+   already crawling.
+
+3. **Emblem border painter at 30 Hz on every device (`GhostCard.tsx`)** —
+   the bolt painter (2D draw + texture upload — several ms per frame on
+   desktop) was gated at 30 Hz only on mobile. The animation clock still
+   advances every frame, so only the sample rate is halved — the same
+   budget phones have shipped with since the mobile pass, invisible
+   behind the fake-bloom glow.
+
+4. **Nothing renders under the opaque intro loader anymore** —
+   `AboutJourney` used to run `frameloop="always"` behind the loader
+   (the home walk already idled); it now uses `demand` until
+   `introDone` (wired `App → AboutPage → AboutJourney`), and the storm
+   canvas skips simulation + painting while the loader covers the
+   screen (`<StormBackground covered={!introDone} />`).
+
+### Quality promise
+
+Unchanged from the blur fix: caps stay at touch ≤ 2×, fine-pointer
+≤ 1.75×, floor 1.0 (native CSS resolution — never pixelated). No
+resolution, texture, AA or shader was lowered anywhere; the only
+"rate" changes are background rain and the border repaint, both
+already proven visually lossless on phones.
+
+### Verification
+
+`scripts/perf-audit.mjs` (new) drives `?perf=1` in headless Chromium
+and prints fps / per-component JS cost / canvas inventory / three.js
+stats. On an emulated dpr-2 desktop the journey render scale now walks
+1.75 → 1.25 → 1.0 within the first sample windows (the old monitor
+stayed pinned at the ceiling for minutes under the same conditions).
+`npx tsc --noEmit` + `npx vite build` clean; home and /about render
+without console errors on desktop and iPhone viewports.

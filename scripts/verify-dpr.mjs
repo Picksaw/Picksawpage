@@ -1,7 +1,10 @@
 // Render-scale verification: emulates a dpr-3 touch phone, loads the built
 // site, and reports the effective render scale (backing px / CSS px) of
-// every canvas — the 3D journey canvas should start at 2.00, the storm
-// 2D canvas at 1.50, never below 1.00.
+// every canvas — the 3D journey canvas should START at 2.00, the storm
+// 2D canvas at 1.50, never below 1.00. Note the adaptive controller
+// (useJourneyDpr) may already have stepped the journey down on very slow
+// renderers (SwiftShader) — use a small settleMs to catch the start caps,
+// or read a later sample to watch the decline.
 //
 // Usage:
 //   npm run build && npx vite preview --port 4173 &

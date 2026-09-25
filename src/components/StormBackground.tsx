@@ -200,8 +200,20 @@ const mix3 = (a: V3, b: V3, t: number): V3 => [
   a[2] + (b[2] - a[2]) * t,
 ];
 
-export default function StormBackground() {
+export default function StormBackground({
+  covered = false,
+}: {
+  /** true while an opaque layer (the intro loader) hides the whole
+   *  screen — the loop then skips simulation + painting entirely so
+   *  loading stays cool on phones (the journey canvas idles the same
+   *  way while the loader is up). */
+  covered?: boolean;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const coveredRef = useRef(covered);
+  useEffect(() => {
+    coveredRef.current = covered;
+  }, [covered]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -246,6 +258,8 @@ export default function StormBackground() {
     let frameCount = 0;
     let renderEveryN = 1;
     let emaCost = 6;
+    let emaFrame = 16.7; // smoothed whole-page frame time (ms)
+    let lastAdapt = 0;
     let cachedMaxScroll = 1;
 
     // cached gradients
@@ -760,10 +774,18 @@ export default function StormBackground() {
       if (!running) return;
       animId = requestAnimationFrame(frame);
 
+      // opaque intro loader above us — nothing to paint, and the
+      // carried clock must not jump when the loader lifts
+      if (coveredRef.current) {
+        lastT = performance.now();
+        return;
+      }
+
       const now = performance.now();
       let dt = now - lastT;
       lastT = now;
       if (dt < 0) dt = 0;
+      const rawDt = dt; // real frame time — drives the shed/recover test
       // real elapsed seconds for the theme crossfade (independent of the
       // simulation's 64ms clamp — slow frames must not freeze the fade)
       themeCarry += Math.min(dt, 500) / 1000;
@@ -772,6 +794,10 @@ export default function StormBackground() {
       elapsed += dt / 1000;
       frameCount++;
 
+      // whole-page frame health (journey + storm + DOM + compositing),
+      // updated every rAF even on frames we skip painting
+      emaFrame = emaFrame * 0.9 + Math.min(rawDt, 2000) * 0.1;
+
       if (frameCount % renderEveryN !== 0) return;
       const t0 = performance.now();
 
@@ -779,12 +805,25 @@ export default function StormBackground() {
       themeCarry = 0;
 
       // ── adaptive framerate ───────────────────────────────────
+      // Two signals: the cost of painting a storm frame (JS + Skia
+      // recording) and the real page frame time — the old test only
+      // saw the first, so the storm never shed rain while the WebGL
+      // journey or compositing was the thing missing vsync. Time-
+      // based (not frame-count) so the decision still fires quickly
+      // on already-slow pages.
       const cost = performance.now() - t0;
       reportFrameCost("storm", cost);
       emaCost = emaCost * 0.9 + cost * 0.1;
-      if (frameCount % 90 === 0) {
-        if (emaCost > 11 && renderEveryN < 3) renderEveryN++;
-        else if (emaCost < 7 && renderEveryN > 1) renderEveryN--;
+      if (now - lastAdapt > 900) {
+        lastAdapt = now;
+        if ((emaCost > 11 || emaFrame > 26) && renderEveryN < 3) {
+          // page under ~40 fps or the paint itself is pricey → shed
+          // rain-rate (background layer only — never sharpness)
+          renderEveryN++;
+        } else if (emaCost < 7 && emaFrame < 17.2 && renderEveryN > 1) {
+          // comfortable 60 fps again → back to full rate
+          renderEveryN--;
+        }
       }
     };
 
