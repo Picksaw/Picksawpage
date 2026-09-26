@@ -259,5 +259,5 @@ export default function GroundFog() {
   );
 
   const ref = useRef<THREE.Points>(null);
-  return <points ref={ref} geometry={geo} material={material} frustumCulled={false} />;
+  return <points ref={ref} name="perf-groundfog" geometry={geo} material={material} frustumCulled={false} />;
 }

@@ -8,8 +8,8 @@ import GhostCard from "./GhostCard";
 import { CorridorScene } from "./Corridor";
 import { aboutLayout, layerOpacity } from "./path";
 import { getLenis } from "../../lib/lenis";
-import { registerPerfGl } from "../../lib/perfProbe";
-import { useJourneyDpr } from "../../lib/renderQuality";
+import { registerPerfGl, registerPerfScene } from "../../lib/perfProbe";
+import { useJourneyQuality } from "../../lib/renderQuality";
 import { useThemeId } from "../../lib/themeStore";
 import { SITE_TEXTS } from "../../config/siteTexts";
 
@@ -84,7 +84,7 @@ export default function AboutJourney({
   const isMobile =
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: coarse)").matches;
-  const dpr = useJourneyDpr(introDone);
+  const { dpr } = useJourneyQuality(introDone);
 
   return (
     <>
@@ -118,7 +118,10 @@ export default function AboutJourney({
             powerPreference: "high-performance",
           }}
           style={{ background: "transparent", touchAction: "pan-y" }}
-          onCreated={(state) => registerPerfGl("about", state.gl)}
+          onCreated={(state) => {
+            registerPerfGl("about", state.gl);
+            registerPerfScene("about", state.scene, state.gl);
+          }}
         >
           <ThemeRig />
           {/* the walk opens on its own ghost card, like the home walk */}

@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
+import * as THREE from "three";
 import {
   AnimatePresence,
   motion,
@@ -23,8 +24,13 @@ import PreviewModal from "../PreviewModal";
 import MagneticButton from "../ui/MagneticButton";
 import { useSound } from "../../audio/SoundProvider";
 import { getLenis } from "../../lib/lenis";
-import { registerPerfGl } from "../../lib/perfProbe";
-import { useJourneyDpr } from "../../lib/renderQuality";
+import {
+  registerPerfGl,
+  registerPerfScene,
+  reportPerfMeta,
+} from "../../lib/perfProbe";
+import { mountLodDebug, setLodBias } from "../../lib/cityLod";
+import { useJourneyQuality } from "../../lib/renderQuality";
 import { useThemeId } from "../../lib/themeStore";
 
 /**
@@ -136,12 +142,14 @@ export default function Journey({
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: coarse)").matches;
 
-  // Adaptive resolution (see useJourneyDpr): starts at the sharp
-  // device-aware cap; if the page can't hold ~60 fps it steps the
-  // backing store down within ~2–4 s (floor 1.0 — native CSS res,
-  // never pixelated) and climbs back only after ~3 s of proven
-  // headroom. Strong devices never leave the sharp cap.
-  const dpr = useJourneyDpr(introDone);
+  // Adaptive quality (see useJourneyQuality): starts at the sharp
+  // device-aware cap with a pixel-exact LOD policy. If the page cannot
+  // hold ~60 fps it spends resolution first (floor 1.0 — native CSS
+  // pixels, never upscaled) and only then geometry detail, recovering in
+  // the opposite order. A strong device never leaves the cap, so it
+  // renders at full quality forever.
+  const { dpr, lodBias, software } = useJourneyQuality(introDone);
+  useEffect(() => setLodBias(lodBias), [lodBias]);
 
   return (
     <>
@@ -202,7 +210,27 @@ export default function Journey({
             // canvas), taps still reach the meshes for drag + tap-to-open.
             touchAction: "pan-y",
           }}
-          onCreated={(state) => registerPerfGl("journey", state.gl)}
+          onCreated={(state) => {
+            registerPerfGl("journey", state.gl);
+            registerPerfScene("journey", state.scene, state.gl);
+            reportPerfMeta("renderer", {
+              software,
+              unmasked: String(
+                state.gl.getContext().getExtension("WEBGL_debug_renderer_info")
+                  ? state.gl.getContext().getParameter(
+                      state.gl
+                        .getContext()
+                        .getExtension("WEBGL_debug_renderer_info")!
+                        .UNMASKED_RENDERER_WEBGL,
+                    )
+                  : "(unavailable)",
+              ),
+            });
+            // no-op unless the page was loaded with ?perf=1
+            mountLodDebug(
+              () => (window.__perf?.scene("journey") as THREE.Object3D | null) ?? null,
+            );
+          }}
           onPointerMissed={() => {
             document.body.style.cursor = "";
           }}

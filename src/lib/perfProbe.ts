@@ -41,6 +41,22 @@ interface GlEntry {
   renderer: unknown;
 }
 
+interface SceneEntry {
+  name: string;
+  scene: unknown;
+  renderer: unknown;
+}
+
+/** Structural view of a three.js Object3D (no three import here). */
+interface ObjLike {
+  id: number;
+  type: string;
+  name: string;
+  visible: boolean;
+  children?: ObjLike[];
+}
+type SceneLike = ObjLike;
+
 class PerfProbe {
   private frames = 0;
   private last = 0;
@@ -49,6 +65,8 @@ class PerfProbe {
   private longTasks = 0;
   private jsCost: Record<string, number> = {};
   private glEntries: GlEntry[] = [];
+  private scenes: SceneEntry[] = [];
+  private meta: Record<string, unknown> = {};
   private deltas: number[] = [];
 
   constructor() {
@@ -82,6 +100,113 @@ class PerfProbe {
   /** Register a three.js WebGLRenderer for stats. */
   registerGl(name: string, renderer: unknown) {
     this.glEntries.push({ name, renderer });
+  }
+
+  /**
+   * Register a three.js scene + renderer so a subsystem can be muted at
+   * runtime (perf attribution: hide one branch, re-measure fps).
+   */
+  registerScene(name: string, scene: unknown, renderer: unknown) {
+    this.scenes.push({ name, scene, renderer });
+  }
+
+  /** List the named objects of a registered scene. */
+  objects(name = "journey"): { id: number; type: string; path: string; visible: boolean }[] {
+    const entry = this.scenes.find((s) => s.name === name);
+    if (!entry) return [];
+    const root = entry.scene as SceneLike;
+    const out: { id: number; type: string; path: string; visible: boolean }[] = [];
+    const walk = (obj: ObjLike, path: string) => {
+      const label = `${path}/${obj.name || obj.type}`;
+      out.push({ id: obj.id, type: obj.type, path: label, visible: obj.visible });
+      obj.children?.forEach((c) => walk(c, label));
+    };
+    walk(root, "");
+    return out;
+  }
+
+  /**
+   * Force `visible` on every object whose path matches `match` (a
+   * substring of the label path). Returns how many matched.
+   */
+  set(match: string, visible: boolean, name = "journey"): number {
+    const entry = this.scenes.find((s) => s.name === name);
+    if (!entry) return 0;
+    let hits = 0;
+    const walk = (obj: ObjLike, path: string) => {
+      const label = `${path}/${obj.name || obj.type}`;
+      if (label.toLowerCase().includes(match.toLowerCase())) {
+        obj.visible = visible;
+        hits++;
+      }
+      obj.children?.forEach((c) => walk(c, label));
+    };
+    walk(entry.scene as SceneLike, "");
+    return hits;
+  }
+
+
+  /** Free-form instrumentation bag (LOD tables, build timings, …). */
+  setMeta(name: string, value: unknown) {
+    this.meta[name] = value;
+  }
+
+  getMeta() {
+    return this.meta;
+  }
+
+  /** The registered scene object itself (debug tooling). */
+  scene(name = "journey"): unknown {
+    return this.scenes.find((s) => s.name === name)?.scene ?? null;
+  }
+
+  /**
+   * Geometry census of a registered scene, grouped by geometry uuid:
+   * how many times one buffer is drawn and how many triangles that
+   * costs per frame. This is what finds over-tessellated models.
+   */
+  census(name = "journey"): {
+    key: string;
+    draws: number;
+    visibleDraws: number;
+    trisPerDraw: number;
+    trisPerFrame: number;
+    matType: string;
+  }[] {
+    const entry = this.scenes.find((s) => s.name === name);
+    if (!entry) return [];
+    const map = new Map<
+      string,
+      { key: string; draws: number; visibleDraws: number; trisPerDraw: number; trisPerFrame: number; matType: string }
+    >();
+    const walk = (obj: ObjLike) => {
+      const o = obj as ObjLike & {
+        isMesh?: boolean;
+        geometry?: {
+          uuid?: string;
+          name?: string;
+          index?: { count: number };
+          attributes?: { position?: { count: number } };
+        };
+        material?: { type?: string };
+      };
+      if (o.isMesh && o.geometry) {
+        const tris = o.geometry.index
+          ? o.geometry.index.count / 3
+          : (o.geometry.attributes?.position?.count ?? 0) / 3;
+        const key = `${o.geometry.name || o.geometry.uuid || "?"}`;
+        const matType = o.material?.type ?? "?";
+        const rec = map.get(key) ?? {
+          key, draws: 0, visibleDraws: 0, trisPerDraw: tris, trisPerFrame: 0, matType,
+        };
+        rec.draws++;
+        if (o.visible) { rec.visibleDraws++; rec.trisPerFrame += tris; }
+        map.set(key, rec);
+      }
+      obj.children?.forEach(walk);
+    };
+    walk(entry.scene as SceneLike);
+    return [...map.values()].sort((a, b) => b.trisPerFrame - a.trisPerFrame);
   }
 
   destroy() {
@@ -160,6 +285,18 @@ declare global {
       report: () => PerfReport;
       addJsCost: (name: string, ms: number) => void;
       registerGl: (name: string, renderer: unknown) => void;
+      registerScene: (name: string, scene: unknown, renderer: unknown) => void;
+      objects: (
+        name?: string
+      ) => { id: number; type: string; path: string; visible: boolean }[];
+      set: (match: string, visible: boolean, name?: string) => number;
+      census: (name?: string) => {
+        key: string; draws: number; visibleDraws: number;
+        trisPerDraw: number; trisPerFrame: number; matType: string;
+      }[];
+      setMeta: (name: string, value: unknown) => void;
+      meta: () => Record<string, unknown>;
+      scene: (name?: string) => unknown;
     };
   }
 }
@@ -176,6 +313,13 @@ export function initPerfProbe(): boolean {
     report: () => probe!.report(),
     addJsCost: (n, ms) => probe!.addJsCost(n, ms),
     registerGl: (n, r) => probe!.registerGl(n, r),
+    registerScene: (n, sc, r) => probe!.registerScene(n, sc, r),
+    objects: (n) => probe!.objects(n),
+    set: (m, v, n) => probe!.set(m, v, n),
+    census: (n) => probe!.census(n),
+    setMeta: (n, v) => probe!.setMeta(n, v),
+    meta: () => probe!.getMeta(),
+    scene: (n) => probe!.scene(n),
   };
   return true;
 }
@@ -185,7 +329,21 @@ export function reportFrameCost(name: string, ms: number) {
   window.__perf?.addJsCost(name, ms);
 }
 
+/** Stash instrumentation data (no-op when probe off). */
+export function reportPerfMeta(name: string, value: unknown) {
+  window.__perf?.setMeta(name, value);
+}
+
 /** Register a three.js renderer with the probe (no-op when probe off). */
 export function registerPerfGl(name: string, renderer: unknown) {
   window.__perf?.registerGl(name, renderer);
+}
+
+/**
+ * Register a scene + renderer for runtime subsystem muting (no-op when
+ * the probe is off). Used by the perf harness to attribute frame cost
+ * to individual branches of the walk: mute one, re-measure.
+ */
+export function registerPerfScene(name: string, scene: unknown, renderer: unknown) {
+  window.__perf?.registerScene(name, scene, renderer);
 }
