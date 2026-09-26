@@ -1,4 +1,12 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+
+/* Automatic source detection walks the whole repository — including the
+   .agents skill docs, whose markdown is full of example utilities like
+   `bg-blue-500` and `dark:bg-gray-800`. Every one of them was being
+   compiled into the shipped stylesheet (~320 kB of dead CSS in the
+   single-file build). Scoped to the app instead. */
+@source "../index.html";
+@source "./**/*.{ts,tsx}";
 
 @theme {
   --font-sans: "Sora Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",

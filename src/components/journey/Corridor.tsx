@@ -27,6 +27,15 @@ import ContactSection from "../ContactSection";
 import AboutSceneFrames from "../AboutFrames";
 import { PuddleMaterial } from "./PuddleMaterial";
 import {
+  LOD_HYSTERESIS,
+  getLodBias,
+  isLodEnabled,
+  lodBuilder,
+  lodPixelFactor,
+  type MeshLod,
+} from "../../lib/cityLod";
+import { reportFrameCost, reportPerfMeta } from "../../lib/perfProbe";
+import {
   useJourneyElectricBorder,
   BORDER_OVERSCAN,
 } from "./JourneyElectricBorder";
@@ -380,7 +389,7 @@ function Painting({
   // catch clicks when it isn't the solo layer (this is what made the end
   // of the site open the last template from anywhere).
   return (
-    <group ref={group} position={[0, 0, z]}>
+    <group ref={group} name="perf-painting" position={[0, 0, z]}>
       {/* glow halo behind the frame */}
       <mesh position={[0, 0, -0.09]}>
         <planeGeometry args={[PAINTING_W + 0.55, PAINTING_H + 0.55]} />
@@ -627,6 +636,27 @@ export function Window3D({
     [],
   );
 
+  /** Last value written to each style, so an idle window writes none. */
+  const last = useRef({
+    w: NaN,
+    h: NaN,
+    op: NaN,
+    blur: NaN,
+    shift: NaN,
+    scale: NaN,
+    focus: null as boolean | null,
+    display: null as string | null,
+  });
+
+  // pan-y + scroll chaining are constants — set them once, not per frame.
+  useEffect(() => {
+    for (const el of [outerRef.current, innerRef.current]) {
+      if (!el) continue;
+      el.style.touchAction = "pan-y";
+      el.style.overscrollBehavior = "auto";
+    }
+  }, []);
+
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.25);
     const tp = easeTheme(live.current, THEMES[getTheme()], dt);
@@ -663,14 +693,29 @@ export function Window3D({
     }
 
     if (outerRef.current && innerRef.current) {
+      const w = last.current;
       if (op < 0.01) {
-        outerRef.current.style.display = "none";
-        outerRef.current.style.opacity = "0";
-        outerRef.current.style.pointerEvents = "none";
+        // Hidden — tracked exactly like the visible path below, so the
+        // values written here are the ones the next visible frame
+        // compares against. (An untracked write here would let the
+        // window come back with a stale opacity of 0.)
+        if (w.display !== "none") {
+          outerRef.current.style.display = "none";
+          w.display = "none";
+        }
+        if (w.op !== 0) {
+          outerRef.current.style.opacity = "0";
+          w.op = 0;
+        }
+        if (w.focus !== false) {
+          outerRef.current.style.pointerEvents = "none";
+          w.focus = false;
+        }
         return;
       }
-      if (outerRef.current.style.display !== "block") {
+      if (w.display !== "block") {
         outerRef.current.style.display = "block";
+        w.display = "block";
       }
 
       const dist = Math.abs(cam.position.z - z);
@@ -690,30 +735,58 @@ export function Window3D({
           size.width
         : 0;
 
-      outerRef.current.style.width = `${pxW}px`;
-      outerRef.current.style.height = `${pxH}px`;
-      // fade effect when going further in: opacity already eased, but also
-      // add a subtle blur + scale hint via CSS for the DOM content
-      outerRef.current.style.opacity = op.toString();
-      outerRef.current.style.filter =
-        op < 0.9 ? `blur(${(1 - op) * 6}px)` : "none";
-      // On touch, keep pointerEvents auto when focused so forms still work,
-      // but allow scroll chaining — inner handles its own scroll and then
-      // lets the page scroll.
-      outerRef.current.style.pointerEvents = focused ? "auto" : "none";
-      outerRef.current.style.transform = `translateX(${shiftX}px)`;
-      outerRef.current.style.touchAction = "pan-y";
-      (outerRef.current.style as any).overscrollBehavior = "auto";
+      // ── write nothing that has not changed ────────────────────
+      // Every style assignment here invalidates layout and paint for a
+      // viewport-sized element. While the visitor is reading a section
+      // the camera has settled and all of these values are identical to
+      // the previous frame, so the whole block used to be pure waste —
+      // sixty times a second. Compared against the last written value
+      // and rounded, an idle section now costs no DOM work at all.
+      const npxW = Math.round(pxW * 100) / 100;
+      const npxH = Math.round(pxH * 100) / 100;
+      const nop = Math.round(op * 1000) / 1000;
+      const nshift = Math.round(shiftX * 100) / 100;
+      const nscale = Math.round((pxW / targetW) * 10000) / 10000;
+      const nblur = op < 0.9 ? Math.round((1 - op) * 60) / 10 : 0;
 
-      const scale = pxW / targetW;
-      innerRef.current.style.transform = `scale(${scale})`;
-      innerRef.current.style.touchAction = "pan-y";
-      (innerRef.current.style as any).overscrollBehavior = "auto";
+      if (w.w !== npxW) {
+        outerRef.current.style.width = `${npxW}px`;
+        w.w = npxW;
+      }
+      if (w.h !== npxH) {
+        outerRef.current.style.height = `${npxH}px`;
+        w.h = npxH;
+      }
+      // fade effect when going further in: opacity already eased, but
+      // also add a subtle blur hint via CSS for the DOM content
+      if (w.op !== nop) {
+        outerRef.current.style.opacity = nop.toString();
+        w.op = nop;
+      }
+      if (w.blur !== nblur) {
+        outerRef.current.style.filter = nblur ? `blur(${nblur}px)` : "none";
+        w.blur = nblur;
+      }
+      if (w.focus !== focused) {
+        // On touch, keep pointerEvents auto when focused so forms still
+        // work, but allow scroll chaining — inner handles its own scroll
+        // and then lets the page scroll.
+        outerRef.current.style.pointerEvents = focused ? "auto" : "none";
+        w.focus = focused;
+      }
+      if (w.shift !== nshift) {
+        outerRef.current.style.transform = `translateX(${nshift}px)`;
+        w.shift = nshift;
+      }
+      if (w.scale !== nscale) {
+        innerRef.current.style.transform = `scale(${nscale})`;
+        w.scale = nscale;
+      }
     }
   });
 
   return (
-    <group ref={group} position={[0, 0, z]}>
+    <group ref={group} name="perf-window3d" position={[0, 0, z]}>
       <mesh position={[0, 0, -0.09]}>
         <planeGeometry args={[width + 0.55, height + 0.55]} />
         <meshBasicMaterial
@@ -1199,6 +1272,7 @@ function makeCity(finaleZ: number): Building[] {
 function MovingStreetLights() {
   const groupRef = useRef<THREE.Group>(null);
   const lightRefs = useRef<(THREE.PointLight | null)[]>([]);
+  const litRef = useRef(true);
   const live = useRef<ThemeParams>(createLiveTheme(getTheme()));
 
   // The storm's multi-colour neon lamps; daylight themes switch them
@@ -1216,6 +1290,21 @@ function MovingStreetLights() {
       groupRef.current.position.z = camera.position.z;
     }
     const p = easeTheme(live.current, THEMES[getTheme()], Math.min(delta, 0.25));
+
+    // Two of the atmospheres (the clear daylight ones) run the lamps at
+    // intensity 0. An intensity-0 point light contributes exactly
+    // nothing to a pixel, yet three.js still counts it in
+    // NUM_POINT_LIGHTS and every lit material in the city pays for the
+    // full PBR light loop anyway — four of them, per fragment. Hiding
+    // the group takes them out of the render state entirely, so those
+    // themes compile a cheaper shader for the whole boulevard. Same
+    // pixels: the lights were already contributing zero.
+    const lit = p.streetI > 0.01;
+    if (lit !== litRef.current && groupRef.current) {
+      groupRef.current.visible = lit;
+      litRef.current = lit;
+    }
+
     tmpColor.setRGB(p.street[0] / 255, p.street[1] / 255, p.street[2] / 255, THREE.SRGBColorSpace);
     for (let i = 0; i < lightRefs.current.length; i++) {
       const light = lightRefs.current[i];
@@ -1226,7 +1315,7 @@ function MovingStreetLights() {
   });
 
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} name="perf-streetlights">
       {Array.from({ length: 4 }).map((_, i) => {
         // Space them out relative to the camera
         const zOffset = -i * 8;
@@ -1246,6 +1335,80 @@ function MovingStreetLights() {
       })}
     </group>
   );
+}
+
+/** One mesh in a building that can swap index buffers. */
+interface LodPart {
+  mesh: THREE.Mesh;
+  hi: THREE.BufferAttribute;
+  levels: THREE.BufferAttribute[];
+  /** Per-level deviation in WORLD units (already × the instance scale). */
+  errs: number[];
+  /** Current level; -1 means the original geometry. */
+  lvl: number;
+}
+
+/** One placed building and the meshes inside it that can swap. */
+interface LodInstance {
+  root: THREE.Object3D;
+  parts: LodPart[];
+}
+
+/**
+ * Build error-bounded LOD chains for every unique building mesh in the
+ * city, off the main thread, and return the per-instance swap table.
+ *
+ * Whatever cannot be simplified simply never appears in the table, so
+ * the worst case is "the city renders exactly as it did before".
+ */
+async function buildCityLods(root: THREE.Group): Promise<LodInstance[]> {
+  const instances: { root: THREE.Object3D; meshes: THREE.Mesh[]; scale: number }[] = [];
+
+  for (const inst of root.children) {
+    const meshes: THREE.Mesh[] = [];
+    inst.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && m.geometry?.index) meshes.push(m);
+    });
+    if (meshes.length) instances.push({ root: inst, meshes, scale: inst.scale.x || 1 });
+  }
+
+  // Unique geometries, heaviest first. The boulevard reuses five
+  // prototypes dozens of times, so one 48k-triangle mesh accounts for
+  // twenty-one draws — simplifying the biggest one first means the
+  // useful part of the chain lands early even on a slow worker.
+  const unique = new Map<string, THREE.BufferGeometry>();
+  for (const inst of instances)
+    for (const m of inst.meshes)
+      if (!unique.has(m.geometry.uuid)) unique.set(m.geometry.uuid, m.geometry);
+  const ordered = [...unique.values()].sort(
+    (a, b) => (b.index?.count ?? 0) - (a.index?.count ?? 0),
+  );
+
+  const resolved = new Map<string, MeshLod | null>();
+  for (const geo of ordered) resolved.set(geo.uuid, await lodBuilder.request(geo));
+
+  const out: LodInstance[] = [];
+  for (const inst of instances) {
+    const parts: LodPart[] = [];
+    for (const m of inst.meshes) {
+      const lod = resolved.get(m.geometry.uuid);
+      if (!lod) continue;
+      // Each mesh carries its OWN error table. Sharing one worst-case
+      // table across the building would let a single small, coarse mesh
+      // push the switch distance past the fog line and disable the LOD
+      // for every detailed mesh next to it.
+      parts.push({
+        mesh: m,
+        hi: lod.hiIndex,
+        levels: lod.levels.map((l) => l.index),
+        errs: lod.levels.map((l) => l.errorWorld * inst.scale),
+        lvl: -1,
+      });
+    }
+    if (parts.length) out.push({ root: inst.root, parts });
+  }
+  return out;
 }
 
 function City() {
@@ -1392,20 +1555,97 @@ function City() {
 
   const groupRef = useRef<THREE.Group>(null);
 
-  useFrame(({ camera }) => {
-    if (groupRef.current) {
-      const camZ = camera.position.z;
-      // Aggressive Distance Culling for 60 FPS — kept just past the fog
-      // end (66) so nothing pops in/out while still visible.
-      groupRef.current.children.forEach((child) => {
-        const dist = camZ - child.position.z;
-        child.visible = dist > -15 && dist < 68;
-      });
+  /** Per-building LOD state, rebuilt whenever the city is rebuilt. */
+  const lodRef = useRef<LodInstance[]>([]);
+  const lodTick = useRef(0);
+
+  useFrame(({ camera, size }) => {
+    const g = groupRef.current;
+    if (!g) return;
+    const camZ = camera.position.z;
+    const kids = g.children;
+
+    // Aggressive Distance Culling for 60 FPS — kept just past the fog
+    // end (66) so nothing pops in/out while still visible.
+    for (let i = 0; i < kids.length; i++) {
+      const child = kids[i];
+      const dist = camZ - child.position.z;
+      child.visible = dist > -15 && dist < 68;
+    }
+
+    // ── LOD ───────────────────────────────────────────────────
+    // Index-buffer swaps only, and only when a building crosses the
+    // distance at which the coarser mesh's measured deviation is still
+    // under half a pixel. Hysteresis stops a building sitting on a
+    // boundary from flickering between levels.
+    const recs = lodRef.current;
+    if (recs.length) {
+      const on = isLodEnabled();
+      const cam = camera as THREE.PerspectiveCamera;
+      // × the adaptive quality bias — see lib/renderQuality.ts
+      const k = lodPixelFactor(size.height, cam.fov) * getLodBias();
+      let onLod = 0;
+      let total = 0;
+      for (let i = 0; i < recs.length; i++) {
+        const r = recs[i];
+        if (!r.root.visible) continue;
+        // dz only — the true distance is larger for side buildings, so
+        // this switches strictly later than the pixel budget demands.
+        const d = camZ - r.root.position.z;
+        for (let j = 0; j < r.parts.length; j++) {
+          const part = r.parts[j];
+          const errs = part.errs;
+          total++;
+
+          let want: number;
+          if (!on) {
+            want = -1;
+          } else if (part.lvl >= 0 && d >= errs[part.lvl] * k * LOD_HYSTERESIS) {
+            // hold, but step coarser while the budget still allows it
+            want = part.lvl;
+            while (want + 1 < errs.length && d >= errs[want + 1] * k) want++;
+          } else {
+            // too close for the current level — find the finest that fits
+            want = -1;
+            for (let l = 0; l < errs.length; l++) {
+              if (d >= errs[l] * k) want = l;
+              else break;
+            }
+          }
+
+          if (want !== part.lvl) {
+            part.lvl = want;
+            part.mesh.geometry.index = want < 0 ? part.hi : part.levels[want];
+          }
+          if (part.lvl >= 0) onLod++;
+        }
+      }
+      // Throttled live readout for ?perf=1 — how much of the visible
+      // city is actually running on simplified geometry, and the pixel
+      // budget it is being held to.
+      const now = performance.now();
+      if (now - lodTick.current > 2000) {
+        lodTick.current = now;
+        reportPerfMeta("lodLive", {
+          meshesVisible: total,
+          meshesOnLod: onLod,
+          pixelFactor: Math.round(k),
+          bias: getLodBias(),
+        });
+      }
     }
   });
 
   const cityGroup = useMemo(() => {
     const g = new THREE.Group();
+
+    // One foundation box per PROTOTYPE, shared by every instance of it —
+    // previously each placed building allocated its own identical
+    // BoxGeometry, which is ~100 wasted buffers for geometry that is
+    // pixel-identical between copies.
+    const foundationGeo = prototypes.map(
+      (proto) => new THREE.BoxGeometry(proto.w - 0.2, 20, proto.d - 0.2),
+    );
 
     for (const b of buildings) {
       const proto = prototypes[b.typeIndex];
@@ -1419,12 +1659,8 @@ function City() {
       else if (b.typeIndex === 0) instance.scale.setScalar(AZADI_BACK_SCALE);
 
       // Add a foundation block under each building so it connects cleanly to the ground
-      const foundationGeo = new THREE.BoxGeometry(
-        proto.w - 0.2,
-        20,
-        proto.d - 0.2,
-      );
-      const foundation = new THREE.Mesh(foundationGeo, concreteMat);
+      const foundation = new THREE.Mesh(foundationGeo[b.typeIndex], concreteMat);
+      foundation.name = "perf-foundation";
       foundation.position.set(0, -10, 0);
       instance.add(foundation);
 
@@ -1439,6 +1675,41 @@ function City() {
     }
     return g;
   }, [buildings, prototypes, concreteMat]);
+
+  /**
+   * Kick off the city's LODs as soon as the buildings exist. This runs
+   * while the intro loader is still covering the screen (the ~28MB of
+   * city GLBs resolve first, then this), and it is off the main thread —
+   * the render loop never waits on it. Until an answer arrives the
+   * meshes keep their original geometry, so there is no wrong frame.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    const t0 = performance.now();
+    buildCityLods(cityGroup).then((recs) => {
+      if (cancelled) return;
+      lodRef.current = recs;
+      reportFrameCost("city-lod-build", performance.now() - t0);
+      reportPerfMeta("cityLod", {
+        buildMs: Math.round(performance.now() - t0),
+        buildingsWithLod: recs.length,
+        buildingsTotal: cityGroup.children.length,
+        meshesCovered: recs.reduce((n, r) => n + r.parts.length, 0),
+        uniqueMeshes: lodBuilder.stats().length,
+        lods: lodBuilder.stats(),
+      });
+    });
+    return () => {
+      cancelled = true;
+      // restore every mesh's own index buffer before the city unmounts
+      for (const r of lodRef.current)
+        for (const part of r.parts) {
+          part.mesh.geometry.index = part.hi;
+          part.lvl = -1;
+        }
+      lodRef.current = [];
+    };
+  }, [cityGroup]);
 
   useEffect(() => {
     return () => {
@@ -1463,6 +1734,7 @@ function City() {
   return (
     <>
       <mesh
+        name="perf-road"
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, -2.0, -62]}
         scale={[1, 1, 1]}
@@ -1483,7 +1755,7 @@ function City() {
         windowMats={windowMats}
       />
 
-      <primitive object={cityGroup} ref={groupRef} />
+      <primitive object={cityGroup} name="perf-city" ref={groupRef} />
     </>
   );
 }
@@ -1567,7 +1839,7 @@ function CorridorRain() {
   });
 
   return (
-    <lineSegments ref={ref} geometry={geo} frustumCulled={false}>
+    <lineSegments ref={ref} name="perf-rain3d" geometry={geo} frustumCulled={false}>
       <lineBasicMaterial
         ref={matRef}
         color="#a0c2e8"

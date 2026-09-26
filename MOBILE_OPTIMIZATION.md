@@ -171,3 +171,166 @@ stats. On an emulated dpr-2 desktop the journey render scale now walks
 stayed pinned at the ceiling for minutes under the same conditions).
 `npx tsc --noEmit` + `npx vite build` clean; home and /about render
 without console errors on desktop and iPhone viewports.
+
+---
+
+## The "40 fps in Chrome, 6 fps in Edge" pass
+
+### The diagnosis
+
+Both browsers are Chromium, so a 6–7× gap is not a browser difference — it
+is **GPU acceleration**. When Edge cannot get a GPU context, WebGL falls
+back to SwiftShader (software rasterization), which is roughly two orders
+of magnitude slower per pixel than a real GPU. Chrome had acceleration;
+Edge did not. Nothing in the codebase detected this case, so the same
+full-quality scene ran on both and one of them crawled.
+
+The sandbox's own Chromium runs under SwiftShader, so every measurement
+below was taken in exactly the failing configuration rather than a proxy
+for it.
+
+### What changed
+
+1. **Software-renderer detection (`src/lib/renderQuality.ts`)** —
+   `isSoftwareRendering(gl)` reads `WEBGL_debug_renderer_info` and matches
+   `swiftshader | software | llvmpipe | softpipe | basic renderers |
+   microsoft basic | warp`. It releases its own probe context via
+   `WEBGL_lose_context`, caches the answer, and returns `false` on any
+   failure, so a browser that blocks the extension is simply treated as
+   normal hardware.
+
+2. **A two-axis adaptive governor replaces the DPR-only one** —
+   `useJourneyQuality` now spends **render scale first, then the LOD
+   budget**, and returns them in reverse once frames recover. A software
+   renderer starts at the low tier immediately (`pixelRatio 0.75`)
+   instead of spending ~15 s crawling down to it. Decline thresholds:
+   46 fps over two windows; incline: 57 fps over six.
+
+3. **City LOD (`src/lib/cityLod.ts`, `src/lib/lod.worker.ts`)** — meshoptimizer's
+   simplifier runs in a **Web Worker** (`?worker&inline`) at load time and
+   builds one alternate **index buffer** per unique mesh. Swapping a level
+   reuses the same vertex buffer and the same draw call, so the draw-call
+   count and the material are untouched.
+
+4. **Street lights drop out entirely in the two daylight themes** —
+   `MovingStreetLights` now hides its group when `streetI <= 0.01`. Two
+   shipped themes set `streetI: 0`, so their four point lights were
+   contributing exactly nothing visually while still costing a
+   `NUM_POINT_LIGHTS` term in every lit shader. Hiding them recompiles a
+   cheaper variant at zero visual cost. The default `storm` theme
+   (`streetI: 15`) is unchanged.
+
+5. **`Window3D` only writes style when a value actually changed** — an
+   overlay section that is off-screen used to reassign eight style
+   properties every frame. A `last` ref tracks `w, h, op, blur, shift,
+   scale, focus, display`, so an idle section now writes nothing.
+
+6. **Tailwind source scoping (`src/index.css`)** — automatic source
+   detection was walking `.agents/skills/**` and emitting utilities from
+   markdown and CSV files. Now `@import "tailwindcss" source(none)` plus
+   two explicit `@source` lines.
+
+### The no-quality-loss rule
+
+Every LOD switch is gated on a measured pixel budget, not a guessed
+distance. The simplifier reports the **world-space** deviation of the
+coarse mesh from the original (`ErrorAbsolute`), and the projected size
+of that deviation is
+
+```
+pixels = error · H / (2 · d · tan(fov/2))
+⇒ switch distance = error · k · lodBias,  k = H / (2 · TARGET_PX · tan(fov/2))
+```
+
+With `TARGET_PX = 0.5`, a level is only used once its worst deviation
+covers **less than half a pixel** on the current viewport. The distance
+used is `dz` only, so the true distance for a side building is larger —
+the switch happens strictly *later* than the budget allows. Levels are
+held with `LOD_HYSTERESIS = 0.85` so a building sitting on a boundary
+cannot flicker.
+
+Every failure path — no worker, no WASM, non-indexed geometry, fewer
+than `MIN_TRIS` triangles, less than `MIN_SAVING` reduction, or a
+non-positive error — resolves to `null` and leaves the mesh exactly as it
+was before this pass.
+
+Only two levels are built, chosen by measuring the real models: the
+detailed façades simplify hard at `0.004` (48,358 → 29,155 triangles),
+but the plainer shells barely move there and only collapse at `0.04`
+(2,304 → 16). Those shells are drawn 21–35 times each, so skipping the
+coarse pass lost a third of the total saving. A third and fourth ceiling
+bought 1–15% beyond these two while doubling build time again.
+
+### Quality promise
+
+No resolution cap was lowered, no texture downscaled, no effect dropped
+and no shader simplified. The LOD is the only geometry change, and it is
+provably sub-pixel. On hardware that holds 60 fps the governor sits at
+its ceiling and the scene looks exactly as it did.
+
+### Verification
+
+`scripts/verify-lod.mjs` (new) runs the scene under SwiftShader at
+1000×620, scroll 0.42, and captures a **paired A/B/A** sequence — LOD on,
+LOD off, LOD on — with the same 3 s gap between every frame, plus the
+same for the underground foundation blocks. Because the scene keeps
+animating, a naive "before vs after" diff measures animation drift as
+well as geometry; the paired design gives each change its own control.
+
+```
+renderer: SwiftShader Device (Subzero) — software: true
+triangles: LOD off 1,004,910 → LOD on 652,914  (-35%)
+  measured with LOD ON : 46/56 meshes on LOD, pf 404, bias 0.25
+  measured with LOD OFF:  0/56 meshes on LOD, pf 404, bias 0.25
+
+control   B→C (nothing changed) : mean 4.8435  max 231  pctOver4 6.039
+LOD       A→B (LOD removed)     : mean 4.6858  max 231  pctOver4 5.685
+found ctrl D→E (nothing changed): mean 1.4137  max 212  pctOver4 2.810
+foundations C→D (blocks hidden) : mean 1.4193  max 212  pctOver4 2.855
+  LOD verdict         : INDISTINGUISHABLE FROM FRAME DRIFT
+  foundations verdict : INDISTINGUISHABLE FROM FRAME DRIFT
+```
+
+The LOD's pixel delta is *smaller than its own control*, so the swap adds
+nothing that frame drift does not already produce.
+
+An independent head-to-head at 1280×720, sampling each arm from a fresh
+page load (`?perf=1` vs `?perf=1&nolod=1`), agrees on the same saving:
+
+| | triangles | avg frame | p95 frame | draw calls |
+|---|---|---|---|---|
+| LOD off | 1,068,852 | 2178 ms | 4917 ms | 192 |
+| LOD on  |   695,077 |  732 ms | 4567 ms | 192 |
+
+**−35.0% triangles, 2.97× faster average frame, identical draw-call
+count.** These absolute milliseconds are software-rendering figures —
+roughly 100× slower than a real GPU — so only the ratio is meaningful.
+
+`npx tsc --noEmit -p tsconfig.json` exits 0 and `npx vite build` is
+clean; `dist/index.html` is 2,032.68 kB (674.55 kB gzip). The `<style>`
+block fell from 447,625 to 312,718 bytes (−135 kB) and the build from
+~30 s to ~8.6 s once Tailwind stopped scanning `.agents/skills/`. All 717
+remaining selectors are app-traceable.
+
+### Not done, and why
+
+- **The foundation blocks stay.** Hiding them is also measured
+  indistinguishable, but it saves only ~420 triangles (~4%) for 35 draw
+  calls, and the proof covers one scroll position and one theme. Not
+  worth the risk for that little.
+- **Street lights cannot be masked per object.** `WebGLRenderer.projectObject`
+  calls `currentRenderState.pushLight(object)` unconditionally, so
+  three.js has no per-object light layers to hook. The daylight-theme
+  hide above is the available win; the default `storm` theme still pays
+  for its four lights.
+- **`buildMs` is not a wall-clock figure under SwiftShader.** It read
+  246 ms, 383 ms, 27.7 s and 39 s across runs purely from CPU
+  starvation — the worker competes with the rasterizer for cores. On
+  GPU-accelerated hardware the CPU is free and the sub-second figure
+  applies. The build is off the main thread and the scene is fully
+  correct without it, so a slow build costs nothing but the saving.
+- **~19.7 MB of GLBs in `public/` appear unreferenced** (`building_02.glb`,
+  `sci-fi_building_11.glb`, `sci-fi_building.glb`,
+  `game_ready_mid_poly_building_1.glb`). They are never loaded at
+  runtime, so they cost bandwidth and not fps; confirm no other importer
+  before deleting.

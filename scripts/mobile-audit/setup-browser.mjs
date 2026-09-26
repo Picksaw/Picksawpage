@@ -25,7 +25,7 @@ const untar = (br, out) => {
 
 untar(`${P}/al2023.tar.br`, "/tmp/al2023");
 untar(`${P}/fonts.tar.br`, "/tmp/fonts");
-untar(`${P}/swiftshader.tar.br`, "/tmp/`);
+untar(`${P}/swiftshader.tar.br`, "/tmp");
 
 // chromium.br: raw brotli'd ELF in @sparticuz/chromium ≥ 120 (older
 // releases shipped a tar). Detect the format instead of assuming.
